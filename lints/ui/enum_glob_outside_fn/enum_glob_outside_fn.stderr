@@ -1,0 +1,27 @@
+warning: glob import of `Fruit`'s variants outside a function
+  --> $DIR/enum_glob_outside_fn.rs:16:5
+   |
+LL | use Fruit::*;
+   |     ^^^^^
+   |
+   = help: move the `use` into the functions that match on `Fruit`, or name the variants as `Fruit::Variant`, as the Google Rust Style Guide's "Don't use glob imports" asks
+   = note: `#[warn(enum_glob_outside_fn)]` on by default
+
+warning: glob import of `Shelf`'s variants outside a function
+  --> $DIR/enum_glob_outside_fn.rs:20:39
+   |
+LL |     use crate::shelves::Shelf::{self, *};
+   |                                       ^
+   |
+   = help: move the `use` into the functions that match on `Shelf`, or name the variants as `Shelf::Variant`, as the Google Rust Style Guide's "Don't use glob imports" asks
+
+warning: glob import of `Ordering`'s variants outside a function
+  --> $DIR/enum_glob_outside_fn.rs:23:13
+   |
+LL |     pub use std::cmp::Ordering::*;
+   |             ^^^^^^^^^^^^^^^^^^
+   |
+   = help: move the `use` into the functions that match on `Ordering`, or name the variants as `Ordering::Variant`, as the Google Rust Style Guide's "Don't use glob imports" asks
+
+warning: 3 warnings emitted
+

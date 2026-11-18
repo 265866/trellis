@@ -1,0 +1,2 @@
+error: invalid `[trellis_lints]` table in `dylint.toml`: toml error: missing field `unsafe_crates`
+

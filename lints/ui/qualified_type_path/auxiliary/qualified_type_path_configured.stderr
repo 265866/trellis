@@ -1,0 +1,19 @@
+warning: `Error` is named through its module
+  --> $DIR/qualified_type_path_configured.rs:13:14
+   |
+LL | fn fail() -> io::Error {
+   |              ^^^^^^^^^
+   |
+   = help: add `use std::io::Error;` and write `Error`, as the Google Rust Style Guide's "Type names should be imported and used unqualified" asks
+   = note: `#[warn(qualified_type_path)]` on by default
+
+warning: `Error` is named through its module
+  --> $DIR/qualified_type_path_configured.rs:14:5
+   |
+LL |     io::Error::other("fail")
+   |     ^^^^^^^^^
+   |
+   = help: add `use std::io::Error;` and write `Error`, as the Google Rust Style Guide's "Type names should be imported and used unqualified" asks
+
+warning: 2 warnings emitted
+

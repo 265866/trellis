@@ -1,0 +1,19 @@
+warning: doc comment starts with a lowercase letter
+  --> $DIR/doc_starts_lowercase_configured.rs:8:1
+   |
+LL | /// trellis's shelf count. Flagged: the configured list replaces the workspace's words.
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: start it with a capital letter, or put code in backticks
+   = note: `#[warn(doc_starts_lowercase)]` on by default
+
+warning: doc comment starts with a lowercase letter
+  --> $DIR/doc_starts_lowercase_configured.rs:13:1
+   |
+LL | /// npmjs is flagged: a listed word followed by more letters is another word.
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: start it with a capital letter, or put code in backticks
+
+warning: 2 warnings emitted
+

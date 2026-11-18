@@ -1,0 +1,43 @@
+warning: glob import of `std::io::prelude`
+  --> $DIR/foreign_prelude_glob.rs:4:5
+   |
+LL | use std::io::prelude::*;
+   |     ^^^^^^^^^^^^^^^^
+   |
+   = help: import the items you use by name, as the Google Rust Style Guide's "Don't use glob imports" asks
+   = note: `#[warn(foreign_prelude_glob)]` on by default
+
+warning: glob import of `core::prelude::rust_2024`
+  --> $DIR/foreign_prelude_glob.rs:7:5
+   |
+LL | use core::prelude::rust_2024::*;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: import the items you use by name, as the Google Rust Style Guide's "Don't use glob imports" asks
+
+warning: glob import of `std::io::prelude`
+  --> $DIR/foreign_prelude_glob.rs:10:21
+   |
+LL | use std::io::{self, prelude::*};
+   |                     ^^^^^^^
+   |
+   = help: import the items you use by name, as the Google Rust Style Guide's "Don't use glob imports" asks
+
+warning: glob import of `reexport::io_prelude`
+  --> $DIR/foreign_prelude_glob.rs:17:5
+   |
+LL | use reexport::io_prelude::*;
+   |     ^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: import the items you use by name, as the Google Rust Style Guide's "Don't use glob imports" asks
+
+warning: glob import of `std::io::prelude`
+  --> $DIR/foreign_prelude_glob.rs:47:9
+   |
+LL |     use std::io::prelude::*;
+   |         ^^^^^^^^^^^^^^^^
+   |
+   = help: import the items you use by name, as the Google Rust Style Guide's "Don't use glob imports" asks
+
+warning: 5 warnings emitted
+

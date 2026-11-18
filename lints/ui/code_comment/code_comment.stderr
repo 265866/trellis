@@ -1,0 +1,76 @@
+warning: code comment
+  --> $DIR/code_comment.rs:18:5
+   |
+LL |     // Flagged: a line comment.
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: move the explanation into a doc comment, a name, an assertion message or an `#[expect(..., reason = "...")]`, or delete it
+   = note: `#[warn(code_comment)]` on by default
+
+warning: code comment
+  --> $DIR/code_comment.rs:20:5
+   |
+LL |     /* Flagged: a block comment. */
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: move the explanation into a doc comment, a name, an assertion message or an `#[expect(..., reason = "...")]`, or delete it
+
+warning: `SAFETY:` comment with no unsafe code after it
+  --> $DIR/code_comment.rs:49:24
+   |
+LL |     let total = 1 + 1; // SAFETY: flagged: no unsafe code on this line or after it.
+   |                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: put it right above, or at the end of, the line with the `unsafe` code it explains, or delete it
+
+warning: `SAFETY:` comment with no unsafe code after it
+  --> $DIR/code_comment.rs:50:5
+   |
+LL | /     // SAFETY: flagged on its own, since a comment at the end of a line takes in no lines below
+LL | |     // it. The next line of code is safe.
+   | |_________________________________________^
+   |
+   = help: put it right above, or at the end of, the line with the `unsafe` code it explains, or delete it
+
+warning: `SAFETY:` comment with no unsafe code after it
+  --> $DIR/code_comment.rs:57:5
+   |
+LL |     // SAFETY: flagged: the blank line below ends the comment, and no unsafe code follows it.
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: put it right above, or at the end of, the line with the `unsafe` code it explains, or delete it
+
+warning: code comment
+  --> $DIR/code_comment.rs:59:5
+   |
+LL |     // Flagged: a separate comment after the blank line.
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: move the explanation into a doc comment, a name, an assertion message or an `#[expect(..., reason = "...")]`, or delete it
+
+warning: code comment
+  --> $DIR/modules/helper.rs:3:1
+   |
+LL | // Flagged: a line comment in a module file.
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: move the explanation into a doc comment, a name, an assertion message or an `#[expect(..., reason = "...")]`, or delete it
+
+warning: code comment
+  --> $DIR/modules/hidden.rs:4:1
+   |
+LL | // Flagged: a line comment in a hidden module.
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: move the explanation into a doc comment, a name, an assertion message or an `#[expect(..., reason = "...")]`, or delete it
+
+warning: code comment
+  --> $DIR/modules/elsewhere.rs:3:1
+   |
+LL | // Flagged: a line comment in a module no build loads.
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: move the explanation into a doc comment, a name, an assertion message or an `#[expect(..., reason = "...")]`, or delete it
+
+warning: 9 warnings emitted
+

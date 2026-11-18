@@ -1,0 +1,7 @@
+warning: crate compiled without the workspace lint levels: `clippy::unwrap_used` is `allow`, and the workspace needs at least `warn`; `elided_lifetimes_in_paths` is `allow`, and the workspace needs at least `warn`; `unused_qualifications` is `warn`, and the workspace needs at least `deny`; `clippy::complexity` is `allow`, and the workspace needs at least `warn`; `clippy::correctness` is `allow`, and the workspace needs at least `warn`; `clippy::perf` is `allow`, and the workspace needs at least `warn`; `clippy::style` is `allow`, and the workspace needs at least `warn`; `clippy::suspicious` is `allow`, and the workspace needs at least `warn`
+   |
+   = help: add `[lints]` with `workspace = true` to the crate's `Cargo.toml`, and don't lower lints through `RUSTFLAGS` or `.cargo/config.toml`
+   = note: `#[warn(missing_workspace_lints)]` on by default
+
+warning: 1 warning emitted
+

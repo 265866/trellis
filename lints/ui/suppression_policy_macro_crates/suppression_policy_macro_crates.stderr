@@ -1,0 +1,40 @@
+warning: `allow` attribute, which the macro `quiet::silence` from `quiet` writes
+  --> $DIR/suppression_policy_macro_crates.rs:7:1
+   |
+LL | / quiet::silence! {
+LL | |     fn first(values: &[u32]) -> u32 {
+LL | |         *values.first().unwrap()
+LL | |     }
+LL | | }
+   | |_^
+   |
+   = help: use `#[expect(lint, reason = "...")]` on the narrowest item, which fails once the lint stops firing
+   = help: write the code without `quiet::silence`, as the idioms in `docs/style.md` show; list `quiet` in `trusted_macro_crates` only after reading every lint level its macros write, which is a rule change
+   = note: `#[warn(suppression_policy)]` on by default
+
+warning: `expect` whose reason is too short to say why the lint is wrong here, which the macro `quiet::terse_exception` from `quiet` writes
+  --> $DIR/suppression_policy_macro_crates.rs:23:1
+   |
+LL | / quiet::terse_exception! {
+LL | |     fn third(values: &[u32]) -> u32 {
+LL | |         *values.first().unwrap()
+LL | |     }
+LL | | }
+   | |_^
+   |
+   = help: a reason needs at least 4 different words besides the words of the lint's name, and 20 characters: say what about this code makes the lint wrong here
+   = help: write the code without `quiet::terse_exception`, as the idioms in `docs/style.md` show; list `quiet` in `trusted_macro_crates` only after reading every lint level its macros write, which is a rule change
+
+warning: `#[clippy::msrv]` attribute, which the macro `quiet::old_rust` from `quiet` writes
+  --> $DIR/suppression_policy_macro_crates.rs:29:1
+   |
+LL | / quiet::old_rust! {
+LL | |     fn fourth() {}
+LL | | }
+   | |_^
+   |
+   = help: clippy's own attributes change what clippy checks without an `expect`: `clippy::msrv` turns off every lint that needs a newer Rust and `clippy::cognitive_complexity` raises a threshold. Set the Rust version with `rust-version` in `Cargo.toml` and thresholds in `clippy.toml`, or put an `expect` with a reason on the item
+   = help: write the code without `quiet::old_rust`, as the idioms in `docs/style.md` show; list `quiet` in `trusted_macro_crates` only after reading every lint level its macros write, which is a rule change
+
+warning: 3 warnings emitted
+

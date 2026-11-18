@@ -1,0 +1,131 @@
+warning: `let` binds the result of `.parse()` without a type
+  --> $DIR/inferred_conversion_binding.rs:22:9
+   |
+LL |     let cents = input.parse()?;
+   |         ^^^^^
+   |
+   = help: write `let cents: u64`, as the Google Rust Style Guide's "Don't overuse type inference" asks
+   = note: `#[warn(inferred_conversion_binding)]` on by default
+
+warning: `let` binds the result of `.into()` without a type
+  --> $DIR/inferred_conversion_binding.rs:26:9
+   |
+LL |     let amount = cents.into();
+   |         ^^^^^^
+   |
+   = help: write `let amount: Amount`, as the Google Rust Style Guide's "Don't overuse type inference" asks
+
+warning: `let` binds the result of `.collect()` without a type
+  --> $DIR/inferred_conversion_binding.rs:30:9
+   |
+LL |     let lengths = words.iter().map(|word| word.len()).collect();
+   |         ^^^^^^^
+   |
+   = help: write `let lengths: Vec<usize>`, as the Google Rust Style Guide's "Don't overuse type inference" asks
+
+warning: type given by turbofish on `.collect()` rather than on the `let`
+  --> $DIR/inferred_conversion_binding.rs:37:19
+   |
+LL |         .collect::<Vec<_>>();
+   |                   ^^^^^^^^
+   |
+   = help: drop the turbofish and write `let upper: Vec<String>`, as the Google Rust Style Guide's "Don't overuse type inference" asks
+
+warning: type given by turbofish on `.parse()` rather than on the `let`
+  --> $DIR/inferred_conversion_binding.rs:40:30
+   |
+LL |     let small = input.parse::<u8>().unwrap();
+   |                              ^^^^
+   |
+   = help: drop the turbofish and write `let small: u8`, as the Google Rust Style Guide's "Don't overuse type inference" asks
+
+warning: `let` binds the result of `.try_into()` without a type
+  --> $DIR/inferred_conversion_binding.rs:43:9
+   |
+LL |     let narrow = cents.try_into().expect("cents fit in a u32");
+   |         ^^^^^^
+   |
+   = help: write `let narrow: u32`, as the Google Rust Style Guide's "Don't overuse type inference" asks
+
+warning: `let` binds the result of `.parse()` without a type
+  --> $DIR/inferred_conversion_binding.rs:48:9
+   |
+LL |     let mapped = input.parse().map_err(|error: ParseIntError| error)?;
+   |         ^^^^^^
+   |
+   = help: write `let mapped: u64`, as the Google Rust Style Guide's "Don't overuse type inference" asks
+
+warning: `let` binds the result of `.parse()` without a type
+  --> $DIR/inferred_conversion_binding.rs:50:9
+   |
+LL |     let fallback = input.parse().unwrap_or(0);
+   |         ^^^^^^^^
+   |
+   = help: write `let fallback: u64`, as the Google Rust Style Guide's "Don't overuse type inference" asks
+
+warning: `let` binds the result of `.parse()` without a type
+  --> $DIR/inferred_conversion_binding.rs:52:9
+   |
+LL |     let defaulted = input.parse().unwrap_or_default();
+   |         ^^^^^^^^^
+   |
+   = help: write `let defaulted: u64`, as the Google Rust Style Guide's "Don't overuse type inference" asks
+
+warning: `let` binds the result of `.parse()` without a type
+  --> $DIR/inferred_conversion_binding.rs:54:9
+   |
+LL |     let maybe = input.parse().ok();
+   |         ^^^^^
+   |
+   = help: write `let maybe: Option<u64>`, as the Google Rust Style Guide's "Don't overuse type inference" asks
+
+warning: type given by turbofish on `.sum()` rather than on the `let`
+  --> $DIR/inferred_conversion_binding.rs:91:36
+   |
+LL |     let total = values.iter().sum::<u64>();
+   |                                    ^^^^^
+   |
+   = help: drop the turbofish and write `let total: u64`, as the Google Rust Style Guide's "Don't overuse type inference" asks
+
+warning: `let` binds the result of `.product()` without a type
+  --> $DIR/inferred_conversion_binding.rs:94:9
+   |
+LL |     let product = values.iter().product();
+   |         ^^^^^^^
+   |
+   = help: write `let product: u64`, as the Google Rust Style Guide's "Don't overuse type inference" asks
+
+warning: type given by turbofish on `.partition()` rather than on the `let`
+  --> $DIR/inferred_conversion_binding.rs:98:51
+   |
+LL |     let (small, large) = values.iter().partition::<Vec<&u64>, _>(|value| **value < 3);
+   |                                                   ^^^^^^^^^^^^^^
+   |
+   = help: drop the turbofish and write `let (small, large): (Vec<&u64>, Vec<&u64>)`, as the Google Rust Style Guide's "Don't overuse type inference" asks
+
+warning: `let` binds the result of `.unzip()` without a type
+  --> $DIR/inferred_conversion_binding.rs:101:9
+   |
+LL |     let (lefts, rights) = pairs.iter().copied().unzip();
+   |         ^^^^^^^^^^^^^^^
+   |
+   = help: write `let (lefts, rights): (Vec<u8>, Vec<u8>)`, as the Google Rust Style Guide's "Don't overuse type inference" asks
+
+warning: `let` binds the result of `Default::default()` without a type
+  --> $DIR/inferred_conversion_binding.rs:105:9
+   |
+LL |     let settings = Default::default();
+   |         ^^^^^^^^
+   |
+   = help: write `let settings: Settings`, as the Google Rust Style Guide's "Don't overuse type inference" asks
+
+warning: `let` binds the result of `.into()` without a type
+  --> $DIR/inferred_conversion_binding.rs:161:9
+   |
+LL |     let amount = r#cents.into();
+   |         ^^^^^^
+   |
+   = help: write `let amount: Amount`, as the Google Rust Style Guide's "Don't overuse type inference" asks
+
+warning: 16 warnings emitted
+

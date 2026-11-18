@@ -1,0 +1,131 @@
+warning: `Rc` in a field type
+  --> $DIR/shared_ownership.rs:9:11
+   |
+LL |     root: Rc<Node>,
+   |           ^^^^^^^^
+   |
+   = help: prefer unique ownership and borrows; if shared ownership is simpler, say why with `#[cfg_attr(dylint_lib = "trellis_lints", expect(shared_ownership, reason = "..."))]`
+   = note: `#[warn(shared_ownership)]` on by default
+
+warning: `Arc` in a field type
+  --> $DIR/shared_ownership.rs:10:13
+   |
+LL |     shared: Arc<Node>,
+   |             ^^^^^^^^^
+   |
+   = help: prefer unique ownership and borrows; if shared ownership is simpler, say why with `#[cfg_attr(dylint_lib = "trellis_lints", expect(shared_ownership, reason = "..."))]`
+
+warning: `rc::Weak` in a field type
+  --> $DIR/shared_ownership.rs:11:13
+   |
+LL |     parent: rc::Weak<Node>,
+   |             ^^^^^^^^^^^^^^
+   |
+   = help: prefer unique ownership and borrows; if shared ownership is simpler, say why with `#[cfg_attr(dylint_lib = "trellis_lints", expect(shared_ownership, reason = "..."))]`
+
+warning: `sync::Weak` in a field type
+  --> $DIR/shared_ownership.rs:12:20
+   |
+LL |     observers: Vec<sync::Weak<Node>>,
+   |                    ^^^^^^^^^^^^^^^^
+   |
+   = help: prefer unique ownership and borrows; if shared ownership is simpler, say why with `#[cfg_attr(dylint_lib = "trellis_lints", expect(shared_ownership, reason = "..."))]`
+
+warning: `Rc` in a field type
+  --> $DIR/shared_ownership.rs:17:12
+   |
+LL |     Shared(Rc<RefCell<Node>>),
+   |            ^^^^^^^^^^^^^^^^^
+   |
+   = help: prefer unique ownership and borrows; if shared ownership is simpler, say why with `#[cfg_attr(dylint_lib = "trellis_lints", expect(shared_ownership, reason = "..."))]`
+
+warning: `Arc` in a type alias
+  --> $DIR/shared_ownership.rs:22:19
+   |
+LL | type SharedNode = Arc<Node>;
+   |                   ^^^^^^^^^
+   |
+   = help: prefer unique ownership and borrows; if shared ownership is simpler, say why with `#[cfg_attr(dylint_lib = "trellis_lints", expect(shared_ownership, reason = "..."))]`
+
+warning: `Rc` in a function signature
+  --> $DIR/shared_ownership.rs:25:16
+   |
+LL | fn share(node: Rc<Node>) -> Arc<Node> {
+   |                ^^^^^^^^
+   |
+   = help: prefer unique ownership and borrows; if shared ownership is simpler, say why with `#[cfg_attr(dylint_lib = "trellis_lints", expect(shared_ownership, reason = "..."))]`
+
+warning: `Arc` in a function signature
+  --> $DIR/shared_ownership.rs:25:29
+   |
+LL | fn share(node: Rc<Node>) -> Arc<Node> {
+   |                             ^^^^^^^^^
+   |
+   = help: prefer unique ownership and borrows; if shared ownership is simpler, say why with `#[cfg_attr(dylint_lib = "trellis_lints", expect(shared_ownership, reason = "..."))]`
+
+warning: `Rc` in a function signature
+  --> $DIR/shared_ownership.rs:32:19
+   |
+LL |     fn root(self: Rc<Self>) -> Option<Rc<Node>> {
+   |                   ^^^^^^^^
+   |
+   = help: prefer unique ownership and borrows; if shared ownership is simpler, say why with `#[cfg_attr(dylint_lib = "trellis_lints", expect(shared_ownership, reason = "..."))]`
+
+warning: `Rc` in a function signature
+  --> $DIR/shared_ownership.rs:32:39
+   |
+LL |     fn root(self: Rc<Self>) -> Option<Rc<Node>> {
+   |                                       ^^^^^^^^
+   |
+   = help: prefer unique ownership and borrows; if shared ownership is simpler, say why with `#[cfg_attr(dylint_lib = "trellis_lints", expect(shared_ownership, reason = "..."))]`
+
+warning: `Arc` in a function signature
+  --> $DIR/shared_ownership.rs:45:25
+   |
+LL |     fn shared(&self) -> Arc<Node>;
+   |                         ^^^^^^^^^
+   |
+   = help: prefer unique ownership and borrows; if shared ownership is simpler, say why with `#[cfg_attr(dylint_lib = "trellis_lints", expect(shared_ownership, reason = "..."))]`
+
+warning: `Arc` in a static
+  --> $DIR/shared_ownership.rs:97:23
+   |
+LL | static SHARED: Option<Arc<Node>> = None;
+   |                       ^^^^^^^^^
+   |
+   = help: prefer unique ownership and borrows; if shared ownership is simpler, say why with `#[cfg_attr(dylint_lib = "trellis_lints", expect(shared_ownership, reason = "..."))]`
+
+warning: `Rc` in a constant
+  --> $DIR/shared_ownership.rs:99:21
+   |
+LL | const EMPTY: Option<Rc<Node>> = None;
+   |                     ^^^^^^^^
+   |
+   = help: prefer unique ownership and borrows; if shared ownership is simpler, say why with `#[cfg_attr(dylint_lib = "trellis_lints", expect(shared_ownership, reason = "..."))]`
+
+warning: `Rc` in a constant
+  --> $DIR/shared_ownership.rs:102:27
+   |
+LL |     const DEFAULT: Option<Rc<Node>>;
+   |                           ^^^^^^^^
+   |
+   = help: prefer unique ownership and borrows; if shared ownership is simpler, say why with `#[cfg_attr(dylint_lib = "trellis_lints", expect(shared_ownership, reason = "..."))]`
+
+warning: `Arc` in a constant
+  --> $DIR/shared_ownership.rs:106:24
+   |
+LL |     const NONE: Option<Arc<Node>> = None;
+   |                        ^^^^^^^^^
+   |
+   = help: prefer unique ownership and borrows; if shared ownership is simpler, say why with `#[cfg_attr(dylint_lib = "trellis_lints", expect(shared_ownership, reason = "..."))]`
+
+warning: `Rc` in a field type
+  --> $DIR/shared_ownership.rs:117:13
+   |
+LL |     shared: r#Rc<u8>,
+   |             ^^^^^^^^
+   |
+   = help: prefer unique ownership and borrows; if shared ownership is simpler, say why with `#[cfg_attr(dylint_lib = "trellis_lints", expect(shared_ownership, reason = "..."))]`
+
+warning: 16 warnings emitted
+

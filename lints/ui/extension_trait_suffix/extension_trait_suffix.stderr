@@ -1,0 +1,27 @@
+warning: extension trait `Prices` doesn't end in `Ext`
+  --> $DIR/extension_trait_suffix.rs:10:7
+   |
+LL | trait Prices {
+   |       ^^^^^^
+   |
+   = help: name it `PricesExt`, as the Google Rust Style Guide's "Naming extension traits" asks
+   = note: `#[warn(extension_trait_suffix)]` on by default
+
+warning: extension trait `Shout` doesn't end in `Ext`
+  --> $DIR/extension_trait_suffix.rs:21:7
+   |
+LL | trait Shout {
+   |       ^^^^^
+   |
+   = help: name it `ShoutExt`, as the Google Rust Style Guide's "Naming extension traits" asks
+
+warning: extension trait `Describe` doesn't end in `Ext`
+  --> $DIR/extension_trait_suffix.rs:38:7
+   |
+LL | trait Describe {
+   |       ^^^^^^^^
+   |
+   = help: name it `DescribeExt`, as the Google Rust Style Guide's "Naming extension traits" asks
+
+warning: 3 warnings emitted
+

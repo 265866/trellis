@@ -1,0 +1,6 @@
+# Lints load into the compiler, so they build against the nightly whose compiler internals the
+# pinned clippy_utils matches. `cargo dylint upgrade` moves both together.
+[toolchain]
+channel = "nightly-2026-11-12"
+components = ["clippy", "llvm-tools-preview", "rustc-dev", "rustfmt"]
+profile = "minimal"

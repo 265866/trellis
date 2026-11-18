@@ -1,0 +1,51 @@
+warning: call to imported function `swap` without its module
+  --> $DIR/qualified_function_calls.rs:42:5
+   |
+LL |     swap(&mut left, &mut right);
+   |     ^^^^
+   |
+   = help: import its module and call it as `mem::swap(..)`, as the Google Rust Style Guide's "Qualify calls to top-level functions with a module name" asks
+   = note: `#[warn(qualified_function_calls)]` on by default
+
+warning: call to imported function `put` without its module
+  --> $DIR/qualified_function_calls.rs:45:13
+   |
+LL |     let _ = put(&mut left, 3);
+   |             ^^^
+   |
+   = help: import its module and call it as `mem::replace(..)`, as the Google Rust Style Guide's "Qualify calls to top-level functions with a module name" asks
+
+warning: call to imported function `double` without its module
+  --> $DIR/qualified_function_calls.rs:48:13
+   |
+LL |     let _ = double(4);
+   |             ^^^^^^
+   |
+   = help: import its module and call it as `math::double(..)`, as the Google Rust Style Guide's "Qualify calls to top-level functions with a module name" asks
+
+warning: call to imported function `max` without its module
+  --> $DIR/qualified_function_calls.rs:51:13
+   |
+LL |     let _ = max(left, right);
+   |             ^^^
+   |
+   = help: import its module and call it as `cmp::max(..)`, as the Google Rust Style Guide's "Qualify calls to top-level functions with a module name" asks
+
+warning: call to imported function `max` without its module
+  --> $DIR/qualified_function_calls.rs:81:5
+   |
+LL |     max(1, 2)
+   |     ^^^
+   |
+   = help: import its module and call it as `cmp::max(..)`, as the Google Rust Style Guide's "Qualify calls to top-level functions with a module name" asks
+
+warning: call to imported function `swap` without its module
+  --> $DIR/qualified_function_calls.rs:111:5
+   |
+LL |     r#swap(first, second);
+   |     ^^^^^^
+   |
+   = help: import its module and call it as `mem::swap(..)`, as the Google Rust Style Guide's "Qualify calls to top-level functions with a module name" asks
+
+warning: 6 warnings emitted
+

@@ -1,0 +1,51 @@
+warning: `cfg` attribute in a string that a macro parses as code
+  --> $DIR/disabled_code_parsed_string.rs:9:15
+   |
+LL | #[parsed(ty = "[(); { #[cfg(not(any(clippy, dylint_lib = /"trellis_lints/")))] fn hidden() {} 0 }]")]
+   |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: the lints read the string as text, so they miss what the `cfg` does to the code: write the code outside the string, in a function or a type with a name, and name that in the string
+   = note: `#[warn(disabled_code)]` on by default
+
+warning: `cfg_attr` attribute in a string that a macro parses as code
+  --> $DIR/disabled_code_parsed_string.rs:14:15
+   |
+LL | #[parsed(ty = "[(); { # [ cfg_attr(clippy, allow(clippy::all))] fn hidden() {} 0 }]")]
+   |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: the lints read the string as text, so they miss what the `cfg` does to the code: write the code outside the string, in a function or a type with a name, and name that in the string
+
+warning: `cfg_select!` in a string that a macro parses as code
+  --> $DIR/disabled_code_parsed_string.rs:19:15
+   |
+LL | #[parsed(ty = "[(); { cfg_select! { clippy => {} _ => { fn hidden() {} } } 0 }]")]
+   |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: the lints read the string as text, so they miss what the `cfg` does to the code: write the code outside the string, in a function or a type with a name, and name that in the string
+
+warning: `cfg_attr` attribute in a string that a macro parses as code
+  --> $DIR/disabled_code_parsed_string.rs:25:17
+   |
+LL | #[parsed(call = "/*{called}*/ #[cfg_attr(clippy, allow(clippy::all))] called")]
+   |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: the lints read the string as text, so they miss what the `cfg` does to the code: write the code outside the string, in a function or a type with a name, and name that in the string
+
+warning: `cfg!` in a string that a macro parses as code
+  --> $DIR/disabled_code_parsed_string.rs:32:15
+   |
+LL | #[parsed(ty = "[(); { if cfg!(test) { 1 } else { 1 } }]")]
+   |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: the lints read the string as text, so they miss what the `cfg` does to the code: write the code outside the string, in a function or a type with a name, and name that in the string
+
+warning: `cfg!` in a string that a macro parses as code
+  --> $DIR/disabled_code_parsed_string.rs:37:15
+   |
+LL | #[parsed(ty = "[(); { if cfg! { test } { 1 } else { 1 } }]")]
+   |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: the lints read the string as text, so they miss what the `cfg` does to the code: write the code outside the string, in a function or a type with a name, and name that in the string
+
+warning: 6 warnings emitted
+

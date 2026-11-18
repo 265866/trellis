@@ -1,0 +1,139 @@
+warning: invisible character written literally
+  --> $DIR/invisible_characters.rs:7:21
+   |
+LL | const SPACE: &str = "check​out";
+   |                     ^^^^^^^^^^
+   |
+   = help: write it as `/u{200B}`
+   = note: `#[warn(invisible_characters)]` on by default
+
+warning: invisible character written literally
+  --> $DIR/invisible_characters.rs:10:20
+   |
+LL | const MARK: char = '﻿';
+   |                    ^^
+   |
+   = help: write it as `/u{FEFF}`
+
+warning: invisible character written literally
+  --> $DIR/invisible_characters.rs:13:19
+   |
+LL | const RAW: &str = r"check­out";
+   |                   ^^^^^^^^^^^
+   |
+   = help: use a literal that isn't raw, and write it as `/u{00AD}`
+
+warning: invisible character written literally
+  --> $DIR/invisible_characters.rs:16:35
+   |
+LL | const C_STRING: &std::ffi::CStr = c"check⁠out";
+   |                                   ^^^^^^^^^^^
+   |
+   = help: write it as `/u{2060}`
+
+warning: invisible character written literally
+  --> $DIR/invisible_characters.rs:19:19
+   |
+LL | const TWO: &str = "​heart️";
+   |                   ^^^^^^^
+   |
+   = help: write them as `/u{200B}`, `/u{FE0F}`
+
+warning: invisible character written literally
+  --> $DIR/invisible_characters.rs:22:24
+   |
+LL | const OVERRIDE: &str = "�lacigam";
+   |                        ^^^^^^^^^^
+   |
+   = help: write it as `/u{202E}`
+
+warning: invisible character written literally
+  --> $DIR/invisible_characters.rs:38:26
+   |
+LL | const NOT_KEYCAP: &str = "7️";
+   |                          ^^^
+   |
+   = help: write it as `/u{FE0F}`
+
+warning: invisible character written literally
+  --> $DIR/invisible_characters.rs:41:27
+   |
+LL | const HALF_JOINED: &str = "🔥a";
+   |                           ^^^^^
+   |
+   = help: write it as `/u{200D}`
+
+warning: invisible character written literally
+  --> $DIR/invisible_characters.rs:60:9
+   |
+LL |         "‌" => String::new(),
+   |         ^^
+   |
+   = help: write it as `/u{200C}`
+
+warning: invisible character written literally
+  --> $DIR/invisible_characters.rs:62:22
+   |
+LL |         _ => format!("{name}"),
+   |                      ^^^^^^^^
+   |
+   = help: write it as `/u{200D}`
+
+warning: invisible character written literally
+  --> $DIR/invisible_characters.rs:90:20
+   |
+LL | const LINE: &str = "check out";
+   |                    ^^^^^^^^^^^
+   |
+   = help: write it as `/u{2028}`
+
+warning: invisible character written literally
+  --> $DIR/invisible_characters.rs:92:19
+   |
+LL | const TAG: &str = "check󠁁out";
+   |                   ^^^^^^^^^^
+   |
+   = help: write it as `/u{E0041}`
+
+warning: invisible character written literally
+  --> $DIR/invisible_characters.rs:94:25
+   |
+LL | const MONGOLIAN: &str = "check᠋out";
+   |                         ^^^^^^^^^^
+   |
+   = help: write it as `/u{180B}`
+
+warning: invisible character written literally
+  --> $DIR/invisible_characters.rs:96:26
+   |
+LL | const SUPPLEMENT: &str = "check󠄀out";
+   |                          ^^^^^^^^^^
+   |
+   = help: write it as `/u{E0100}`
+
+warning: invisible character written literally
+  --> $DIR/invisible_characters.rs:104:14
+   |
+LL | #[must_use = "the price​ matters"]
+   |              ^^^^^^^^^^^^^^^^^^^
+   |
+   = help: write it as `/u{200B}`
+
+warning: invisible character written literally
+  --> $DIR/invisible_characters.rs:53:9
+   |
+LL |         "checkout"
+   |         ^^^^^^^^^^
+   |
+   = help: write it as `/u{200D}`
+
+warning: invisible character written literally
+  --> $DIR/invisible_characters.rs:102:45
+   |
+LL | const CONCATENATED: &str = concat!("check", "​out");
+   |                                             ^^^^^
+   |
+   = help: write it as `/u{200B}`
+
+warning: 17 warnings emitted
+

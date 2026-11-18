@@ -1,0 +1,19 @@
+warning: module named `prelude`
+  --> $DIR/prelude_module.rs:7:13
+   |
+LL |     pub mod prelude {
+   |             ^^^^^^^
+   |
+   = help: remove it and have callers import items by name, as the Google Rust Style Guide's "Don't use glob imports" asks
+   = note: `#[warn(prelude_module)]` on by default
+
+warning: module named `prelude`
+  --> $DIR/prelude_module.rs:14:5
+   |
+LL | mod prelude;
+   |     ^^^^^^^
+   |
+   = help: remove it and have callers import items by name, as the Google Rust Style Guide's "Don't use glob imports" asks
+
+warning: 2 warnings emitted
+

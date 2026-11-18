@@ -1,0 +1,27 @@
+warning: error type `OrderError` could be `Copy`
+  --> $DIR/error_type_copy.rs:18:6
+   |
+LL | enum OrderError {
+   |      ^^^^^^^^^^
+   |
+   = help: derive `Clone` and `Copy`, as the Google Rust Style Guide's "Specific guidance for important traits" asks of error types
+   = note: `#[warn(error_type_copy)]` on by default
+
+warning: error type `OutOfRange` could be `Copy`
+  --> $DIR/error_type_copy.rs:28:8
+   |
+LL | struct OutOfRange {
+   |        ^^^^^^^^^^
+   |
+   = help: derive `Clone` and `Copy`, as the Google Rust Style Guide's "Specific guidance for important traits" asks of error types
+
+warning: error type `Unexpected` could be `Copy`
+  --> $DIR/error_type_copy.rs:38:8
+   |
+LL | struct Unexpected<'a> {
+   |        ^^^^^^^^^^
+   |
+   = help: derive `Clone` and `Copy`, as the Google Rust Style Guide's "Specific guidance for important traits" asks of error types
+
+warning: 3 warnings emitted
+

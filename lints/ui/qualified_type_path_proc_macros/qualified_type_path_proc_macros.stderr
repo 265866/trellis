@@ -1,0 +1,67 @@
+warning: `From` is named through its module
+  --> $DIR/qualified_type_path_proc_macros.rs:14:6
+   |
+LL | impl ::core::convert::From<Meters> for u32 {
+   |      ^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: write `From`, which the prelude already brings into scope, as the Google Rust Style Guide's "Type names should be imported and used unqualified" asks
+   = note: `#[warn(qualified_type_path)]` on by default
+
+warning: `Fn` is named through its module
+  --> $DIR/qualified_type_path_proc_macros.rs:22:25
+   |
+LL | fn apply(function: &dyn ::core::ops::Fn(u8) -> u8) -> u8 {
+   |                         ^^^^^^^^^^^^^^^
+   |
+   = help: write `Fn`, which the prelude already brings into scope, as the Google Rust Style Guide's "Type names should be imported and used unqualified" asks
+
+warning: `String` is named through its module
+  --> $DIR/qualified_type_path_proc_macros.rs:29:20
+   |
+LL | #[defaulted(path = "std::string::String::new")]
+   |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: write `String`, which the prelude already brings into scope, as the Google Rust Style Guide's "Type names should be imported and used unqualified" asks
+
+warning: `String` is named through its module
+  --> $DIR/qualified_type_path_proc_macros.rs:35:20
+   |
+LL | #[defaulted(path = "std::string::/**/String::new")]
+   |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: write `String`, which the prelude already brings into scope, as the Google Rust Style Guide's "Type names should be imported and used unqualified" asks
+
+warning: `String` is named through its module
+  --> $DIR/qualified_type_path_proc_macros.rs:39:20
+   |
+LL | #[defaulted(path = "std::string::r#String::new")]
+   |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: write `String`, which the prelude already brings into scope, as the Google Rust Style Guide's "Type names should be imported and used unqualified" asks
+
+warning: `String` is named through its module
+  --> $DIR/qualified_type_path_proc_macros.rs:43:20
+   |
+LL | #[defaulted(path = "std::string::String::<>::new")]
+   |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: write `String`, which the prelude already brings into scope, as the Google Rust Style Guide's "Type names should be imported and used unqualified" asks
+
+warning: `Length` is named through its module
+  --> $DIR/qualified_type_path_proc_macros.rs:50:20
+   |
+LL | #[defaulted(with = "units::Length")]
+   |                    ^^^^^^^^^^^^^^^
+   |
+   = help: add `use crate::units::Length;` and write `Length`, as the Google Rust Style Guide's "Type names should be imported and used unqualified" asks
+
+warning: `Café` is named through its module
+  --> $DIR/qualified_type_path_proc_macros.rs:64:20
+   |
+LL | #[defaulted(with = "accents::Café")]
+   |                    ^^^^^^^^^^^^^^^
+   |
+   = help: add `use crate::accents::Café;` and write `Café`, as the Google Rust Style Guide's "Type names should be imported and used unqualified" asks
+
+warning: 8 warnings emitted
+

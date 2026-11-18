@@ -1,0 +1,6 @@
+error: `trusted_macro_lints` in `dylint.toml` lists `quiet`, which `trusted_macro_crates` doesn't: only a trusted crate's macros may set lint levels
+
+error: `trusted_macro_lints` in `dylint.toml` lists the lint group `clippy::style` for `std`: a group silences lints nobody named, so list each lint
+
+error: aborting due to 2 previous errors
+

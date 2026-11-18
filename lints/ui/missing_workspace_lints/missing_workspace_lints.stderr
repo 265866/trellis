@@ -1,0 +1,7 @@
+warning: crate compiled without the workspace lint levels: `clippy::pedantic` is `allow`, and the workspace needs at least `warn`; `clippy::unwrap_used` is `allow`, and the workspace needs at least `warn`; `disabled_code` is `allow`, and the workspace needs at least `warn`; `missing_docs` is `allow`, and the workspace needs at least `warn`; `suppression_policy` is `allow`, and the workspace needs at least `warn`; `unsafe_code` is `allow`, and the workspace needs at least `deny`
+   |
+   = help: add `[lints]` with `workspace = true` to the crate's `Cargo.toml`, and don't lower lints through `RUSTFLAGS` or `.cargo/config.toml`
+   = note: `#[warn(missing_workspace_lints)]` on by default
+
+warning: 1 warning emitted
+

@@ -1,0 +1,59 @@
+warning: wildcard hides 4 variants of non-exhaustive `IntErrorKind`
+  --> $DIR/non_exhaustive_wildcard.rs:9:9
+   |
+LL |         _ => "invalid",
+   |         ^
+   |
+   = help: name `IntErrorKind::InvalidDigit | IntErrorKind::PosOverflow | IntErrorKind::NegOverflow | IntErrorKind::Zero` in an arm, or as alternatives next to the wildcard, as the Google Rust Style Guide's "Don't omit patterns on `non_exhaustive` enums when matching" asks
+   = note: `#[warn(non_exhaustive_wildcard)]` on by default
+
+warning: wildcard hides 2 variants of non-exhaustive `IntErrorKind`
+  --> $DIR/non_exhaustive_wildcard.rs:18:9
+   |
+LL |         other => "overflow",
+   |         ^^^^^
+   |
+   = help: name `IntErrorKind::PosOverflow | IntErrorKind::NegOverflow` in an arm, or as alternatives next to the wildcard, as the Google Rust Style Guide's "Don't omit patterns on `non_exhaustive` enums when matching" asks
+
+warning: wildcard hides 1 variant of non-exhaustive `BacktraceStatus`
+  --> $DIR/non_exhaustive_wildcard.rs:26:37
+   |
+LL |         BacktraceStatus::Disabled | _ => false,
+   |                                     ^
+   |
+   = help: name `BacktraceStatus::Unsupported` in an arm, or as alternatives next to the wildcard, as the Google Rust Style Guide's "Don't omit patterns on `non_exhaustive` enums when matching" asks
+
+warning: wildcard hides 38 variants of non-exhaustive `ErrorKind`
+  --> $DIR/non_exhaustive_wildcard.rs:34:9
+   |
+LL |         _ => false,
+   |         ^
+   |
+   = help: name `ErrorKind::PermissionDenied | ErrorKind::ConnectionRefused | ErrorKind::ConnectionReset | ErrorKind::HostUnreachable | ErrorKind::NetworkUnreachable | ErrorKind::ConnectionAborted | ...` and 32 more in an arm, or as alternatives next to the wildcard, as the Google Rust Style Guide's "Don't omit patterns on `non_exhaustive` enums when matching" asks
+
+warning: wildcard hides 4 variants of non-exhaustive `IntErrorKind`
+  --> $DIR/non_exhaustive_wildcard.rs:76:9
+   |
+LL |         _ => false,
+   |         ^
+   |
+   = help: name `IntErrorKind::InvalidDigit | IntErrorKind::PosOverflow | IntErrorKind::NegOverflow | IntErrorKind::Zero` in an arm, or as alternatives next to the wildcard, as the Google Rust Style Guide's "Don't omit patterns on `non_exhaustive` enums when matching" asks
+
+warning: wildcard hides 3 variants of non-exhaustive `IntErrorKind`
+  --> $DIR/non_exhaustive_wildcard.rs:84:14
+   |
+LL |         Some(_) => 2,
+   |              ^
+   |
+   = help: name `IntErrorKind::InvalidDigit | IntErrorKind::PosOverflow | IntErrorKind::NegOverflow` in an arm, or as alternatives next to the wildcard, as the Google Rust Style Guide's "Don't omit patterns on `non_exhaustive` enums when matching" asks
+
+warning: wildcard hides 4 variants of non-exhaustive `IntErrorKind`
+  --> $DIR/non_exhaustive_wildcard.rs:89:9
+   |
+LL |         Ok(..) => 2,
+   |         ^^^^^^
+   |
+   = help: name `IntErrorKind::Empty | IntErrorKind::PosOverflow | IntErrorKind::NegOverflow | IntErrorKind::Zero` in an arm, or as alternatives next to the wildcard, as the Google Rust Style Guide's "Don't omit patterns on `non_exhaustive` enums when matching" asks
+
+warning: 7 warnings emitted
+

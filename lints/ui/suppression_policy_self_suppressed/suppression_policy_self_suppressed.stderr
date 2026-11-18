@@ -1,0 +1,54 @@
+error: `allow` attribute
+  --> $DIR/suppression_policy_self_suppressed.rs:3:1
+   |
+LL | #![cfg_attr(dylint_lib = "trellis_lints", allow(warnings))]
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: use `#[expect(lint, reason = "...")]` on the narrowest item, which fails once the lint stops firing
+note: this attribute sets the level of `suppression_policy`, which only the command line may set, so the lint reports an error
+  --> $DIR/suppression_policy_self_suppressed.rs:3:49
+   |
+LL | #![cfg_attr(dylint_lib = "trellis_lints", allow(warnings))]
+   |                                                 ^^^^^^^^
+
+error: inner `#![allow(..)]` attribute
+  --> $DIR/suppression_policy_self_suppressed.rs:3:1
+   |
+LL | #![cfg_attr(dylint_lib = "trellis_lints", allow(warnings))]
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: it applies to everything in the enclosing crate, module or function: put an outer `#[expect(lint, reason = "...")]` on the narrowest item instead, or change the level in `[workspace.lints]` in `Cargo.toml`
+note: this attribute sets the level of `suppression_policy`, which only the command line may set, so the lint reports an error
+  --> $DIR/suppression_policy_self_suppressed.rs:3:49
+   |
+LL | #![cfg_attr(dylint_lib = "trellis_lints", allow(warnings))]
+   |                                                 ^^^^^^^^
+
+error: inner `#![expect(..)]` attribute
+  --> $DIR/suppression_policy_self_suppressed.rs:7:5
+   |
+LL |     #![expect(suppression_policy, reason = "the legacy module predates the policy")]
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: it applies to everything in the enclosing crate, module or function: put an outer `#[expect(lint, reason = "...")]` on the narrowest item instead, or change the level in `[workspace.lints]` in `Cargo.toml`
+note: this attribute sets the level of `suppression_policy`, which only the command line may set, so the lint reports an error
+  --> $DIR/suppression_policy_self_suppressed.rs:3:49
+   |
+LL | #![cfg_attr(dylint_lib = "trellis_lints", allow(warnings))]
+   |                                                 ^^^^^^^^
+
+error: `expect` of `suppression_policy`, which has no exceptions
+  --> $DIR/suppression_policy_self_suppressed.rs:7:15
+   |
+LL |     #![expect(suppression_policy, reason = "the legacy module predates the policy")]
+   |               ^^^^^^^^^^^^^^^^^^
+   |
+   = help: fix what the lint reports; if the rule itself is wrong for the workspace, change it in trellis's `lints/` and `docs/style.md`
+note: this attribute sets the level of `suppression_policy`, which only the command line may set, so the lint reports an error
+  --> $DIR/suppression_policy_self_suppressed.rs:3:49
+   |
+LL | #![cfg_attr(dylint_lib = "trellis_lints", allow(warnings))]
+   |                                                 ^^^^^^^^
+
+error: aborting due to 4 previous errors
+

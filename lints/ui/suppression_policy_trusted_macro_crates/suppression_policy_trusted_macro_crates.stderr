@@ -1,0 +1,21 @@
+warning: code written in the source under the lint levels of `warnings` that a macro from `quiet` writes, which `trusted_macro_lints` in `dylint.toml` doesn't allow there
+  --> $DIR/suppression_policy_trusted_macro_crates.rs:9:5
+   |
+LL | /     fn first(values: &[u32]) -> u32 {
+LL | |         *values.first().unwrap()
+LL | |     }
+   | |_____^
+   |
+   = help: a lint group, or one of clippy's own attributes such as `clippy::msrv`, changes what clippy checks in all of this code, so no configuration can allow it: move the code into a function or a constant with a name, and refer to it here by that name, so clippy checks it
+   = note: `#[warn(suppression_policy)]` on by default
+
+warning: code written in the source under the lint levels of `clippy::msrv` that a macro from `quiet` writes, which `trusted_macro_lints` in `dylint.toml` doesn't allow there
+  --> $DIR/suppression_policy_trusted_macro_crates.rs:32:5
+   |
+LL |     fn fourth() {}
+   |     ^^^^^^^^^^^^^^
+   |
+   = help: a lint group, or one of clippy's own attributes such as `clippy::msrv`, changes what clippy checks in all of this code, so no configuration can allow it: move the code into a function or a constant with a name, and refer to it here by that name, so clippy checks it
+
+warning: 2 warnings emitted
+

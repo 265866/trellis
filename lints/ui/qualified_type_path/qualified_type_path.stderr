@@ -1,0 +1,67 @@
+warning: `Display` is named through its module
+  --> $DIR/qualified_type_path.rs:40:6
+   |
+LL | impl fmt::Display for Order {
+   |      ^^^^^^^^^^^^
+   |
+   = help: add `use std::fmt::Display;` and write `Display`, as the Google Rust Style Guide's "Type names should be imported and used unqualified" asks
+   = note: `#[warn(qualified_type_path)]` on by default
+
+warning: `Formatter` is named through its module
+  --> $DIR/qualified_type_path.rs:41:27
+   |
+LL |     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+   |                           ^^^^^^^^^^^^^^
+   |
+   = help: add `use std::fmt::Formatter;` and write `Formatter`, as the Google Rust Style Guide's "Type names should be imported and used unqualified" asks
+
+warning: `HashMap` is named through its module
+  --> $DIR/qualified_type_path.rs:47:15
+   |
+LL | fn table() -> collections::HashMap<u8, u8> {
+   |               ^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: add `use std::collections::HashMap;` and write `HashMap`, as the Google Rust Style Guide's "Type names should be imported and used unqualified" asks
+
+warning: `HashMap` is named through its module
+  --> $DIR/qualified_type_path.rs:48:5
+   |
+LL |     collections::HashMap::new()
+   |     ^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: add `use std::collections::HashMap;` and write `HashMap`, as the Google Rust Style Guide's "Type names should be imported and used unqualified" asks
+
+warning: `Shelf` is named through its module
+  --> $DIR/qualified_type_path.rs:52:21
+   |
+LL | fn first_shelf() -> shelves::Shelf {
+   |                     ^^^^^^^^^^^^^^
+   |
+   = help: add `use crate::shelves::Shelf;` and write `Shelf`, as the Google Rust Style Guide's "Type names should be imported and used unqualified" asks
+
+warning: `String` is named through its module
+  --> $DIR/qualified_type_path.rs:95:15
+   |
+LL | fn owned() -> std::string::String {
+   |               ^^^^^^^^^^^^^^^^^^^
+   |
+   = help: write `String`, which the prelude already brings into scope, as the Google Rust Style Guide's "Type names should be imported and used unqualified" asks
+
+warning: `String` is named through its module
+  --> $DIR/qualified_type_path.rs:96:5
+   |
+LL |     std::string::String::new()
+   |     ^^^^^^^^^^^^^^^^^^^
+   |
+   = help: write `String`, which the prelude already brings into scope, as the Google Rust Style Guide's "Type names should be imported and used unqualified" asks
+
+warning: `Shelf` is named through its module
+  --> $DIR/qualified_type_path.rs:119:19
+   |
+LL |     fn shelf() -> super::shelves::Shelf {
+   |                   ^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: add `use crate::shelves::Shelf;` and write `Shelf`, as the Google Rust Style Guide's "Type names should be imported and used unqualified" asks
+
+warning: 8 warnings emitted
+

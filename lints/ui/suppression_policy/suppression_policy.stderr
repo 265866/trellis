@@ -1,0 +1,625 @@
+warning: `allow` attribute
+  --> $DIR/suppression_policy.rs:2:1
+   |
+LL | / #![cfg_attr(
+LL | |     not(dylint_lib = "trellis_lints"),
+LL | |     allow(clippy::pedantic, clippy::unwrap_used, reason = "x")
+LL | | )]
+   | |__^
+   |
+   = help: use `#[expect(lint, reason = "...")]` on the narrowest item, which fails once the lint stops firing
+   = note: `#[warn(suppression_policy)]` on by default
+
+warning: inner `#![allow(..)]` attribute
+  --> $DIR/suppression_policy.rs:2:1
+   |
+LL | / #![cfg_attr(
+LL | |     not(dylint_lib = "trellis_lints"),
+LL | |     allow(clippy::pedantic, clippy::unwrap_used, reason = "x")
+LL | | )]
+   | |__^
+   |
+   = help: it applies to everything in the enclosing crate, module or function: put an outer `#[expect(lint, reason = "...")]` on the narrowest item instead, or change the level in `[workspace.lints]` in `Cargo.toml`
+
+warning: `#![allow(..)]` behind a `cfg_attr` that is on in only some builds
+  --> $DIR/suppression_policy.rs:2:1
+   |
+LL | / #![cfg_attr(
+LL | |     not(dylint_lib = "trellis_lints"),
+LL | |     allow(clippy::pedantic, clippy::unwrap_used, reason = "x")
+LL | | )]
+   | |__^
+   |
+   = help: clippy runs without `dylint_lib` and `trellis_lints` runs with it, so the attribute escapes one of them; the only allowed form is `#[cfg_attr(dylint_lib = "trellis_lints", expect(lint, reason = "..."))]`, for the lints in this library
+
+warning: inner `#![expect(..)]` attribute
+  --> $DIR/suppression_policy.rs:7:1
+   |
+LL | / #![cfg_attr(
+LL | |     dylint_lib = "trellis_lints",
+LL | |     expect(code_comment, reason = "the generated tables carry comments")
+LL | | )]
+   | |__^
+   |
+   = help: it applies to everything in the enclosing crate, module or function: put an outer `#[expect(lint, reason = "...")]` on the narrowest item instead, or change the level in `[workspace.lints]` in `Cargo.toml`
+
+warning: `expect` of `code_comment`, which has no exceptions
+  --> $DIR/suppression_policy.rs:9:12
+   |
+LL |     expect(code_comment, reason = "the generated tables carry comments")
+   |            ^^^^^^^^^^^^
+   |
+   = help: fix what the lint reports; if the rule itself is wrong for the workspace, change it in trellis's `lints/` and `docs/style.md`
+
+warning: inner `#![expect(..)]` attribute
+  --> $DIR/suppression_policy.rs:12:1
+   |
+LL | #![expect(clippy::pedantic, reason = "the prototype predates the style rules")]
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: it applies to everything in the enclosing crate, module or function: put an outer `#[expect(lint, reason = "...")]` on the narrowest item instead, or change the level in `[workspace.lints]` in `Cargo.toml`
+
+warning: `expect` of the lint group `clippy::pedantic`
+  --> $DIR/suppression_policy.rs:12:11
+   |
+LL | #![expect(clippy::pedantic, reason = "the prototype predates the style rules")]
+   |           ^^^^^^^^^^^^^^^^
+   |
+   = help: expect each lint that fires here by name, so the exception covers only them
+
+warning: `warn` attribute
+  --> $DIR/suppression_policy.rs:14:1
+   |
+LL | #![warn(unused_qualifications)]
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: lint levels come from `[workspace.lints]` in `Cargo.toml`; an attribute may only tighten them, with `deny` or `forbid`
+
+warning: inner `#![warn(..)]` attribute
+  --> $DIR/suppression_policy.rs:14:1
+   |
+LL | #![warn(unused_qualifications)]
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: it applies to everything in the enclosing crate, module or function: put an outer `#[expect(lint, reason = "...")]` on the narrowest item instead, or change the level in `[workspace.lints]` in `Cargo.toml`
+
+warning: `allow` attribute
+  --> $DIR/suppression_policy.rs:20:1
+   |
+LL | #[cfg_attr(dylint_lib = "trellis_lints", allow(shared_ownership))]
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: use `#[expect(lint, reason = "...")]` on the narrowest item, which fails once the lint stops firing
+
+warning: `expect` without a reason
+  --> $DIR/suppression_policy.rs:28:1
+   |
+LL | #[cfg_attr(dylint_lib = "trellis_lints", expect(shared_ownership))]
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: add `reason = "..."` saying why the lint is wrong here
+
+warning: `expect` without a reason
+  --> $DIR/suppression_policy.rs:36:1
+   |
+LL | #[expect(non_snake_case, reason = " ")]
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: add `reason = "..."` saying why the lint is wrong here
+
+warning: `allow` attribute
+  --> $DIR/suppression_policy.rs:40:1
+   |
+LL | #[cfg_attr(test, allow(dead_code))]
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: use `#[expect(lint, reason = "...")]` on the narrowest item, which fails once the lint stops firing
+
+warning: `#[allow(..)]` behind a `cfg_attr` that is on in only some builds
+  --> $DIR/suppression_policy.rs:40:1
+   |
+LL | #[cfg_attr(test, allow(dead_code))]
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: clippy runs without `dylint_lib` and `trellis_lints` runs with it, so the attribute escapes one of them; the only allowed form is `#[cfg_attr(dylint_lib = "trellis_lints", expect(lint, reason = "..."))]`, for the lints in this library
+
+warning: `#[expect(..)]` behind a `cfg_attr` that is on in only some builds
+  --> $DIR/suppression_policy.rs:44:1
+   |
+LL | / #[cfg_attr(
+LL | |     any(dylint_lib = "trellis_lints", clippy),
+LL | |     expect(warnings, unused, reason = "the function is a placeholder for now")
+LL | | )]
+   | |__^
+   |
+   = help: clippy runs without `dylint_lib` and `trellis_lints` runs with it, so the attribute escapes one of them; the only allowed form is `#[cfg_attr(dylint_lib = "trellis_lints", expect(lint, reason = "..."))]`, for the lints in this library
+
+warning: `expect` of the lint group `warnings`
+  --> $DIR/suppression_policy.rs:46:12
+   |
+LL |     expect(warnings, unused, reason = "the function is a placeholder for now")
+   |            ^^^^^^^^
+   |
+   = help: expect each lint that fires here by name, so the exception covers only them
+
+warning: `expect` of the lint group `unused`
+  --> $DIR/suppression_policy.rs:46:22
+   |
+LL |     expect(warnings, unused, reason = "the function is a placeholder for now")
+   |                      ^^^^^^
+   |
+   = help: expect each lint that fires here by name, so the exception covers only them
+
+warning: `#[expect(..)]` behind a `cfg_attr` that is on in only some builds
+  --> $DIR/suppression_policy.rs:51:1
+   |
+LL | / #[cfg_attr(
+LL | |     dylint_lib = "trellis_lints",
+LL | |     cfg_attr(test, expect(non_snake_case, reason = "mirrors the test data names"))
+LL | | )]
+   | |__^
+   |
+   = help: clippy runs without `dylint_lib` and `trellis_lints` runs with it, so the attribute escapes one of them; the only allowed form is `#[cfg_attr(dylint_lib = "trellis_lints", expect(lint, reason = "..."))]`, for the lints in this library
+
+warning: `expect` of `code_comment`, which has no exceptions
+  --> $DIR/suppression_policy.rs:60:12
+   |
+LL |     expect(code_comment, missing_workspace_lints, reason = "the parser is generated")
+   |            ^^^^^^^^^^^^
+   |
+   = help: fix what the lint reports; if the rule itself is wrong for the workspace, change it in trellis's `lints/` and `docs/style.md`
+
+warning: `expect` of `missing_workspace_lints`, which has no exceptions
+  --> $DIR/suppression_policy.rs:60:26
+   |
+LL |     expect(code_comment, missing_workspace_lints, reason = "the parser is generated")
+   |                          ^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: fix what the lint reports; if the rule itself is wrong for the workspace, change it in trellis's `lints/` and `docs/style.md`
+
+warning: `expect` of `macro_definition`, which has no exceptions
+  --> $DIR/suppression_policy.rs:68:12
+   |
+LL |     expect(macro_definition, reason = "a function can't take a variable number of arguments")
+   |            ^^^^^^^^^^^^^^^^
+   |
+   = help: use a function, type or trait; a macro goes only in a crate that `macro_crates` in `dylint.toml` lists, which is a rule change
+
+warning: `expect` whose reason is too short to say why the lint is wrong here
+  --> $DIR/suppression_policy.rs:90:26
+   |
+LL | #[expect(non_snake_case, reason = "x")]
+   |                          ^^^^^^^^^^^^
+   |
+   = help: a reason needs at least 4 different words besides the words of the lint's name, and 20 characters: say what about this code makes the lint wrong here
+
+warning: `expect` whose reason is too short to say why the lint is wrong here
+  --> $DIR/suppression_policy.rs:93:42
+   |
+LL | #[expect(clippy::needless_pass_by_value, reason = "needless pass by value")]
+   |                                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: a reason needs at least 4 different words besides the words of the lint's name, and 20 characters: say what about this code makes the lint wrong here
+
+warning: `expect` whose reason is too short to say why the lint is wrong here
+  --> $DIR/suppression_policy.rs:96:42
+   |
+LL | #[expect(clippy::needless_pass_by_value, reason = "Clippy: Needless_Pass_By_Value!")]
+   |                                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: a reason needs at least 4 different words besides the words of the lint's name, and 20 characters: say what about this code makes the lint wrong here
+
+warning: `expect` whose reason is too short to say why the lint is wrong here
+  --> $DIR/suppression_policy.rs:99:26
+   |
+LL | #[expect(non_snake_case, reason = "it is ok here")]
+   |                          ^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: a reason needs at least 4 different words besides the words of the lint's name, and 20 characters: say what about this code makes the lint wrong here
+
+warning: `expect` whose reason is too short to say why the lint is wrong here
+  --> $DIR/suppression_policy.rs:102:42
+   |
+LL | #[expect(clippy::needless_pass_by_value, reason = "the value is needless here")]
+   |                                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: a reason needs at least 4 different words besides the words of the lint's name, and 20 characters: say what about this code makes the lint wrong here
+
+warning: `#[clippy::msrv]` attribute
+  --> $DIR/suppression_policy.rs:110:1
+   |
+LL | #[clippy::msrv = "1.50"]
+   | ^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: clippy's own attributes change what clippy checks without an `expect`: `clippy::msrv` turns off every lint that needs a newer Rust and `clippy::cognitive_complexity` raises a threshold. Set the Rust version with `rust-version` in `Cargo.toml` and thresholds in `clippy.toml`, or put an `expect` with a reason on the item
+
+warning: `#[clippy::cognitive_complexity]` attribute
+  --> $DIR/suppression_policy.rs:113:1
+   |
+LL | #[clippy::cognitive_complexity = "50"]
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: clippy's own attributes change what clippy checks without an `expect`: `clippy::msrv` turns off every lint that needs a newer Rust and `clippy::cognitive_complexity` raises a threshold. Set the Rust version with `rust-version` in `Cargo.toml` and thresholds in `clippy.toml`, or put an `expect` with a reason on the item
+
+warning: `#[clippy::has_significant_drop]` attribute
+  --> $DIR/suppression_policy.rs:116:1
+   |
+LL | #[cfg_attr(dylint_lib = "trellis_lints", clippy::has_significant_drop)]
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: clippy's own attributes change what clippy checks without an `expect`: `clippy::msrv` turns off every lint that needs a newer Rust and `clippy::cognitive_complexity` raises a threshold. Set the Rust version with `rust-version` in `Cargo.toml` and thresholds in `clippy.toml`, or put an `expect` with a reason on the item
+
+warning: `#[clippy::dump]` attribute
+  --> $DIR/suppression_policy.rs:119:1
+   |
+LL | #[clippy::dump]
+   | ^^^^^^^^^^^^^^^
+   |
+   = help: clippy's own attributes change what clippy checks without an `expect`: `clippy::msrv` turns off every lint that needs a newer Rust and `clippy::cognitive_complexity` raises a threshold. Set the Rust version with `rust-version` in `Cargo.toml` and thresholds in `clippy.toml`, or put an `expect` with a reason on the item
+
+warning: `allow` attribute
+  --> $DIR/suppression_policy.rs:137:5
+   |
+LL |     #![allow(unused_variables)]
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: use `#[expect(lint, reason = "...")]` on the narrowest item, which fails once the lint stops firing
+
+warning: inner `#![allow(..)]` attribute
+  --> $DIR/suppression_policy.rs:137:5
+   |
+LL |     #![allow(unused_variables)]
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: it applies to everything in the enclosing crate, module or function: put an outer `#[expect(lint, reason = "...")]` on the narrowest item instead, or change the level in `[workspace.lints]` in `Cargo.toml`
+
+warning: `expect` of `disabled_code`, which has no exceptions
+  --> $DIR/suppression_policy.rs:153:12
+   |
+LL |     expect(disabled_code, suppression_policy, reason = "the guard is written by a code generator")
+   |            ^^^^^^^^^^^^^
+   |
+   = help: fix what the lint reports; if the rule itself is wrong for the workspace, change it in trellis's `lints/` and `docs/style.md`
+
+warning: `expect` of `suppression_policy`, which has no exceptions
+  --> $DIR/suppression_policy.rs:153:27
+   |
+LL |     expect(disabled_code, suppression_policy, reason = "the guard is written by a code generator")
+   |                           ^^^^^^^^^^^^^^^^^^
+   |
+   = help: fix what the lint reports; if the rule itself is wrong for the workspace, change it in trellis's `lints/` and `docs/style.md`
+
+warning: `expect` on a module
+  --> $DIR/suppression_policy.rs:158:1
+   |
+LL | / #[expect(
+LL | |     clippy::unwrap_used,
+LL | |     clippy::missing_panics_doc,
+LL | |     reason = "the legacy module predates these rules"
+LL | | )]
+   | |__^
+   |
+   = help: it covers every item in the module and in the modules inside it: put the `expect` on the smallest item inside that the lint reports
+
+warning: `expect` on a module
+  --> $DIR/suppression_policy.rs:169:1
+   |
+LL | #[expect(clippy::unwrap_used, reason = "the legacy module predates these rules")]
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: it covers every item in the module and in the modules inside it: put the `expect` on the smallest item inside that the lint reports
+
+warning: `expect` on a module
+  --> $DIR/suppression_policy.rs:173:1
+   |
+LL | / #[cfg_attr(
+LL | |     dylint_lib = "trellis_lints",
+LL | |     expect(non_leaf_module_items, reason = "the legacy module predates these rules")
+LL | | )]
+   | |__^
+   |
+   = help: it covers every item in the module and in the modules inside it: put the `expect` on the smallest item inside that the lint reports
+
+warning: `expect` of `non_leaf_module_items`, which has no exceptions
+  --> $DIR/suppression_policy.rs:175:12
+   |
+LL |     expect(non_leaf_module_items, reason = "the legacy module predates these rules")
+   |            ^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: rename or move the code as the lint says; if the rule itself is wrong for the workspace, change it in trellis's `lints/` and `docs/style.md`
+
+warning: `expect` of `clippy::unwrap_used` on an impl block
+  --> $DIR/suppression_policy.rs:186:10
+   |
+LL | #[expect(clippy::unwrap_used, reason = "every method here unwraps a lookup")]
+   |          ^^^^^^^^^^^^^^^^^^^
+   |
+   = help: it covers every item in the block: put it on the item inside that the lint reports. Only the lints that report at an impl block or trait itself, listed in `BLOCK_LINTS` in `lints/src/suppression_policy.rs`, may be expected there
+
+warning: `expect` of `clippy::missing_errors_doc` on a trait
+  --> $DIR/suppression_policy.rs:193:10
+   |
+LL | #[expect(clippy::missing_errors_doc, reason = "the errors are obvious from the types")]
+   |          ^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: it covers every item in the block: put it on the item inside that the lint reports. Only the lints that report at an impl block or trait itself, listed in `BLOCK_LINTS` in `lints/src/suppression_policy.rs`, may be expected there
+
+warning: attribute whose path is a macro variable
+  --> $DIR/suppression_policy.rs:230:11
+   |
+LL |         #[$level(clippy::unwrap_used)]
+   |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: the lints can't tell which attribute the macro's caller passes, so it may be a lint level they never check: write the attribute out in the macro, or put it on the item at the call
+
+warning: attribute whose path is a macro variable
+  --> $DIR/suppression_policy.rs:240:16
+   |
+LL |             #![$level(clippy::unwrap_used)]
+   |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: the lints can't tell which attribute the macro's caller passes, so it may be a lint level they never check: write the attribute out in the macro, or put it on the item at the call
+
+warning: attribute whose path is a macro variable
+  --> $DIR/suppression_policy.rs:249:13
+   |
+LL |         $(#[$attribute])*
+   |             ^^^^^^^^^^
+   |
+   = help: the lints can't tell which attribute the macro's caller passes, so it may be a lint level they never check: write the attribute out in the macro, or put it on the item at the call
+
+warning: `allow` attribute
+  --> $DIR/suppression_policy.rs:254:18
+   |
+LL | with_attributes!(#[allow(dead_code)] attributed);
+   |                  ^^^^^^^^^^^^^^^^^^^
+   |
+   = help: use `#[expect(lint, reason = "...")]` on the narrowest item, which fails once the lint stops firing
+
+warning: `expect` of a lint named by a macro variable
+  --> $DIR/suppression_policy.rs:258:18
+   |
+LL |         #[expect($lint, reason = "the caller names a lint it expects")]
+   |                  ^^^^^
+   |
+   = help: the lints can't tell which lint the macro's caller names, so it may be a group or a lint without exceptions: name the lint in the macro
+
+warning: `expect` on a macro variable
+  --> $DIR/suppression_policy.rs:261:9
+   |
+LL |         #[expect(clippy::unwrap_used, reason = "the caller passes a lookup that never misses")]
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: the lints can't tell what the macro's caller passes, which may be a whole module: put the `expect` on the item at the call
+
+warning: attribute whose path is a macro variable
+  --> $DIR/suppression_policy.rs:264:50
+   |
+LL |         #[cfg_attr(dylint_lib = "trellis_lints", $lint)]
+   |                                                  ^^^^^
+   |
+   = help: the lints can't tell which attribute the macro's caller passes, so it may be a lint level they never check: write the attribute out in the macro, or put it on the item at the call
+
+warning: `#![clippy::msrv]` attribute
+  --> $DIR/suppression_policy.rs:315:12
+   |
+LL | discard! { #![clippy::msrv = "1.40"] }
+   |            ^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: clippy's own attributes change what clippy checks without an `expect`: `clippy::msrv` turns off every lint that needs a newer Rust and `clippy::cognitive_complexity` raises a threshold. Set the Rust version with `rust-version` in `Cargo.toml` and thresholds in `clippy.toml`, or put an `expect` with a reason on the item
+
+warning: `expect` of a lint that isn't written as a path
+  --> $DIR/suppression_policy.rs:318:21
+   |
+LL | discard! { #[expect([<clippy::un wrap_used>], reason = "the caller checks it")] fn pasted() {} }
+   |                     ^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: the lints can't tell which lint the tokens name once a macro joins them: write the lint's name out
+
+warning: `allow` attribute
+  --> $DIR/modules/hidden.rs:5:1
+   |
+LL | #[allow(dead_code)]
+   | ^^^^^^^^^^^^^^^^^^^
+   |
+   = help: use `#[expect(lint, reason = "...")]` on the narrowest item, which fails once the lint stops firing
+
+warning: brackets after a `:tt` macro variable, which make an attribute when the caller passes `#`
+  --> $DIR/suppression_policy.rs:275:9
+   |
+LL |         $pound [allow(warnings, clippy::all)]
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: the lints can't read an attribute built from a `#` the caller passes: write `#[...]` out in the macro's body, or bind the variable to a fragment other than `tt`, such as `expr` or `ident`
+
+warning: `#` that doesn't start an attribute
+  --> $DIR/suppression_policy.rs:280:13
+   |
+LL | accessor! { # pub fn first(values: &[u32]) -> u32 { *values.first().unwrap() } }
+   |             ^
+   |
+   = help: a macro given a `#` can put brackets after it and build an attribute the lints never read: write the attribute out on the item it applies to
+
+warning: brackets after a `:tt` macro variable, which make an attribute when the caller passes `#`
+  --> $DIR/suppression_policy.rs:287:13
+   |
+LL |             $($pound)? ! [allow(unused_variables)]
+   |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: the lints can't read an attribute built from a `#` the caller passes: write `#[...]` out in the macro's body, or bind the variable to a fragment other than `tt`, such as `expr` or `ident`
+
+warning: `#` that doesn't start an attribute
+  --> $DIR/suppression_policy.rs:293:19
+   |
+LL | inner_accessor! { # }
+   |                   ^
+   |
+   = help: a macro given a `#` can put brackets after it and build an attribute the lints never read: write the attribute out on the item it applies to
+
+warning: `#` that doesn't start an attribute
+  --> $DIR/suppression_policy.rs:304:9
+   |
+LL | joined!(#, [allow(dead_code)], fn joined_item() {});
+   |         ^
+   |
+   = help: a macro given a `#` can put brackets after it and build an attribute the lints never read: write the attribute out on the item it applies to
+
+warning: attribute that doesn't start with a path
+  --> $DIR/suppression_policy.rs:311:12
+   |
+LL | discard! { #![[<al low>](clippy::unwrap_used, warnings)] }
+   |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: the lints read an attribute by its path, so one that a macro such as `paste` builds from other tokens may be a lint level they never check: write the attribute out
+
+warning: brackets after a `:tt` macro variable, which make an attribute when the caller passes `#`
+  --> $DIR/suppression_policy.rs:323:9
+   |
+LL |         $pound [expect(warnings)]
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: the lints can't read an attribute built from a `#` the caller passes: write `#[...]` out in the macro's body, or bind the variable to a fragment other than `tt`, such as `expr` or `ident`
+
+warning: `#` that doesn't start an attribute
+  --> $DIR/suppression_policy.rs:328:11
+   |
+LL | careless!(#);
+   |           ^
+   |
+   = help: a macro given a `#` can put brackets after it and build an attribute the lints never read: write the attribute out on the item it applies to
+
+warning: `allow` attribute, which the macro `with_level` defined in this crate writes
+  --> $DIR/suppression_policy.rs:230:9
+   |
+LL | macro_rules! with_level {
+LL |     ($level:ident, $item:item) => {
+LL |         #[$level(clippy::unwrap_used)]
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+LL | with_level!(allow, fn unwrapped() {});
+   | ------------------------------------- in this macro invocation
+   |
+   = help: use `#[expect(lint, reason = "...")]` on the narrowest item, which fails once the lint stops firing
+
+warning: `allow` attribute, which the macro `with_inner_level` defined in this crate writes
+  --> $DIR/suppression_policy.rs:240:13
+   |
+LL | macro_rules! with_inner_level {
+...
+LL |             #![$level(clippy::unwrap_used)]
+   |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+LL | with_inner_level!(allow);
+   | ------------------------ in this macro invocation
+   |
+   = help: use `#[expect(lint, reason = "...")]` on the narrowest item, which fails once the lint stops firing
+
+warning: inner `#![allow(..)]` attribute, which the macro `with_inner_level` defined in this crate writes
+  --> $DIR/suppression_policy.rs:240:13
+   |
+LL | macro_rules! with_inner_level {
+...
+LL |             #![$level(clippy::unwrap_used)]
+   |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+LL | with_inner_level!(allow);
+   | ------------------------ in this macro invocation
+   |
+   = help: it applies to everything in the enclosing crate, module or function: put an outer `#[expect(lint, reason = "...")]` on the narrowest item instead, or change the level in `[workspace.lints]` in `Cargo.toml`
+
+warning: `expect` of the lint group `clippy::pedantic`, which the macro `expecting` defined in this crate writes
+  --> $DIR/suppression_policy.rs:269:12
+   |
+LL | expecting!(clippy::pedantic, fn passed() {});
+   |            ^^^^^^^^^^^^^^^^
+   |
+   = help: expect each lint that fires here by name, so the exception covers only them
+
+warning: `#[clippy::pedantic]` attribute, which the macro `expecting` defined in this crate writes
+  --> $DIR/suppression_policy.rs:264:50
+   |
+LL | macro_rules! expecting {
+...
+LL |         #[cfg_attr(dylint_lib = "trellis_lints", $lint)]
+   |                                                  ^^^^^
+...
+LL | expecting!(clippy::pedantic, fn passed() {});
+   | -------------------------------------------- in this macro invocation
+   |
+   = help: clippy's own attributes change what clippy checks without an `expect`: `clippy::msrv` turns off every lint that needs a newer Rust and `clippy::cognitive_complexity` raises a threshold. Set the Rust version with `rust-version` in `Cargo.toml` and thresholds in `clippy.toml`, or put an `expect` with a reason on the item
+
+warning: `allow` attribute, which the macro `accessor` defined in this crate writes
+  --> $DIR/suppression_policy.rs:275:9
+   |
+LL | macro_rules! accessor {
+LL |     ($pound:tt $($item:tt)*) => {
+LL |         $pound [allow(warnings, clippy::all)]
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+LL | accessor! { # pub fn first(values: &[u32]) -> u32 { *values.first().unwrap() } }
+   | -------------------------------------------------------------------------------- in this macro invocation
+   |
+   = help: use `#[expect(lint, reason = "...")]` on the narrowest item, which fails once the lint stops firing
+
+warning: `allow` attribute, which the macro `inner_accessor` defined in this crate writes
+  --> $DIR/suppression_policy.rs:287:15
+   |
+LL | macro_rules! inner_accessor {
+...
+LL |             $($pound)? ! [allow(unused_variables)]
+   |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+LL | inner_accessor! { # }
+   | --------------------- in this macro invocation
+   |
+   = help: use `#[expect(lint, reason = "...")]` on the narrowest item, which fails once the lint stops firing
+
+warning: inner `#![allow(..)]` attribute, which the macro `inner_accessor` defined in this crate writes
+  --> $DIR/suppression_policy.rs:287:15
+   |
+LL | macro_rules! inner_accessor {
+...
+LL |             $($pound)? ! [allow(unused_variables)]
+   |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+LL | inner_accessor! { # }
+   | --------------------- in this macro invocation
+   |
+   = help: it applies to everything in the enclosing crate, module or function: put an outer `#[expect(lint, reason = "...")]` on the narrowest item instead, or change the level in `[workspace.lints]` in `Cargo.toml`
+
+warning: `allow` attribute, which a macro built from tokens that aren't an attribute in the source
+  --> $DIR/suppression_policy.rs:304:9
+   |
+LL | joined!(#, [allow(dead_code)], fn joined_item() {});
+   |         ^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: use `#[expect(lint, reason = "...")]` on the narrowest item, which fails once the lint stops firing
+
+warning: `expect` without a reason, which the macro `careless` defined in this crate writes
+  --> $DIR/suppression_policy.rs:323:9
+   |
+LL | macro_rules! careless {
+LL |     ($pound:tt) => {
+LL |         $pound [expect(warnings)]
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+LL | careless!(#);
+   | ------------ in this macro invocation
+   |
+   = help: add `reason = "..."` saying why the lint is wrong here
+
+warning: `expect` of the lint group `warnings`, which the macro `careless` defined in this crate writes
+  --> $DIR/suppression_policy.rs:323:24
+   |
+LL | macro_rules! careless {
+LL |     ($pound:tt) => {
+LL |         $pound [expect(warnings)]
+   |                        ^^^^^^^^
+...
+LL | careless!(#);
+   | ------------ in this macro invocation
+   |
+   = help: expect each lint that fires here by name, so the exception covers only them
+
+warning: 69 warnings emitted
+

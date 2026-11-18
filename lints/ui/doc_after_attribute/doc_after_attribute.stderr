@@ -1,0 +1,35 @@
+warning: doc comment after an attribute
+  --> $DIR/doc_after_attribute.rs:5:1
+   |
+LL | /// An order of the shelves.
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: move the doc comment above the item's attributes, as the Rust Style Guide asks
+   = note: `#[warn(doc_after_attribute)]` on by default
+
+warning: doc comment after an attribute
+  --> $DIR/doc_after_attribute.rs:12:1
+   |
+LL | /// It settles in cents.
+   | ^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: move the doc comment above the item's attributes, as the Rust Style Guide asks
+
+warning: doc comment after an attribute
+  --> $DIR/doc_after_attribute.rs:17:5
+   |
+LL |     /// The quantity, in cents.
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: move the doc comment above the item's attributes, as the Rust Style Guide asks
+
+warning: doc comment after an attribute
+  --> $DIR/doc_after_attribute.rs:38:1
+   |
+LL | /** A price. */
+   | ^^^^^^^^^^^^^^^
+   |
+   = help: move the doc comment above the item's attributes, as the Rust Style Guide asks
+
+warning: 4 warnings emitted
+

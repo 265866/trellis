@@ -1,0 +1,272 @@
+warning: code written in the source under the lint levels of `clippy::restriction` that a macro from `levels` writes, which `trusted_macro_lints` in `dylint.toml` doesn't allow there
+  --> $DIR/suppression_policy_trusted_lints.rs:14:9
+   |
+LL | #[count(3)]
+   |         ^
+   |
+   = help: a lint group, or one of clippy's own attributes such as `clippy::msrv`, changes what clippy checks in all of this code, so no configuration can allow it: move the code into a function or a constant with a name, and refer to it here by that name, so clippy checks it
+   = note: `#[warn(suppression_policy)]` on by default
+
+warning: code written in the source under the lint levels of `clippy::restriction` that a macro from `levels` writes, which `trusted_macro_lints` in `dylint.toml` doesn't allow there
+  --> $DIR/suppression_policy_trusted_lints.rs:18:9
+   |
+LL | #[count(three())]
+   |         ^^^^^^^
+   |
+   = help: a lint group, or one of clippy's own attributes such as `clippy::msrv`, changes what clippy checks in all of this code, so no configuration can allow it: move the code into a function or a constant with a name, and refer to it here by that name, so clippy checks it
+
+warning: code written in the source under the lint levels of `clippy::restriction` that a macro from `levels` writes, which `trusted_macro_lints` in `dylint.toml` doesn't allow there
+  --> $DIR/suppression_policy_trusted_lints.rs:23:9
+   |
+LL | #[count((3_u8)as u32)]
+   |         ^^^^^^^^^^^^
+   |
+   = help: a lint group, or one of clippy's own attributes such as `clippy::msrv`, changes what clippy checks in all of this code, so no configuration can allow it: move the code into a function or a constant with a name, and refer to it here by that name, so clippy checks it
+
+warning: code written in the source under the lint levels of `clippy::restriction` that a macro from `levels` writes, which `trusted_macro_lints` in `dylint.toml` doesn't allow there
+  --> $DIR/suppression_policy_trusted_lints.rs:27:9
+   |
+LL | #[count(std:: dbg!(3))]
+   |         ^^^^^^^^^^^^^
+   |
+   = help: a lint group, or one of clippy's own attributes such as `clippy::msrv`, changes what clippy checks in all of this code, so no configuration can allow it: move the code into a function or a constant with a name, and refer to it here by that name, so clippy checks it
+
+warning: code written in the source under the lint levels of `clippy::restriction` that a macro from `levels` writes, which `trusted_macro_lints` in `dylint.toml` doesn't allow there
+  --> $DIR/suppression_policy_trusted_lints.rs:32:9
+   |
+LL | #[count("3".parse::<u32>().unwrap())]
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: a lint group, or one of clippy's own attributes such as `clippy::msrv`, changes what clippy checks in all of this code, so no configuration can allow it: move the code into a function or a constant with a name, and refer to it here by that name, so clippy checks it
+
+warning: code written in the source under the lint levels of `clippy::restriction` that a macro from `levels` writes, which `trusted_macro_lints` in `dylint.toml` doesn't allow there
+  --> $DIR/suppression_policy_trusted_lints.rs:37:9
+   |
+LL | #[count((|| 3)())]
+   |         ^^^^^^^^
+   |
+   = help: a lint group, or one of clippy's own attributes such as `clippy::msrv`, changes what clippy checks in all of this code, so no configuration can allow it: move the code into a function or a constant with a name, and refer to it here by that name, so clippy checks it
+
+warning: code written in the source under the lint levels of `clippy::needless_return` that a macro from `levels` writes, which `trusted_macro_lints` in `dylint.toml` doesn't allow there
+  --> $DIR/suppression_policy_trusted_lints.rs:48:22
+   |
+LL |   fn unlisted() -> u32 {
+   |  ______________________^
+LL | |     return three();
+LL | | }
+   | |_^
+   |
+   = help: move the code into a function or a constant with a name, and refer to it here by that name, so clippy checks it; or, once you have read that the macro writes the level and that no code following the style guide trips the lint, list the lint for the crate in `trusted_macro_lints` in `dylint.toml`, which is a rule change
+
+warning: code written in the source under the lint levels of `clippy::octal_escapes` that a macro from `levels` writes, which `trusted_macro_lints` in `dylint.toml` doesn't allow there
+  --> $DIR/suppression_policy_trusted_lints.rs:71:18
+   |
+LL | #[named(rename = "/033[0m")]
+   |                  ^^^^^^^^^
+   |
+   = help: move the code into a function or a constant with a name, and refer to it here by that name, so clippy checks it; or, once you have read that the macro writes the level and that no code following the style guide trips the lint, list the lint for the crate in `trusted_macro_lints` in `dylint.toml`, which is a rule change
+
+warning: code written in the source under the lint levels of `unused_qualifications` that a macro from `levels` writes, which `trusted_macro_lints` in `dylint.toml` doesn't allow there
+  --> $DIR/suppression_policy_trusted_lints.rs:77:16
+   |
+LL | #[named(path = "self::defaults::label")]
+   |                ^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: write each path in the string so these lints have nothing to report: at most two plain segments, such as `defaults::retries`, `Vec<u8>` or `T: Deserialize<'de>`, with no `crate::`, `self::`, `super::` or leading `::`, no comment, escape, raw identifier or turbofish, and no last segment that names the same item by itself; or, once you have read that the macro writes the level and that no code following the style guide trips the lint, list the lint for the crate in `trusted_macro_lints` in `dylint.toml`, which is a rule change
+
+warning: code written in the source under the lint levels of `non_upper_case_globals`, `unused_attributes`, `unused_qualifications`, `clippy::absolute_paths` that a macro from `levels` writes, which `trusted_macro_lints` in `dylint.toml` doesn't allow there
+  --> $DIR/suppression_policy_trusted_lints.rs:125:18
+   |
+LL | #[named(joined = "self::defaults")]
+   |                  ^^^^^^^^^^^^^^^^
+   |
+   = help: write each path in the string so these lints have nothing to report: at most two plain segments, such as `defaults::retries`, `Vec<u8>` or `T: Deserialize<'de>`, with no `crate::`, `self::`, `super::` or leading `::`, no comment, escape, raw identifier or turbofish, and no last segment that names the same item by itself; or, once you have read that the macro writes the level and that no code following the style guide trips the lint, list the lint for the crate in `trusted_macro_lints` in `dylint.toml`, which is a rule change
+
+warning: code written in the source under the lint levels of `non_upper_case_globals`, `unused_attributes`, `unused_qualifications`, `clippy::absolute_paths` that a macro from `levels` writes, which `trusted_macro_lints` in `dylint.toml` doesn't allow there
+  --> $DIR/suppression_policy_trusted_lints.rs:132:18
+   |
+LL | #[named(module = "self::defaults")]
+   |                  ^^^^^^^^^^^^^^^^
+   |
+   = help: write each path in the string so these lints have nothing to report: at most two plain segments, such as `defaults::retries`, `Vec<u8>` or `T: Deserialize<'de>`, with no `crate::`, `self::`, `super::` or leading `::`, no comment, escape, raw identifier or turbofish, and no last segment that names the same item by itself; or, once you have read that the macro writes the level and that no code following the style guide trips the lint, list the lint for the crate in `trusted_macro_lints` in `dylint.toml`, which is a rule change
+
+warning: code written in the source under the lint levels of `non_upper_case_globals`, `unused_attributes`, `unused_qualifications`, `clippy::absolute_paths` that a macro from `levels` writes, which `trusted_macro_lints` in `dylint.toml` doesn't allow there
+  --> $DIR/suppression_policy_trusted_lints.rs:137:16
+   |
+LL | #[named(path = "crate::defaults::label")]
+   |                ^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: write each path in the string so these lints have nothing to report: at most two plain segments, such as `defaults::retries`, `Vec<u8>` or `T: Deserialize<'de>`, with no `crate::`, `self::`, `super::` or leading `::`, no comment, escape, raw identifier or turbofish, and no last segment that names the same item by itself; or, once you have read that the macro writes the level and that no code following the style guide trips the lint, list the lint for the crate in `trusted_macro_lints` in `dylint.toml`, which is a rule change
+
+warning: code written in the source under the lint levels of `non_upper_case_globals`, `unused_attributes`, `unused_qualifications`, `clippy::absolute_paths` that a macro from `levels` writes, which `trusted_macro_lints` in `dylint.toml` doesn't allow there
+  --> $DIR/suppression_policy_trusted_lints.rs:142:16
+   |
+LL | #[named(path = "defaults::/**/label")]
+   |                ^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: write each path in the string so these lints have nothing to report: at most two plain segments, such as `defaults::retries`, `Vec<u8>` or `T: Deserialize<'de>`, with no `crate::`, `self::`, `super::` or leading `::`, no comment, escape, raw identifier or turbofish, and no last segment that names the same item by itself; or, once you have read that the macro writes the level and that no code following the style guide trips the lint, list the lint for the crate in `trusted_macro_lints` in `dylint.toml`, which is a rule change
+
+warning: code written in the source under the lint levels of `non_upper_case_globals`, `unused_attributes`, `unused_qualifications`, `clippy::absolute_paths` that a macro from `levels` writes, which `trusted_macro_lints` in `dylint.toml` doesn't allow there
+  --> $DIR/suppression_policy_trusted_lints.rs:147:16
+   |
+LL | #[named(path = "defaults::r#label")]
+   |                ^^^^^^^^^^^^^^^^^^^
+   |
+   = help: write each path in the string so these lints have nothing to report: at most two plain segments, such as `defaults::retries`, `Vec<u8>` or `T: Deserialize<'de>`, with no `crate::`, `self::`, `super::` or leading `::`, no comment, escape, raw identifier or turbofish, and no last segment that names the same item by itself; or, once you have read that the macro writes the level and that no code following the style guide trips the lint, list the lint for the crate in `trusted_macro_lints` in `dylint.toml`, which is a rule change
+
+warning: code written in the source under the lint levels of `non_upper_case_globals`, `unused_attributes`, `unused_qualifications`, `clippy::absolute_paths` that a macro from `levels` writes, which `trusted_macro_lints` in `dylint.toml` doesn't allow there
+  --> $DIR/suppression_policy_trusted_lints.rs:152:16
+   |
+LL | #[named(path = "defaults::label::<>")]
+   |                ^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: write each path in the string so these lints have nothing to report: at most two plain segments, such as `defaults::retries`, `Vec<u8>` or `T: Deserialize<'de>`, with no `crate::`, `self::`, `super::` or leading `::`, no comment, escape, raw identifier or turbofish, and no last segment that names the same item by itself; or, once you have read that the macro writes the level and that no code following the style guide trips the lint, list the lint for the crate in `trusted_macro_lints` in `dylint.toml`, which is a rule change
+
+warning: code written in the source under the lint levels of `non_upper_case_globals`, `unused_attributes`, `unused_qualifications`, `clippy::absolute_paths` that a macro from `levels` writes, which `trusted_macro_lints` in `dylint.toml` doesn't allow there
+  --> $DIR/suppression_policy_trusted_lints.rs:181:14
+   |
+LL | #[named(ty = "std::primitive::u8")]
+   |              ^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: write each path in the string so these lints have nothing to report: at most two plain segments, such as `defaults::retries`, `Vec<u8>` or `T: Deserialize<'de>`, with no `crate::`, `self::`, `super::` or leading `::`, no comment, escape, raw identifier or turbofish, and no last segment that names the same item by itself; or, once you have read that the macro writes the level and that no code following the style guide trips the lint, list the lint for the crate in `trusted_macro_lints` in `dylint.toml`, which is a rule change
+
+warning: code written in the source under the lint levels of `non_upper_case_globals`, `unused_attributes`, `unused_qualifications`, `clippy::absolute_paths` that a macro from `levels` writes, which `trusted_macro_lints` in `dylint.toml` doesn't allow there
+  --> $DIR/suppression_policy_trusted_lints.rs:186:14
+   |
+LL | #[named(ty = "Vec<std::string::String>")]
+   |              ^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: write each path in the string so these lints have nothing to report: at most two plain segments, such as `defaults::retries`, `Vec<u8>` or `T: Deserialize<'de>`, with no `crate::`, `self::`, `super::` or leading `::`, no comment, escape, raw identifier or turbofish, and no last segment that names the same item by itself; or, once you have read that the macro writes the level and that no code following the style guide trips the lint, list the lint for the crate in `trusted_macro_lints` in `dylint.toml`, which is a rule change
+
+warning: code written in the source under the lint levels of `non_upper_case_globals`, `unused_attributes`, `unused_qualifications`, `clippy::absolute_paths` that a macro from `levels` writes, which `trusted_macro_lints` in `dylint.toml` doesn't allow there
+  --> $DIR/suppression_policy_trusted_lints.rs:191:17
+   |
+LL | #[named(bound = "T: crate::Marker<'de>")]
+   |                 ^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: write each path in the string so these lints have nothing to report: at most two plain segments, such as `defaults::retries`, `Vec<u8>` or `T: Deserialize<'de>`, with no `crate::`, `self::`, `super::` or leading `::`, no comment, escape, raw identifier or turbofish, and no last segment that names the same item by itself; or, once you have read that the macro writes the level and that no code following the style guide trips the lint, list the lint for the crate in `trusted_macro_lints` in `dylint.toml`, which is a rule change
+
+warning: code written in the source under the lint levels of `non_upper_case_globals`, `unused_attributes`, `unused_qualifications`, `clippy::absolute_paths` that a macro from `levels` writes, which `trusted_macro_lints` in `dylint.toml` doesn't allow there
+  --> $DIR/suppression_policy_trusted_lints.rs:196:17
+   |
+LL | #[named(bound = "T: Clone + limits::Marker<'de>")]
+   |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: write each path in the string so these lints have nothing to report: at most two plain segments, such as `defaults::retries`, `Vec<u8>` or `T: Deserialize<'de>`, with no `crate::`, `self::`, `super::` or leading `::`, no comment, escape, raw identifier or turbofish, and no last segment that names the same item by itself; or, once you have read that the macro writes the level and that no code following the style guide trips the lint, list the lint for the crate in `trusted_macro_lints` in `dylint.toml`, which is a rule change
+
+warning: code written in the source under the lint levels of `non_upper_case_globals`, `unused_attributes`, `unused_qualifications`, `clippy::absolute_paths` that a macro from `levels` writes, which `trusted_macro_lints` in `dylint.toml` doesn't allow there
+  --> $DIR/suppression_policy_trusted_lints.rs:221:16
+   |
+LL | #[named_length(self::limits::WIDTH)]
+   |                ^^^^^^^^^^^^^^^^^^^
+   |
+   = help: move the code into a function or a constant with a name, and refer to it here by that name, so clippy checks it; or, once you have read that the macro writes the level and that no code following the style guide trips the lint, list the lint for the crate in `trusted_macro_lints` in `dylint.toml`, which is a rule change
+
+warning: code written in the source under the lint levels of `non_upper_case_globals`, `unused_attributes`, `unused_qualifications`, `clippy::absolute_paths` that a macro from `levels` writes, which `trusted_macro_lints` in `dylint.toml` doesn't allow there
+  --> $DIR/suppression_policy_trusted_lints.rs:237:20
+   |
+LL |     #[named(path = "defaults::label")]
+   |                    ^^^^^^^^^^^^^^^^^
+   |
+   = help: write each path in the string so these lints have nothing to report: at most two plain segments, such as `defaults::retries`, `Vec<u8>` or `T: Deserialize<'de>`, with no `crate::`, `self::`, `super::` or leading `::`, no comment, escape, raw identifier or turbofish, and no last segment that names the same item by itself; or, once you have read that the macro writes the level and that no code following the style guide trips the lint, list the lint for the crate in `trusted_macro_lints` in `dylint.toml`, which is a rule change
+
+warning: code written in the source under the lint levels of `non_upper_case_globals`, `unused_attributes`, `unused_qualifications`, `clippy::absolute_paths` that a macro from `levels` writes, which `trusted_macro_lints` in `dylint.toml` doesn't allow there
+  --> $DIR/suppression_policy_trusted_lints.rs:267:20
+   |
+LL |     #[named(path = "super::defaults::label")]
+   |                    ^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: write each path in the string so these lints have nothing to report: at most two plain segments, such as `defaults::retries`, `Vec<u8>` or `T: Deserialize<'de>`, with no `crate::`, `self::`, `super::` or leading `::`, no comment, escape, raw identifier or turbofish, and no last segment that names the same item by itself; or, once you have read that the macro writes the level and that no code following the style guide trips the lint, list the lint for the crate in `trusted_macro_lints` in `dylint.toml`, which is a rule change
+
+warning: code written in the source under the lint levels of `non_upper_case_globals`, `unused_attributes`, `unused_qualifications`, `clippy::absolute_paths` that a macro from `levels` writes, which `trusted_macro_lints` in `dylint.toml` doesn't allow there
+  --> $DIR/suppression_policy_trusted_lints.rs:272:20
+   |
+LL |     #[named(path = "defaults::label")]
+   |                    ^^^^^^^^^^^^^^^^^
+   |
+   = help: write each path in the string so these lints have nothing to report: at most two plain segments, such as `defaults::retries`, `Vec<u8>` or `T: Deserialize<'de>`, with no `crate::`, `self::`, `super::` or leading `::`, no comment, escape, raw identifier or turbofish, and no last segment that names the same item by itself; or, once you have read that the macro writes the level and that no code following the style guide trips the lint, list the lint for the crate in `trusted_macro_lints` in `dylint.toml`, which is a rule change
+   = help: `label` is also in scope by itself through the glob import `super::defaults::*` on line 262, so `unused_qualifications` would report the path: import the names the module uses one by one instead of the glob
+
+warning: code written in the source under the lint levels of `non_upper_case_globals`, `unused_attributes`, `unused_qualifications`, `clippy::absolute_paths` that a macro from `levels` writes, which `trusted_macro_lints` in `dylint.toml` doesn't allow there
+  --> $DIR/suppression_policy_trusted_lints.rs:309:20
+   |
+LL |     #[named(path = "defaults::label")]
+   |                    ^^^^^^^^^^^^^^^^^
+   |
+   = help: write each path in the string so these lints have nothing to report: at most two plain segments, such as `defaults::retries`, `Vec<u8>` or `T: Deserialize<'de>`, with no `crate::`, `self::`, `super::` or leading `::`, no comment, escape, raw identifier or turbofish, and no last segment that names the same item by itself; or, once you have read that the macro writes the level and that no code following the style guide trips the lint, list the lint for the crate in `trusted_macro_lints` in `dylint.toml`, which is a rule change
+
+warning: code written in the source under the lint levels of `unused_qualifications`, `clippy::redundant_locals` that a macro from `levels` writes, which `trusted_macro_lints` in `dylint.toml` doesn't allow there
+  --> $DIR/suppression_policy_trusted_lints.rs:400:16
+   |
+LL | #[named(path = "zero")]
+   |                ^^^^^^
+   |
+   = help: move the code into a function or a constant with a name, and refer to it here by that name, so clippy checks it; or, once you have read that the macro writes the level and that no code following the style guide trips the lint, list the lint for the crate in `trusted_macro_lints` in `dylint.toml`, which is a rule change
+
+warning: code written in the source under the lint levels of `clippy::style` that a macro from `levels` writes, which `trusted_macro_lints` in `dylint.toml` doesn't allow there
+  --> $DIR/suppression_policy_trusted_lints.rs:405:16
+   |
+LL | #[named(path = "zero")]
+   |                ^^^^^^
+   |
+   = help: a lint group, or one of clippy's own attributes such as `clippy::msrv`, changes what clippy checks in all of this code, so no configuration can allow it: move the code into a function or a constant with a name, and refer to it here by that name, so clippy checks it
+
+warning: code written in the source under the lint levels of `non_upper_case_globals`, `unused_attributes`, `unused_qualifications`, `clippy::absolute_paths` that a macro from `levels` writes, which `trusted_macro_lints` in `dylint.toml` doesn't allow there
+  --> $DIR/suppression_policy_trusted_lints.rs:419:16
+   |
+LL | #[named(path = "crate::accents::zéro")]
+   |                ^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: write each path in the string so these lints have nothing to report: at most two plain segments, such as `defaults::retries`, `Vec<u8>` or `T: Deserialize<'de>`, with no `crate::`, `self::`, `super::` or leading `::`, no comment, escape, raw identifier or turbofish, and no last segment that names the same item by itself; or, once you have read that the macro writes the level and that no code following the style guide trips the lint, list the lint for the crate in `trusted_macro_lints` in `dylint.toml`, which is a rule change
+
+warning: code written in the source under the lint levels of `clippy::restriction` that a macro from `levels` writes, which `trusted_macro_lints` in `dylint.toml` doesn't allow there
+  --> $DIR/suppression_policy_trusted_lints.rs:423:9
+   |
+LL | #[count(accents::zéro())]
+   |         ^^^^^^^^^^^^^^^
+   |
+   = help: a lint group, or one of clippy's own attributes such as `clippy::msrv`, changes what clippy checks in all of this code, so no configuration can allow it: move the code into a function or a constant with a name, and refer to it here by that name, so clippy checks it
+
+warning: code written in the source under the lint levels of `non_upper_case_globals`, `unused_attributes`, `unused_qualifications`, `clippy::absolute_paths` that a macro from `levels` writes, which `trusted_macro_lints` in `dylint.toml` doesn't allow there
+  --> $DIR/suppression_policy_trusted_lints.rs:495:14
+   |
+LL | #[named(ty = "<u8 as std::str::FromStr>::Err")]
+   |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: write each path in the string so these lints have nothing to report: at most two plain segments, such as `defaults::retries`, `Vec<u8>` or `T: Deserialize<'de>`, with no `crate::`, `self::`, `super::` or leading `::`, no comment, escape, raw identifier or turbofish, and no last segment that names the same item by itself; or, once you have read that the macro writes the level and that no code following the style guide trips the lint, list the lint for the crate in `trusted_macro_lints` in `dylint.toml`, which is a rule change
+
+warning: code written in the source under the lint levels of `non_upper_case_globals`, `unused_attributes`, `unused_qualifications`, `clippy::absolute_paths` that a macro from `levels` writes, which `trusted_macro_lints` in `dylint.toml` doesn't allow there
+  --> $DIR/suppression_policy_trusted_lints.rs:500:17
+   |
+LL | #[named(bound = "Self: Sized, T: limits::Marker<'de>")]
+   |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: write each path in the string so these lints have nothing to report: at most two plain segments, such as `defaults::retries`, `Vec<u8>` or `T: Deserialize<'de>`, with no `crate::`, `self::`, `super::` or leading `::`, no comment, escape, raw identifier or turbofish, and no last segment that names the same item by itself; or, once you have read that the macro writes the level and that no code following the style guide trips the lint, list the lint for the crate in `trusted_macro_lints` in `dylint.toml`, which is a rule change
+
+warning: code written in the source under the lint levels of `non_upper_case_globals`, `unused_attributes`, `unused_qualifications`, `clippy::absolute_paths` that a macro from `levels` writes, which `trusted_macro_lints` in `dylint.toml` doesn't allow there
+  --> $DIR/suppression_policy_trusted_lints.rs:508:14
+   |
+LL | #[named(ty = "string::String")]
+   |              ^^^^^^^^^^^^^^^^
+   |
+   = help: write each path in the string so these lints have nothing to report: at most two plain segments, such as `defaults::retries`, `Vec<u8>` or `T: Deserialize<'de>`, with no `crate::`, `self::`, `super::` or leading `::`, no comment, escape, raw identifier or turbofish, and no last segment that names the same item by itself; or, once you have read that the macro writes the level and that no code following the style guide trips the lint, list the lint for the crate in `trusted_macro_lints` in `dylint.toml`, which is a rule change
+
+warning: code written in the source under the lint levels of `non_upper_case_globals`, `unused_attributes`, `unused_qualifications`, `clippy::absolute_paths` that a macro from `levels` writes, which `trusted_macro_lints` in `dylint.toml` doesn't allow there
+  --> $DIR/suppression_policy_trusted_lints.rs:518:20
+   |
+LL |     #[named(path = "defaults::label")]
+   |                    ^^^^^^^^^^^^^^^^^
+   |
+   = help: write each path in the string so these lints have nothing to report: at most two plain segments, such as `defaults::retries`, `Vec<u8>` or `T: Deserialize<'de>`, with no `crate::`, `self::`, `super::` or leading `::`, no comment, escape, raw identifier or turbofish, and no last segment that names the same item by itself; or, once you have read that the macro writes the level and that no code following the style guide trips the lint, list the lint for the crate in `trusted_macro_lints` in `dylint.toml`, which is a rule change
+   = help: `label` is also in scope by itself through the glob import `super::defaults::*` on line 512, so `unused_qualifications` would report the path: import the names the module uses one by one instead of the glob
+
+warning: `allow` attribute, which a macro built from tokens that aren't an attribute in the source
+  --> $DIR/suppression_policy_trusted_lints.rs:114:14
+   |
+LL | #[named(ty = "[(); { #[allow(clippy::all)] fn hidden() { let _ = 1_u8.checked_sub(2).unwrap(); } 0 }]")]
+   |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: use `#[expect(lint, reason = "...")]` on the narrowest item, which fails once the lint stops firing
+
+warning: 33 warnings emitted
+

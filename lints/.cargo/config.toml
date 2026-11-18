@@ -1,0 +1,3 @@
+# dylint-link names the library after the toolchain it was built with, which cargo-dylint needs.
+[target.'cfg(all())']
+linker = "dylint-link"
