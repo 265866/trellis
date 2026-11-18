@@ -1,0 +1,77 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":semanticCommits",
+    "schedule:weekly",
+    "helpers:pinGitHubActionDigests",
+    "docker:pinDigests"
+  ],
+  "minimumReleaseAge": "7 days",
+  "packageRules": [
+    {
+      "description": "trellis owns the action, image and toolchain pins of the projects it generates, so they move here, in template/, and reach projects through their trellis update.",
+      "matchFileNames": [
+        "template/**"
+      ],
+      "groupName": "template pins"
+    },
+    {
+      "description": "The stable toolchain moves in this repository and in the template together, so `just pins` holds in one PR.",
+      "matchManagers": [
+        "rust-toolchain"
+      ],
+      "matchFileNames": [
+        "rust-toolchain.toml",
+        "template/rust-toolchain.toml"
+      ],
+      "groupName": "Rust toolchain"
+    },
+    {
+      "description": "The lints' nightly moves with `clippy_utils` and the template's `lints_nightly`, through `cargo dylint upgrade` by hand.",
+      "matchFileNames": [
+        "lints/rust-toolchain.toml"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "clippy_utils is pinned to the lints' nightly, and dylint_linting and dylint_testing to the cargo-dylint the workflows install. They move together by hand; see CONTRIBUTING.md.",
+      "matchFileNames": [
+        "lints/Cargo.toml"
+      ],
+      "matchPackageNames": [
+        "clippy_utils",
+        "dylint_linting",
+        "dylint_testing"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "Crate updates other than major ones arrive as one PR.",
+      "groupName": "cargo",
+      "matchManagers": [
+        "cargo"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ]
+    },
+    {
+      "groupName": "GitHub Actions",
+      "matchManagers": [
+        "github-actions"
+      ]
+    }
+  ],
+  "github-actions": {
+    "managerFilePatterns": [
+      "/(^|/)\\.github/workflows/[^/]+\\.(ya?ml|jinja)$/"
+    ]
+  },
+  "dockerfile": {
+    "managerFilePatterns": [
+      "/(^|/)template/.*Containerfile.*\\.jinja$/"
+    ]
+  }
+}
