@@ -1,0 +1,154 @@
+# Working on {{ project_name }}
+
+{{ description }}
+
+Read [CONTRIBUTING.md](CONTRIBUTING.md) for setup and the checks, and
+[docs/style.md](docs/style.md) for the code style and the review checklist. This file adds what an
+agent needs on top. Its rules apply to people and agents alike. Changing it is a rule change.
+
+## Layout
+
+| Path | Holds |
+| --- | --- |
+{%- if kind == 'library' %}
+| `crates/{{ crate_name }}` | The library. |
+{%- else %}
+| `crates/{{ crate_name }}` | The {{ 'service' if kind == 'service' else 'binary' }}: `main.rs` parses its input and wires the parts together. No logic that a test would want to call. |
+| `crates/{{ crate_name }}_core` | The logic, apart from the binary so tests can use it. |
+{%- endif %}
+
+Add a row for each crate you add, in the same pull request as the rule change that allows it.
+
+[docs/design.md](docs/design.md) holds the goals, the architecture and the decisions behind them.
+Keep it current: update it in the same pull request as the code it describes.
+
+## Product boundaries
+
+Settled decisions about what this project does and doesn't do go here, one bullet each, so an agent
+doesn't build past them. Don't add one without the user asking.
+
+## Before every commit
+
+1. Run `just ci` and fix what fails. Never weaken a check to get it passing: no lowered lint
+   level, no new exception without a reason that holds up, no skipped or deleted test.
+2. Spawn a fresh-context review subagent. Give it the diff (`git diff --cached`, or
+   `git diff main...HEAD` for a branch), the task it implements, [docs/style.md](docs/style.md)
+   and the [Google Rust Style Guide](https://google.github.io/styleguide/rustguide.html), and
+   none of your own reasoning. Ask it to check the diff against the review checklist in
+   `docs/style.md` and report findings with file and line.
+3. Fix every finding that holds up, rerun `just ci`, and repeat the review if the fixes were
+   more than mechanical.
+4. Commit with a [conventional commit](https://www.conventionalcommits.org/) message, one
+   coherent change per commit.
+5. Push to a branch and open a pull request for the user. Never push to `main`, merge a pull
+   request, or change the repository's settings; the user does those.
+
+## Silencing a lint
+
+Put the exception on the smallest item it applies to, with a reason:
+
+- a clippy or rustc lint: `#[expect(clippy::lint_name, reason = "...")]`;
+- a custom lint: `#[cfg_attr(dylint_lib = "trellis_lints", expect(lint_name, reason = "..."))]`.
+  The `cfg_attr` keeps ordinary builds, which don't know the lint, from warning about it.
+
+That is the only way to silence a lint, and these all fail `just dylint`:
+
+- `allow` and `warn`, and every inner lint attribute (`#![...]`), at the top of a crate or module
+  or inside a function;
+- an `expect` on a `mod` line, or on an `impl` block or trait for a lint that doesn't report at
+  the block;
+- any other `cfg_attr` around an `allow`, `warn` or `expect`, and a lint attribute built from
+  macro variables or assembled by a macro;
+- a lint attribute or `#[ignore]` that a macro writes and that would fail written by hand, unless
+  `trusted_macro_crates` in `dylint.toml` lists the crate that defines the macro;
+- an `expect` whose reason has fewer than 20 characters or fewer than 4 distinct words besides
+  the words of the lint's name;
+- an `expect` of a lint group, such as `warnings` or `clippy::pedantic`;
+- any `#[clippy::...]` attribute, such as `#[clippy::msrv]`.
+
+An `expect` also fails once its lint stops firing. Some rules have no exceptions at all:
+`code_comment`, `suppression_policy`, `missing_workspace_lints`, `disabled_code`,
+`needless_raw_identifier`, `file_named_after_item` and `non_leaf_module_items` (rename or move the
+code instead), and `macro_definition` (a macro goes only in a crate `macro_crates` in `dylint.toml`
+lists).
+
+If a rule seems wrong for this project, say so to the user rather than changing it. A rule
+changes only when the user asks, in a pull request of its own.
+
+## Where a rule belongs
+
+The repository is the next agent's memory: whatever pattern is in it gets copied, a workaround
+included. So a rule lives as far up this list as it can, strongest first:
+
+1. **Structure.** Types, crate boundaries and APIs that make the wrong thing impossible to write.
+2. **Checks.** A lint level, a cargo-deny rule, a structure rule in `[workspace.metadata.policy]`,
+   or a test.
+3. **This file.** Guidance for what no check can decide, such as product boundaries.
+4. **Review.** The checklist in [docs/style.md](docs/style.md).
+
+When a review finding comes up a second time, move it up. A new custom lint or structure check
+belongs in [trellis](https://github.com/265866/trellis), so every project gets it; ask the user
+to add it there. A pull request can't change rules and code together. When a new rule flags
+existing code, fix the code first, or land the rule with an `expect` carrying a real reason at
+each place it flags. [CONTRIBUTING.md](CONTRIBUTING.md) has the order for that and for a new proc
+macro.
+
+## Comments
+
+Rust code has no `//` or `/* */` comments except `// SAFETY:` ones, and the `code_comment` lint
+enforces it. A comment drifts from the code, and it is where a workaround gets justified instead of
+fixed: the next agent that reads it copies the workaround to the next place that looks alike,
+rather than finding the best fix there. Before you reuse a workaround you find, even one an
+`expect` reason explains, check that the problem it works around still exists. Put the why where
+it is checked or reviewed with the code: a doc comment on the item, the name of a function or test,
+an assertion message, or the `reason` of an `#[expect(...)]`. Configuration files (TOML, YAML, the
+justfile) keep their comments, since they have nowhere else to say why.
+
+## Code
+
+- **Errors.** A failure that a caller can recover from returns a `Result` whose error says what
+  failed and with what input. Never panic on user input, I/O or anything over the network; a
+  panic is for a bug or a broken invariant.
+- **Fail closed.** Input the code doesn't recognize is an error, not a default.
+- **Logs.** No secret, token or personal data in a log line or an error message.
+- **Tests.** A test of timeouts, expiry, ordering or retries uses a clock it controls or explicit
+  timestamps, never a sleep. Fixtures hold made-up data, never real names, emails, addresses,
+  keys or tokens.
+
+## New crates
+
+Each crate has one job. `just policy` checks every crate against these rules:
+
+- **Place and manifest.** A crate goes under `crates/`, whose crates are the workspace's only
+  members. It has no build script unless `build_script_crates` in `[workspace.metadata.policy]`
+  lists it. Its `Cargo.toml` holds only the keys the checker allows, so tests can't be switched
+  off there; its `[lints]` table is exactly `workspace = true`; and it inherits `edition`,
+  `rust-version` and `publish` from the workspace.
+- **Sources.** Its sources live under its own directory: every `#[path]` names a `.rs` file
+  inside the crate, and there are no symbolic links.
+- **Internal dependencies.** `internal_dependencies` in `[workspace.metadata.policy]` maps each
+  crate to the workspace crates it may depend on directly. A crate missing from the map, or an
+  edge the map doesn't list, fails, so a new crate or a new edge is a rule change. A crate in
+  `dev_only_crates` may be a dev-dependency of any crate, and nothing else.
+- **Proc macros.** A crate depends directly on a proc-macro crate only if `proc_macro_crates`
+  lists it, since a proc macro writes code the custom lints don't check. A crate that re-exports
+  a proc macro, such as `serde` with `derive`, isn't caught by that list; instead, `just dylint`
+  fails on a lint attribute its macros write, unless `trusted_macro_crates` in `dylint.toml`
+  lists the crate that defines the macro (`serde_derive`, not `serde`), and a lint level it writes
+  over your code names only lints `trusted_macro_lints` lists for that crate.
+- **Releases.** List the crate in `changelog_include` in `release-plz.toml`, in the rule change
+  that allows it, so its commits reach the release notes; `just policy` fails until you do.
+- **Configuration.** Tool configuration files such as `clippy.toml`, `rustfmt.toml` or
+  `.cargo/config.toml` live only at the root, under their exact names.
+- **Agent instructions.** This file is the only one for coding agents: any other `AGENTS.md` or
+  `CLAUDE.md`, `GEMINI.md`, `.cursorrules`, `.cursor/`, `.claude/` or
+  `.github/copilot-instructions.md` fails.
+
+## Platforms
+
+{%- set os_list = ['linux'] if kind == 'service' else platforms %}
+{%- set names = {'linux': 'Linux', 'macos': 'macOS', 'windows': 'Windows'} %}
+
+`just ci` checks the platform you run it on, and CI checks every platform the project ships for:
+{{ os_list | map('extract', names) | join(', ') }}. Code for any other platform fails `just dylint`.
+A change to platform-specific code needs a run on that platform before it's done.

@@ -1,0 +1,241 @@
+# Contributing to {{ project_name }}
+
+This project follows [trellis](https://github.com/265866/trellis): strict lints, a structure
+checker, and pull requests that keep rules and code apart. [docs/style.md](docs/style.md) lists
+every style rule, what checks it, and the review checklist for the rest;
+[AGENTS.md](AGENTS.md) holds the rules no check decides. Both apply to people and coding agents
+alike.
+
+## Set up
+
+Install [rustup](https://rustup.rs/), [cargo-binstall](https://github.com/cargo-bins/cargo-binstall),
+[uv](https://docs.astral.sh/uv/), [Go](https://go.dev/dl/) for actionlint, and
+[shellcheck](https://www.shellcheck.net/) 0.11.0, which actionlint runs on the workflows' scripts.
+{%- if kind != 'service' and 'windows' in platforms %} On
+Windows, also install the [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
+with the "Desktop development with C++" workload, which Rust's MSVC toolchain links with.
+{%- endif %}
+Then install the tools the checks use:
+
+```sh
+cargo binstall just@1.59.0 cargo-deny@0.20.2 cargo-shear@1.14.0 cargo-nextest@0.9.150 \
+  cargo-dylint@6.3.0 dylint-link@6.3.0 typos-cli@1.51.1 taplo-cli@0.10.0 lychee@0.24.2
+{%- if kind != 'library' %}
+cargo binstall cargo-about@0.9.3
+{%- endif %}
+go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+uv tool install zizmor@1.31.1
+just install-toolchains
+```
+
+These are the versions CI pins in `.github/workflows/`.
+
+`just install-toolchains` installs the stable toolchain from `rust-toolchain.toml`, the nightly
+rustfmt, and the nightly the custom lints build on.
+
+### Editors
+
+The options in `rustfmt.toml` exist only in nightly rustfmt. For rust-analyzer, set
+`rust-analyzer.rustfmt.extraArgs` to `["+nightly-2026-10-28"]`, so format-on-save matches
+`just fmt-check`.
+
+## Check a change
+
+`just ci` runs every check CI runs. `just` alone lists them, so you can run one at a time:
+
+| Recipe | Checks |
+| --- | --- |
+| `just fmt-check` | Rust and TOML formatting. `just fmt` fixes both. |
+| `just typos` | Spelling. |
+| `just actionlint`, `just zizmor` | The GitHub workflows, and their security. |
+| `just shear` | Every declared dependency is used. |
+| `just deny` | Advisories, licenses, banned crates and sources (`deny.toml`). |
+| `just links` | Every relative link and anchor in the Markdown files. |
+| `just policy` | The structure rules: workspace lints, manifests, crate dependencies, the release changelog, the docs index. |
+| `just lint` | clippy on every target, warnings as errors. |
+| `just dylint` | The custom lints from trellis, warnings as errors. |
+| `just test` | The tests through nextest, then the doctests. |
+| `just docs` | The docs, private items included, warnings as errors. |
+| `just build-release` | The release build. |
+{%- if kind != 'library' %}
+| `just notices` | The license notices a release ships, in `target/THIRD-PARTY-LICENSES.html`. It fails on a license `about.toml` doesn't accept. |
+{%- endif %}
+{%- if kind == 'library' and publish_crate %}
+| `just package` | The crate's package holds the README and its license files. |
+{%- endif %}
+| `just rule-changes [base]` | Rules and code change in separate pull requests. |
+
+To silence a lint, put an `expect` with a reason on the smallest item it applies to:
+
+- a clippy or rustc lint: `#[expect(clippy::lint_name, reason = "...")]`;
+- a custom lint: `#[cfg_attr(dylint_lib = "trellis_lints", expect(lint_name, reason = "..."))]`.
+
+Nothing else silences a lint: no `allow`, no inner `#![...]` attributes, and no reason shorter than
+20 characters. An `expect` fails once its lint stops firing, so a stale exception doesn't linger.
+
+### Tests
+
+Put a test next to the code it tests, or in the crate's `tests/` directory when it uses only the
+crate's public API. A test is never skipped or retried: `#[ignore]` fails `just dylint`, and
+nextest has no retries.
+
+### Advisories
+
+The Advisories workflow also runs `just deny` every week. A new advisory can fail a pull request
+that changed nothing; fix it with `cargo update -p <crate>` in its own pull request.
+
+## Send a change
+
+Pull requests are squash-merged, so the title becomes the commit on `main`. It must be a
+[conventional commit](https://www.conventionalcommits.org/), such as `feat(cli): add a --json flag`
+or `fix(config)!: reject unknown keys`. A `!` marks a breaking change.
+
+A pull request changes either the rules or the code, never both. When a new rule would flag
+existing code, either fix the code in one pull request and add the rule in the next, or add the
+rule together with an `expect` and a real reason at each place it flags. `just rule-changes` sorts
+the changed files:
+
+- **Neither:** the root `README.md`, `CHANGELOG.md`, `SECURITY.md`, `LICENSE*`, `.editorconfig` and
+  `Cargo.lock`, the `LICENSE*` files in a crate's directory, the Markdown files in `docs/` other
+  than `docs/style.md` and agent instruction files, and a `.rs` change that only adds or removes
+  `expect` attributes.
+- **Code:** every other file under `crates/` and every `.rs` file, apart from the rule files
+  below. A crate's `Cargo.toml` is code, but the part of a change that touches its
+  `[build-dependencies]` or its `build` key is a rule, so a change to both is both. A proc-macro
+  dependency is code: list the crate in `proc_macro_crates` in one pull request, then add the
+  dependency and its first use in the next.
+- **Rules:** everything else, including the root `Cargo.toml` outside `[workspace.dependencies]`
+  and `[patch]`, the tool configuration files, the `justfile`, build scripts, `.github/`,
+  `.copier-answers.yml`, this file, `docs/style.md` and `AGENTS.md`. A file the checker doesn't
+  know{{ ', such as `Containerfile`,' if kind == 'service' else '' }} is a rule too.
+
+## Set up once per repository
+
+{% if kind != 'library' -%}
+- Keep the repository public. On a personal account, GitHub attests release files only in public
+  repositories, and the release workflow stops when it can't attest.
+{% endif -%}
+- In Settings, General, allow squash merging only, with the pull request title as its default
+  message, so the title becomes the commit on `main`.
+- Install the [Renovate app](https://github.com/apps/renovate) on the repository. Each week it opens
+  one pull request with the crate updates other than major ones, and one for each major update.
+  The toolchain, tool, action and image pins arrive with trellis updates.
+- Allow the rule-change check to run. From 2026-12-02 GitHub blocks `pull_request_target` in
+  public repositories unless an Actions policy allows it, and without it no pull request gets the
+  "Rule changes stand alone" status:
+
+  ```sh
+  gh api --method POST repos/{{ github_owner }}/{{ project_name }}/actions/policies --input - <<'EOF'
+  {"name": "Rule-change check", "enforcement": "active",
+   "conditions": {"workflow_path": {"include": [".github/workflows/rule-changes.yml"], "exclude": []}},
+   "rules": [{"type": "restrict_action_events",
+              "parameters": {"allowed_events": ["pull_request_target"]}}]}
+  EOF
+  ```
+
+- Create the label release-plz puts on its PR: `gh label create release`.
+- Add a fine-grained token with contents and pull request write access to this repository as the
+  `RELEASE_PLZ_TOKEN` secret. A pull request that `GITHUB_TOKEN` opens starts no
+  `pull_request_target` workflow, so without the token the release PR never gets the
+  "Rule changes stand alone" status and can't merge.
+- Turn on private vulnerability reporting, which [SECURITY.md](SECURITY.md) points to.
+{%- if kind == 'library' and publish_crate %}
+- Publish the first version by hand with `cargo publish`. If that commit has no `vX.Y.Z` tag, tag it
+  with its version and push the tag, so release-plz starts from it. Then add this repository's
+  `release.yml` as a trusted publisher in the crate's settings on crates.io. Later releases publish
+  through it. Every crate you add is published too, so do the same for each one.
+{%- endif %}
+{%- if kind == 'service' %}
+- After the first release, make the `{{ project_name }}` package public in its package settings on
+  GitHub, so others can pull the image.
+{%- endif %}
+{%- set os_list = ['linux'] if kind == 'service' else platforms %}
+{%- set job_names = {'linux': 'Ubuntu', 'macos': 'macOS', 'windows': 'Windows'} %}
+- After the first pull request's checks run (GitHub offers only checks it has seen), protect
+  `main` and require these checks: `PR title`, `Quick checks`,
+  {% for os in os_list %}`{{ job_names[os] }}`, {% endfor %}
+{%- if kind == 'service' %}`Container image`, {% endif %}and the "Rule changes stand alone"
+  status with GitHub Actions as its source.
+{%- if kind == 'binary' %} The `Release build` checks run only when a pull request
+  changes what goes into a release, so don't require them.
+{%- endif %}
+{%- if kind == 'service' %}
+  `Container image` builds the image, as `just image` does, and runs it with `--version`, so the
+  service must answer `--version` and exit 0.
+{%- endif %}
+
+## Releases
+
+release-plz keeps a release PR open with the next version and its `CHANGELOG.md` entry. Merging it
+releases that version, with that entry as the release notes;
+[release.yml](.github/workflows/release.yml) does the rest. Before 1.0, a `feat` or a `!` bumps the
+minor version and a `fix` the patch version. To ship:
+
+1. To reword an entry, edit `CHANGELOG.md` on the release PR's branch, as the last step before you
+   merge: the next merge to `main` closes the release PR and opens a new one without the edit.
+   The first release after you add a crate comes out as a patch when only that crate changed. For a
+   minor one, change the version on that branch too: in the root `Cargo.toml`, in `Cargo.lock` and
+   in the `CHANGELOG.md` heading. Its notes can repeat older entries; delete those. Renaming the
+   main crate stops the release workflow with an error that says what to do by hand.
+2. Merge it once its checks pass. Merge no other PR until the release workflow's
+   **{{ 'Release' if kind == 'library' else 'Tag' }}** job finishes, or release-plz may propose the same version again.
+{%- if kind != 'library' %}
+3. If a later job fails, re-run the failed jobs. They pick up from the same tag.
+{%- endif %}
+{%- if kind != 'library' %}
+
+### Keep releases verifiable
+
+[Verify a release](docs/verifying-releases.md) gives users commands that name the `vX.Y.Z` tag
+form, the `release.yml` file and the `main` branch it runs on, the repository
+`{{ github_owner }}/{{ project_name }}`, and
+{%- if kind == 'binary' %} the archive, `SHA256SUMS` and `attestation.json` file names.
+{%- else %} the image `ghcr.io/{{ github_owner | lower }}/{{ project_name }}`.
+{%- endif %} Changing
+one breaks the commands users have copied.
+{%- endif %}
+
+## Update trellis
+
+Renovate opens a pull request when trellis tags a new version. To update by hand:
+
+```sh
+uvx copier update --defaults
+```
+
+To change an answer, keep the trellis version and pass the new value, such as
+{%- if kind == 'service' %} the license:
+
+```sh
+uvx copier update --defaults --vcs-ref=:current: --data 'license=MIT OR Apache-2.0'
+```
+{%- else %} the platforms:
+
+```sh
+uvx copier update --defaults --vcs-ref=:current: --data 'platforms=[linux, macos]'
+```
+{%- endif %}
+
+An update never touches `crates/`, `Cargo.lock`, `CHANGELOG.md` or `docs/design.md`, which are
+yours after the project is generated. It is a rule change, so it can't also change code.
+Copier merges the new template into your edits; resolve any conflict markers it leaves before you
+commit.
+{%- if kind == 'library' %} After turning on `publish_crate`, or changing a published crate's
+license, copy the root `LICENSE*` files into the crate's directory and remove the old ones, in the
+same pull request; `just package` fails until you do.
+{%- endif %}
+{%- if license == 'MIT' %}
+
+## License
+
+By contributing, you agree that your contributions are licensed under the
+[MIT License](LICENSE).
+{%- elif license == 'MIT OR Apache-2.0' %}
+
+## License
+
+{{ project_name }} is licensed under either the [Apache License 2.0](LICENSE-APACHE) or the
+[MIT License](LICENSE-MIT), at your option. Unless you explicitly state otherwise, any contribution
+intentionally submitted for inclusion in {{ project_name }} by you, as defined in the Apache-2.0
+license, shall be dual licensed as above, without any additional terms or conditions.
+{%- endif %}
