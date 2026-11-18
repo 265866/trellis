@@ -1,0 +1,206 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  # Pull requests share a group so a new push cancels the stale run; every commit on main gets
+  # its own run.
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  quick:
+    name: Quick checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install the pinned toolchain
+        run: rustup toolchain install
+
+      - uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2.90.5
+        with:
+          tool: just@1.59.0,cargo-deny@0.20.2,cargo-shear@1.14.0,typos@1.51.1,taplo@0.10.0,shellcheck@0.11.0,zizmor@1.31.1,lychee@0.24.2
+
+      - name: Install the pinned nightly rustfmt
+        run: just install-nightly-rustfmt
+
+      # install-action has no actionlint package; the runner image has Go.
+      - name: Install actionlint
+        run: |
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - run: just fmt-check
+      - run: just typos
+      - run: just actionlint
+      - run: just zizmor
+      - run: just shear
+      - run: just deny
+      - run: just links
+      - run: just pins
+
+  policy:
+    name: Policy and custom lints
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # rust-cache reads the root toolchain to key its cache, so both toolchains are installed.
+      - name: Install the pinned toolchains
+        run: |
+          rustup toolchain install
+          cd lints && rustup toolchain install
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: |
+            . -> target
+            lints -> target
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2.90.5
+        with:
+          tool: just@1.59.0,cargo-nextest@0.9.150,cargo-dylint@6.3.0,dylint-link@6.3.0
+
+      - run: just lints-lint
+      - run: just lints-comments
+      - run: just lints-test
+      - run: just lint
+      - run: just dylint
+      - run: just test
+      - run: just docs
+
+  template:
+    name: Template (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: binary
+            os: ubuntu-24.04
+            kind: binary
+            recipes: ci
+            tools: just@1.59.0,cargo-deny@0.20.2,cargo-shear@1.14.0,typos@1.51.1,taplo@0.10.0,shellcheck@0.11.0,zizmor@1.31.1,lychee@0.24.2,cargo-nextest@0.9.150,cargo-dylint@6.3.0,dylint-link@6.3.0,uv@0.13.8,cargo-about@0.9.3
+          - name: service
+            os: ubuntu-24.04
+            kind: service
+            recipes: ci
+            tools: just@1.59.0,cargo-deny@0.20.2,cargo-shear@1.14.0,typos@1.51.1,taplo@0.10.0,shellcheck@0.11.0,zizmor@1.31.1,lychee@0.24.2,cargo-nextest@0.9.150,cargo-dylint@6.3.0,dylint-link@6.3.0,uv@0.13.8,cargo-about@0.9.3
+          - name: library
+            os: ubuntu-24.04
+            kind: library
+            recipes: ci
+            tools: just@1.59.0,cargo-deny@0.20.2,cargo-shear@1.14.0,typos@1.51.1,taplo@0.10.0,shellcheck@0.11.0,zizmor@1.31.1,lychee@0.24.2,cargo-nextest@0.9.150,cargo-dylint@6.3.0,dylint-link@6.3.0,uv@0.13.8
+          # A generated project's CI runs these recipes on macOS and Windows, and its release build
+          # runs `notices` there.
+          - name: binary on macOS
+            os: macos-26
+            kind: binary
+            recipes: lint dylint test docs build-release notices
+            tools: just@1.59.0,cargo-nextest@0.9.150,cargo-dylint@6.3.0,dylint-link@6.3.0,uv@0.13.8,cargo-about@0.9.3
+          - name: binary on Windows
+            os: windows-2025
+            kind: binary
+            recipes: lint dylint test docs build-release notices
+            tools: just@1.59.0,cargo-nextest@0.9.150,cargo-dylint@6.3.0,dylint-link@6.3.0,uv@0.13.8,cargo-about@0.9.3
+          # The published library's `package` recipe has a PowerShell variant only Windows runs.
+          - name: published library on Windows
+            os: windows-2025
+            kind: library
+            publish: "true"
+            recipes: package lint dylint test
+            tools: just@1.59.0,cargo-nextest@0.9.150,cargo-dylint@6.3.0,dylint-link@6.3.0,uv@0.13.8
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2.90.5
+        with:
+          tool: ${{ matrix.tools }}
+
+      - name: Install the pinned toolchains
+        shell: bash
+        run: |
+          rustup toolchain install
+          just install-nightly-rustfmt
+          cd lints && rustup toolchain install
+
+      - name: Install actionlint
+        if: runner.os == 'Linux'
+        run: |
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Generate a ${{ matrix.kind }} project and run its checks
+        shell: bash
+        env:
+          KIND: ${{ matrix.kind }}
+          RECIPES: ${{ matrix.recipes }}
+          PUBLISH: ${{ matrix.publish || 'false' }}
+        run: just template "$KIND" "$RECIPES" "$PUBLISH"
+
+  dependencies:
+    name: Template with common dependencies
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2.90.5
+        with:
+          tool: just@1.59.0,cargo-deny@0.20.2,cargo-shear@1.14.0,typos@1.51.1,taplo@0.10.0,cargo-nextest@0.9.150,cargo-dylint@6.3.0,dylint-link@6.3.0,uv@0.13.8,cargo-about@0.9.3
+
+      - name: Install the pinned toolchains
+        run: |
+          rustup toolchain install
+          just install-nightly-rustfmt
+          cd lints && rustup toolchain install
+
+      - run: just dependencies
+
+  shapes:
+    name: Template shapes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2.90.5
+        with:
+          tool: just@1.59.0,cargo-deny@0.20.2,cargo-shear@1.14.0,typos@1.51.1,taplo@0.10.0,shellcheck@0.11.0,zizmor@1.31.1,lychee@0.24.2,uv@0.13.8,cargo-about@0.9.3
+
+      - name: Install the pinned toolchains
+        run: |
+          rustup toolchain install
+          just install-nightly-rustfmt
+
+      - name: Install actionlint
+        run: |
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - run: just shapes
+      - run: just update
