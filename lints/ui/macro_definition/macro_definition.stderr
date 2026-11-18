@@ -1,0 +1,67 @@
+warning: `macro_rules!` definition in a crate not listed in `macro_crates`
+  --> $DIR/macro_definition.rs:12:1
+   |
+LL | macro_rules! double {
+   | ^^^^^^^^^^^^^^^^^^^
+   |
+   = help: use a function, type or trait. If only a macro will do, ask for a crate of its own listed in `macro_crates` under `[trellis_lints]` in `dylint.toml`, which is a rule change: `trellis_lints` skips the code a macro writes
+   = note: `#[warn(macro_definition)]` on by default
+
+warning: `macro` definition in a crate not listed in `macro_crates`
+  --> $DIR/macro_definition.rs:19:1
+   |
+LL | macro triple($value:expr) {
+   | ^^^^^^^^^^^^
+   |
+   = help: use a function, type or trait. If only a macro will do, ask for a crate of its own listed in `macro_crates` under `[trellis_lints]` in `dylint.toml`, which is a rule change: `trellis_lints` skips the code a macro writes
+
+warning: procedural macro definition in a crate not listed in `macro_crates`
+  --> $DIR/macro_definition.rs:25:8
+   |
+LL | pub fn shout(input: TokenStream) -> TokenStream {
+   |        ^^^^^
+   |
+   = help: use a function, type or trait. If only a macro will do, ask for a crate of its own listed in `macro_crates` under `[trellis_lints]` in `dylint.toml`, which is a rule change: `trellis_lints` skips the code a macro writes
+
+warning: procedural macro definition in a crate not listed in `macro_crates`
+  --> $DIR/macro_definition.rs:31:8
+   |
+LL | pub fn describe(input: TokenStream) -> TokenStream {
+   |        ^^^^^^^^
+   |
+   = help: use a function, type or trait. If only a macro will do, ask for a crate of its own listed in `macro_crates` under `[trellis_lints]` in `dylint.toml`, which is a rule change: `trellis_lints` skips the code a macro writes
+
+warning: procedural macro definition in a crate not listed in `macro_crates`
+  --> $DIR/macro_definition.rs:38:8
+   |
+LL | pub fn traced(attribute: TokenStream, item: TokenStream) -> TokenStream {
+   |        ^^^^^^
+   |
+   = help: use a function, type or trait. If only a macro will do, ask for a crate of its own listed in `macro_crates` under `[trellis_lints]` in `dylint.toml`, which is a rule change: `trellis_lints` skips the code a macro writes
+
+warning: `macro_rules!` definition in a crate not listed in `macro_crates`
+  --> $DIR/macro_definition.rs:44:1
+   |
+LL | macro_rules! sizes {
+   | ^^^^^^^^^^^^^^^^^^
+   |
+   = help: use a function, type or trait. If only a macro will do, ask for a crate of its own listed in `macro_crates` under `[trellis_lints]` in `dylint.toml`, which is a rule change: `trellis_lints` skips the code a macro writes
+
+warning: `macro_rules!` definition in a crate not listed in `macro_crates`
+  --> $DIR/macro_definition.rs:56:1
+   |
+LL | macro_rules! define_quadruple {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: use a function, type or trait. If only a macro will do, ask for a crate of its own listed in `macro_crates` under `[trellis_lints]` in `dylint.toml`, which is a rule change: `trellis_lints` skips the code a macro writes
+
+warning: `macro_rules!` definition in a crate not listed in `macro_crates`
+  --> $DIR/macro_definition.rs:71:5
+   |
+LL |     macro_rules! halve {
+   |     ^^^^^^^^^^^^^^^^^^
+   |
+   = help: use a function, type or trait. If only a macro will do, ask for a crate of its own listed in `macro_crates` under `[trellis_lints]` in `dylint.toml`, which is a rule change: `trellis_lints` skips the code a macro writes
+
+warning: 8 warnings emitted
+

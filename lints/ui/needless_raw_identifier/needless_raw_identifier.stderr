@@ -1,0 +1,75 @@
+warning: raw identifier `r#Arc`, whose name isn't a keyword
+  --> $DIR/needless_raw_identifier.rs:7:13
+   |
+LL |     shared: r#Arc<u8>,
+   |             ^^^^^
+   |
+   = help: write `Arc`: `r#` is only for names the edition reserves, and lints that compare the code with its source text skip a needless one
+   = note: `#[warn(needless_raw_identifier)]` on by default
+
+warning: raw identifier `r#union`, whose name isn't a keyword
+  --> $DIR/needless_raw_identifier.rs:13:5
+   |
+LL |     r#union: u8,
+   |     ^^^^^^^
+   |
+   = help: write `union`: `r#` is only for names the edition reserves, and lints that compare the code with its source text skip a needless one
+
+warning: raw identifier `'r#input`, whose name isn't a keyword
+  --> $DIR/needless_raw_identifier.rs:17:10
+   |
+LL | fn first<'r#input>(text: &'r#input str) -> &'r#input str {
+   |          ^^^^^^^^
+   |
+   = help: write `'input`: `r#` is only for names the edition reserves, and lints that compare the code with its source text skip a needless one
+
+warning: raw identifier `'r#input`, whose name isn't a keyword
+  --> $DIR/needless_raw_identifier.rs:17:27
+   |
+LL | fn first<'r#input>(text: &'r#input str) -> &'r#input str {
+   |                           ^^^^^^^^
+   |
+   = help: write `'input`: `r#` is only for names the edition reserves, and lints that compare the code with its source text skip a needless one
+
+warning: raw identifier `'r#input`, whose name isn't a keyword
+  --> $DIR/needless_raw_identifier.rs:17:45
+   |
+LL | fn first<'r#input>(text: &'r#input str) -> &'r#input str {
+   |                                             ^^^^^^^^
+   |
+   = help: write `'input`: `r#` is only for names the edition reserves, and lints that compare the code with its source text skip a needless one
+
+warning: raw identifier `r#u32`, whose name isn't a keyword
+  --> $DIR/needless_raw_identifier.rs:24:9
+   |
+LL |         r#u32::from($value) * 2
+   |         ^^^^^
+   |
+   = help: write `u32`: `r#` is only for names the edition reserves, and lints that compare the code with its source text skip a needless one
+
+warning: raw identifier `r#holder`, whose name isn't a keyword
+  --> $DIR/needless_raw_identifier.rs:30:9
+   |
+LL |     let r#holder = Holder {
+   |         ^^^^^^^^
+   |
+   = help: write `holder`: `r#` is only for names the edition reserves, and lints that compare the code with its source text skip a needless one
+
+warning: raw identifier `r#first`, whose name isn't a keyword
+  --> $DIR/needless_raw_identifier.rs:36:14
+   |
+LL |     let _ = (r#first("text"), double!(holder.r#type), r#holder.r#gen);
+   |              ^^^^^^^
+   |
+   = help: write `first`: `r#` is only for names the edition reserves, and lints that compare the code with its source text skip a needless one
+
+warning: raw identifier `r#holder`, whose name isn't a keyword
+  --> $DIR/needless_raw_identifier.rs:36:55
+   |
+LL |     let _ = (r#first("text"), double!(holder.r#type), r#holder.r#gen);
+   |                                                       ^^^^^^^^
+   |
+   = help: write `holder`: `r#` is only for names the edition reserves, and lints that compare the code with its source text skip a needless one
+
+warning: 9 warnings emitted
+

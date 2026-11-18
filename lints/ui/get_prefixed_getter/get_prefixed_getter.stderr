@@ -1,0 +1,19 @@
+warning: getter named `get_price`
+  --> $DIR/get_prefixed_getter.rs:7:8
+   |
+LL |     fn get_price(&self) -> u64 {
+   |        ^^^^^^^^^
+   |
+   = help: name it `price`, as the Google Rust Style Guide's "Getters and setters" asks
+   = note: `#[warn(get_prefixed_getter)]` on by default
+
+warning: getter named `get_price`
+  --> $DIR/get_prefixed_getter.rs:52:8
+   |
+LL |     fn get_price(&self) -> u64;
+   |        ^^^^^^^^^
+   |
+   = help: name it `price`, as the Google Rust Style Guide's "Getters and setters" asks
+
+warning: 2 warnings emitted
+

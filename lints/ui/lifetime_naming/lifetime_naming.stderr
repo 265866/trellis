@@ -1,0 +1,59 @@
+warning: single-letter lifetime `'a` on a struct
+  --> $DIR/lifetime_naming.rs:2:15
+   |
+LL | struct Parser<'a> {
+   |               ^^
+   |
+   = help: name it after what it borrows from, such as `'input`
+   = note: `#[warn(lifetime_naming)]` on by default
+
+warning: single-letter lifetime `'a` on an enum
+  --> $DIR/lifetime_naming.rs:7:12
+   |
+LL | enum Token<'a, 'b> {
+   |            ^^
+   |
+   = help: name it after what it borrows from, such as `'input`
+
+warning: single-letter lifetime `'b` on an enum
+  --> $DIR/lifetime_naming.rs:7:16
+   |
+LL | enum Token<'a, 'b> {
+   |                ^^
+   |
+   = help: name it after what it borrows from, such as `'input`
+
+warning: single-letter lifetime `'a` on an impl
+  --> $DIR/lifetime_naming.rs:13:6
+   |
+LL | impl<'a> Parser<'a> {
+   |      ^^
+   |
+   = help: name it after what it borrows from, such as `'input`
+
+warning: single-letter lifetime `'a` on a trait
+  --> $DIR/lifetime_naming.rs:21:14
+   |
+LL | trait Source<'a> {
+   |              ^^
+   |
+   = help: name it after what it borrows from, such as `'input`
+
+warning: single-letter lifetime `'a` on a type alias
+  --> $DIR/lifetime_naming.rs:26:12
+   |
+LL | type Words<'a> = Vec<&'a str>;
+   |            ^^
+   |
+   = help: name it after what it borrows from, such as `'input`
+
+warning: `join` declares 3 single-letter lifetimes
+  --> $DIR/lifetime_naming.rs:47:8
+   |
+LL | fn join<'a, 'b, 'c>(first: &'a str, second: &'b str, third: &'c str) -> usize {
+   |        ^^^^^^^^^^^^
+   |
+   = help: name them after what they borrow from; up to two single-letter lifetimes are fine
+
+warning: 7 warnings emitted
+

@@ -1,0 +1,59 @@
+warning: trait `Write` is imported for the whole module but used only in `render`
+  --> $DIR/module_level_trait_import.rs:5:5
+   |
+LL |     use std::fmt::Write as _;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: move the `use` into `render`, as the Google Rust Style Guide's "Prefer locally-scoped trait imports" asks
+   = note: `#[warn(module_level_trait_import)]` on by default
+
+warning: trait `FromStr` is imported for the whole module but used only in `parse`
+  --> $DIR/module_level_trait_import.rs:22:5
+   |
+LL |     use std::str::FromStr;
+   |     ^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: move the `use` into `parse`, as the Google Rust Style Guide's "Prefer locally-scoped trait imports" asks
+
+warning: trait `Add` is imported for the whole module but used only in `sum`
+  --> $DIR/module_level_trait_import.rs:25:5
+   |
+LL |     use std::ops::Add;
+   |     ^^^^^^^^^^^^^^^^^^
+   |
+   = help: move the `use` into `sum`, as the Google Rust Style Guide's "Prefer locally-scoped trait imports" asks
+
+warning: trait `FromStr` is imported for the whole module but used only in `parse`
+  --> $DIR/module_level_trait_import.rs:170:5
+   |
+LL |     use std::str::FromStr;
+   |     ^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: move the `use` into `parse`, as the Google Rust Style Guide's "Prefer locally-scoped trait imports" asks
+
+warning: trait `Write` is imported for the whole module but used only in `render`
+  --> $DIR/modules/test_only.rs:6:5
+   |
+LL |     use std::fmt::Write as _;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: move the `use` into `render`, as the Google Rust Style Guide's "Prefer locally-scoped trait imports" asks
+
+warning: trait `Seek` is imported for the whole module but used only in `rewind`
+  --> $DIR/modules/test_only.rs:22:5
+   |
+LL |     use std::io::Seek;
+   |     ^^^^^^^^^^^^^^^^^^
+   |
+   = help: move the `use` into `rewind`, as the Google Rust Style Guide's "Prefer locally-scoped trait imports" asks
+
+warning: trait `FromStr` is imported for the whole module but used only in `parse`
+  --> $DIR/modules/test_only.rs:36:5
+   |
+LL |     use std::str::FromStr;
+   |     ^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: move the `use` into `parse`, as the Google Rust Style Guide's "Prefer locally-scoped trait imports" asks
+
+warning: 7 warnings emitted
+

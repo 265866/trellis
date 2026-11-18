@@ -1,0 +1,75 @@
+warning: enum `State` in a module with child modules
+  --> $DIR/modules/machine.rs:7:10
+   |
+LL | pub enum State {
+   |          ^^^^^
+   |
+   = help: move it into a child module and re-export it if needed; a non-leaf module should hold only `mod` declarations and re-exports, as the Google Rust Style Guide's "Don't implement APIs in non-leaf modules" asks
+   = note: `#[warn(non_leaf_module_items)]` on by default
+
+warning: function `main` in a module with child modules
+  --> $DIR/modules/machine.rs:12:4
+   |
+LL | fn main() {}
+   |    ^^^^
+   |
+   = help: move it into a child module and re-export it if needed; a non-leaf module should hold only `mod` declarations and re-exports, as the Google Rust Style Guide's "Don't implement APIs in non-leaf modules" asks
+
+warning: function `lever` in a module with child modules
+  --> $DIR/modules/machine.rs:23:4
+   |
+LL | fn lever() -> Lever {
+   |    ^^^^^
+   |
+   = help: move it into a child module and re-export it if needed; a non-leaf module should hold only `mod` declarations and re-exports, as the Google Rust Style Guide's "Don't implement APIs in non-leaf modules" asks
+
+warning: struct `Engine` in a module with child modules
+  --> $DIR/non_leaf_module_items.rs:16:12
+   |
+LL | pub struct Engine;
+   |            ^^^^^^
+   |
+   = help: move it into a child module and re-export it if needed; a non-leaf module should hold only `mod` declarations and re-exports, as the Google Rust Style Guide's "Don't implement APIs in non-leaf modules" asks
+
+warning: implementation in a module with child modules
+  --> $DIR/non_leaf_module_items.rs:19:1
+   |
+LL | impl Engine {
+   | ^^^^^^^^^^^
+   |
+   = help: move it into a child module and re-export it if needed; a non-leaf module should hold only `mod` declarations and re-exports, as the Google Rust Style Guide's "Don't implement APIs in non-leaf modules" asks
+
+warning: function `helper` in a module with child modules
+  --> $DIR/non_leaf_module_items.rs:24:4
+   |
+LL | fn helper() {}
+   |    ^^^^^^
+   |
+   = help: move it into a child module and re-export it if needed; a non-leaf module should hold only `mod` declarations and re-exports, as the Google Rust Style Guide's "Don't implement APIs in non-leaf modules" asks
+
+warning: constant item `LIMIT` in a module with child modules
+  --> $DIR/non_leaf_module_items.rs:27:7
+   |
+LL | const LIMIT: u8 = 3;
+   |       ^^^^^
+   |
+   = help: move it into a child module and re-export it if needed; a non-leaf module should hold only `mod` declarations and re-exports, as the Google Rust Style Guide's "Don't implement APIs in non-leaf modules" asks
+
+warning: inline module `inline_leaf` defines items in a non-leaf module
+  --> $DIR/non_leaf_module_items.rs:30:5
+   |
+LL | mod inline_leaf {
+   |     ^^^^^^^^^^^
+   |
+   = help: move the module to its own file, as the Google Rust Style Guide's "Don't implement APIs in non-leaf modules" asks
+
+warning: function `tie` in a module with child modules
+  --> $DIR/non_leaf_module_items.rs:46:8
+   |
+LL |     fn tie() {}
+   |        ^^^
+   |
+   = help: move it into a child module and re-export it if needed; a non-leaf module should hold only `mod` declarations and re-exports, as the Google Rust Style Guide's "Don't implement APIs in non-leaf modules" asks
+
+warning: 9 warnings emitted
+

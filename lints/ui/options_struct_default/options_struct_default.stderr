@@ -1,0 +1,19 @@
+warning: options struct `OrderOptions` doesn't implement `Default`
+  --> $DIR/options_struct_default.rs:4:8
+   |
+LL | struct OrderOptions {
+   |        ^^^^^^^^^^^^
+   |
+   = help: derive or implement `Default`, as the Google Rust Style Guide's "Options structs should implement Default" asks
+   = note: `#[warn(options_struct_default)]` on by default
+
+warning: options struct `RenderOptions` doesn't implement `Default`
+  --> $DIR/options_struct_default.rs:10:8
+   |
+LL | struct RenderOptions<T> {
+   |        ^^^^^^^^^^^^^
+   |
+   = help: derive or implement `Default`, as the Google Rust Style Guide's "Options structs should implement Default" asks
+
+warning: 2 warnings emitted
+

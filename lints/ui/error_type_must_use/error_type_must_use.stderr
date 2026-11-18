@@ -1,0 +1,35 @@
+warning: error type `AmountTooLarge` isn't `#[must_use]`
+  --> $DIR/error_type_must_use.rs:8:8
+   |
+LL | struct AmountTooLarge;
+   |        ^^^^^^^^^^^^^^
+   |
+   = help: add `#[must_use]`, as the Google Rust Style Guide's "`#[must_use]` on types" asks
+   = note: `#[warn(error_type_must_use)]` on by default
+
+warning: error type `OrderError` isn't `#[must_use]`
+  --> $DIR/error_type_must_use.rs:20:6
+   |
+LL | enum OrderError {
+   |      ^^^^^^^^^^
+   |
+   = help: add `#[must_use]`, as the Google Rust Style Guide's "`#[must_use]` on types" asks
+
+warning: error type `Wrapped` isn't `#[must_use]`
+  --> $DIR/error_type_must_use.rs:34:8
+   |
+LL | struct Wrapped<E>(E);
+   |        ^^^^^^^
+   |
+   = help: add `#[must_use]`, as the Google Rust Style Guide's "`#[must_use]` on types" asks
+
+warning: error type `Rejected` isn't `#[must_use]`
+  --> $DIR/error_type_must_use.rs:96:8
+   |
+LL | struct Rejected;
+   |        ^^^^^^^^
+   |
+   = help: add `#[must_use]`, as the Google Rust Style Guide's "`#[must_use]` on types" asks
+
+warning: 4 warnings emitted
+

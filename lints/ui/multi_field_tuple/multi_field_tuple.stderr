@@ -1,0 +1,211 @@
+warning: tuple struct `Range` has 2 fields
+  --> $DIR/multi_field_tuple.rs:7:8
+   |
+LL | struct Range(u64, u64);
+   |        ^^^^^
+   |
+   = help: name the fields, as the Google Rust Style Guide's "Prefer named fields over tuples and non-newtype tuple structs" asks
+   = note: `#[warn(multi_field_tuple)]` on by default
+
+warning: tuple struct `Tagged` has 2 fields
+  --> $DIR/multi_field_tuple.rs:10:8
+   |
+LL | struct Tagged<T>(u64, u64, PhantomData<T>);
+   |        ^^^^^^
+   |
+   = help: name the fields, as the Google Rust Style Guide's "Prefer named fields over tuples and non-newtype tuple structs" asks
+
+warning: field holds a tuple of 2
+  --> $DIR/multi_field_tuple.rs:19:13
+   |
+LL | struct Pair((u64, u64));
+   |             ^^^^^^^^^^
+   |
+   = help: use a struct with named fields, as the Google Rust Style Guide's "Prefer named fields over tuples and non-newtype tuple structs" asks
+
+warning: field `bounds` holds a tuple of 2
+  --> $DIR/multi_field_tuple.rs:29:13
+   |
+LL |     bounds: (u64, u64),
+   |             ^^^^^^^^^^
+   |
+   = help: use a struct with named fields, as the Google Rust Style Guide's "Prefer named fields over tuples and non-newtype tuple structs" asks
+
+warning: field `last` holds a tuple of 2
+  --> $DIR/multi_field_tuple.rs:31:18
+   |
+LL |     last: Option<(u64, bool)>,
+   |                  ^^^^^^^^^^^
+   |
+   = help: use a struct with named fields, as the Google Rust Style Guide's "Prefer named fields over tuples and non-newtype tuple structs" asks
+
+warning: field `history` holds a tuple of 2
+  --> $DIR/multi_field_tuple.rs:33:18
+   |
+LL |     history: Vec<(u64, u64)>,
+   |                  ^^^^^^^^^^
+   |
+   = help: use a struct with named fields, as the Google Rust Style Guide's "Prefer named fields over tuples and non-newtype tuple structs" asks
+
+warning: field `totals` holds a tuple of 2
+  --> $DIR/multi_field_tuple.rs:34:44
+   |
+LL |     totals: std::collections::HashMap<u64, (usize, usize)>,
+   |                                            ^^^^^^^^^^^^^^
+   |
+   = help: use a struct with named fields, as the Google Rust Style Guide's "Prefer named fields over tuples and non-newtype tuple structs" asks
+
+warning: tuple variant `Sale` has 2 fields
+  --> $DIR/multi_field_tuple.rs:42:5
+   |
+LL |     Sale(u64, u64),
+   |     ^^^^
+   |
+   = help: name the fields, as the Google Rust Style Guide's "Prefer named fields over tuples and non-newtype tuple structs" asks
+
+warning: field `range` holds a tuple of 2
+  --> $DIR/multi_field_tuple.rs:43:21
+   |
+LL |     Refund { range: (u64, u64) },
+   |                     ^^^^^^^^^^
+   |
+   = help: use a struct with named fields, as the Google Rust Style Guide's "Prefer named fields over tuples and non-newtype tuple structs" asks
+
+warning: return type holds a tuple of 3
+  --> $DIR/multi_field_tuple.rs:50:15
+   |
+LL | fn order() -> (u64, u64, bool) {
+   |               ^^^^^^^^^^^^^^^^
+   |
+   = help: use a struct with named fields, as the Google Rust Style Guide's "Prefer named fields over tuples and non-newtype tuple structs" asks
+
+warning: return type holds a tuple of 2
+  --> $DIR/multi_field_tuple.rs:55:16
+   |
+LL | fn bounds() -> (u64, u64) {
+   |                ^^^^^^^^^^
+   |
+   = help: use a struct with named fields, as the Google Rust Style Guide's "Prefer named fields over tuples and non-newtype tuple structs" asks
+
+warning: return type holds a tuple of 3
+  --> $DIR/multi_field_tuple.rs:60:22
+   |
+LL | fn parse() -> Option<(u64, u64, u64)> {
+   |                      ^^^^^^^^^^^^^^^
+   |
+   = help: use a struct with named fields, as the Google Rust Style Guide's "Prefer named fields over tuples and non-newtype tuple structs" asks
+
+warning: return type holds a tuple of 2
+  --> $DIR/multi_field_tuple.rs:65:21
+   |
+LL | fn read() -> Result<(u64, u64), String> {
+   |                     ^^^^^^^^^^
+   |
+   = help: use a struct with named fields, as the Google Rust Style Guide's "Prefer named fields over tuples and non-newtype tuple structs" asks
+
+warning: return type holds a tuple of 2
+  --> $DIR/multi_field_tuple.rs:69:35
+   |
+LL | fn read_io() -> io::Result<Option<(u64, u64)>> {
+   |                                   ^^^^^^^^^^
+   |
+   = help: use a struct with named fields, as the Google Rust Style Guide's "Prefer named fields over tuples and non-newtype tuple structs" asks
+
+warning: return type holds a tuple of 2
+  --> $DIR/multi_field_tuple.rs:74:21
+   |
+LL | async fn fetch() -> (u64, u64) {
+   |                     ^^^^^^^^^^
+   |
+   = help: use a struct with named fields, as the Google Rust Style Guide's "Prefer named fields over tuples and non-newtype tuple structs" asks
+
+warning: return type holds a tuple of 2
+  --> $DIR/multi_field_tuple.rs:79:19
+   |
+LL | fn pairs() -> Vec<(u64, u64)> {
+   |                   ^^^^^^^^^^
+   |
+   = help: use a struct with named fields, as the Google Rust Style Guide's "Prefer named fields over tuples and non-newtype tuple structs" asks
+
+warning: return type holds a tuple of 2
+  --> $DIR/multi_field_tuple.rs:83:37
+   |
+LL | fn prices() -> impl Iterator<Item = (u64, bool)> {
+   |                                     ^^^^^^^^^^^
+   |
+   = help: use a struct with named fields, as the Google Rust Style Guide's "Prefer named fields over tuples and non-newtype tuple structs" asks
+
+warning: parameter holds a tuple of 2
+  --> $DIR/multi_field_tuple.rs:87:15
+   |
+LL | fn pay(order: (u64, bool)) -> u64 {
+   |               ^^^^^^^^^^^
+   |
+   = help: use a struct with named fields, as the Google Rust Style Guide's "Prefer named fields over tuples and non-newtype tuple structs" asks
+
+warning: type alias holds a tuple of 2
+  --> $DIR/multi_field_tuple.rs:92:15
+   |
+LL | type Bounds = (u64, u64);
+   |               ^^^^^^^^^^
+   |
+   = help: use a struct with named fields, as the Google Rust Style Guide's "Prefer named fields over tuples and non-newtype tuple structs" asks
+
+warning: return type holds a tuple of 3
+  --> $DIR/multi_field_tuple.rs:109:24
+   |
+LL |     fn stops(&self) -> (u8, u8, u8) {
+   |                        ^^^^^^^^^^^^
+   |
+   = help: use a struct with named fields, as the Google Rust Style Guide's "Prefer named fields over tuples and non-newtype tuple structs" asks
+
+warning: return type holds a tuple of 2
+  --> $DIR/multi_field_tuple.rs:114:37
+   |
+LL |     async fn fetch(&self) -> Option<(u8, u8)> {
+   |                                     ^^^^^^^^
+   |
+   = help: use a struct with named fields, as the Google Rust Style Guide's "Prefer named fields over tuples and non-newtype tuple structs" asks
+
+warning: return type holds a tuple of 2
+  --> $DIR/multi_field_tuple.rs:121:24
+   |
+LL |     fn stops(&self) -> (u8, u8);
+   |                        ^^^^^^^^
+   |
+   = help: use a struct with named fields, as the Google Rust Style Guide's "Prefer named fields over tuples and non-newtype tuple structs" asks
+
+warning: field `pick` holds a tuple of 2
+  --> $DIR/multi_field_tuple.rs:172:27
+   |
+LL |     pick: Box<dyn Fn() -> (u64, u64)>,
+   |                           ^^^^^^^^^^
+   |
+   = help: use a struct with named fields, as the Google Rust Style Guide's "Prefer named fields over tuples and non-newtype tuple structs" asks
+
+warning: field `place` holds a tuple of 2
+  --> $DIR/multi_field_tuple.rs:173:23
+   |
+LL |     place: Box<dyn Fn((u64, u64), &mut Store)>,
+   |                       ^^^^^^^^^^
+   |
+   = help: use a struct with named fields, as the Google Rust Style Guide's "Prefer named fields over tuples and non-newtype tuple structs" asks
+
+warning: return type holds a tuple of 2
+  --> $DIR/multi_field_tuple.rs:176:42
+   |
+LL | fn picker() -> impl FnMut(u64) -> Option<(u64, bool)> {
+   |                                          ^^^^^^^^^^^
+   |
+   = help: use a struct with named fields, as the Google Rust Style Guide's "Prefer named fields over tuples and non-newtype tuple structs" asks
+
+warning: return type holds a tuple of 2
+  --> $DIR/multi_field_tuple.rs:189:18
+   |
+LL | fn raw_pair() -> (r#u32, u32) {
+   |                  ^^^^^^^^^^^^
+   |
+   = help: use a struct with named fields, as the Google Rust Style Guide's "Prefer named fields over tuples and non-newtype tuple structs" asks
+
+warning: 26 warnings emitted
+

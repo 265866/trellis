@@ -1,0 +1,40 @@
+warning: `allow` attribute
+  --> $DIR/suppression_policy_proc_macros.rs:24:1
+   |
+LL | #[allow(dead_code)]
+   | ^^^^^^^^^^^^^^^^^^^
+   |
+   = help: use `#[expect(lint, reason = "...")]` on the narrowest item, which fails once the lint stops firing
+   = note: `#[warn(suppression_policy)]` on by default
+
+warning: `allow` attribute, which the macro `hush::hush` from `hush` writes
+  --> $DIR/suppression_policy_proc_macros.rs:9:1
+   |
+LL | fn first() {}
+   | ^^
+   |
+   = help: use `#[expect(lint, reason = "...")]` on the narrowest item, which fails once the lint stops firing
+   = help: write the code without `hush::hush`, as the idioms in `docs/style.md` show; list `hush` in `trusted_macro_crates` only after reading every lint level its macros write, which is a rule change
+
+warning: `allow` attribute, which the macro `hush::Hush` from `hush` writes
+  --> $DIR/suppression_policy_proc_macros.rs:13:8
+   |
+LL | struct Second;
+   |        ^^^^^^
+   |
+   = help: use `#[expect(lint, reason = "...")]` on the narrowest item, which fails once the lint stops firing
+   = help: write the code without `hush::Hush`, as the idioms in `docs/style.md` show; list `hush` in `trusted_macro_crates` only after reading every lint level its macros write, which is a rule change
+
+warning: `allow` attribute, which a macro built from tokens that aren't an attribute in the source
+  --> $DIR/suppression_policy_proc_macros.rs:18:25
+   |
+LL |       hush::hushed_block!({
+   |  _________________________^
+LL | |         let unused = 1;
+LL | |     });
+   | |_____^
+   |
+   = help: use `#[expect(lint, reason = "...")]` on the narrowest item, which fails once the lint stops firing
+
+warning: 4 warnings emitted
+

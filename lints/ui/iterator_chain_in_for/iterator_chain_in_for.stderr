@@ -1,0 +1,69 @@
+warning: `for` loop header builds a combinator chain with `filter_map`
+  --> $DIR/iterator_chain_in_for.rs:18:18
+   |
+LL |       for value in texts
+   |  __________________^
+LL | |         .iter()
+LL | |         .filter_map(|text| parse(text).ok())
+LL | |         .filter(|value| *value > 1)
+   | |___________________________________^
+   |
+   = help: assign the chain to a variable whose name says what it holds, then loop over that variable, as the Google Rust Style Guide's "Don't use iterator combinator chains when direct iteration is clearer" asks
+   = note: `#[warn(iterator_chain_in_for)]` on by default
+
+warning: `for` loop header builds a combinator chain with `map`
+  --> $DIR/iterator_chain_in_for.rs:27:20
+   |
+LL |     for doubled in values.iter().map(|value| value * 2) {
+   |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: assign the chain to a variable whose name says what it holds, then loop over that variable, as the Google Rust Style Guide's "Don't use iterator combinator chains when direct iteration is clearer" asks
+
+warning: `for` loop header builds a combinator chain with `map`
+  --> $DIR/iterator_chain_in_for.rs:32:18
+   |
+LL |     for value in texts.iter().map(|text| parse(text)).filter_map(Result::ok) {
+   |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: assign the chain to a variable whose name says what it holds, then loop over that variable, as the Google Rust Style Guide's "Don't use iterator combinator chains when direct iteration is clearer" asks
+
+warning: iterator chain with 5 closure-taking combinators
+  --> $DIR/iterator_chain_in_for.rs:59:22
+   |
+LL |       let total: u32 = values
+   |  ______________________^
+LL | |         .iter()
+LL | |         .map(|value| value + 1)
+LL | |         .filter(|value| value % 2 == 0)
+LL | |         .map(|value| value * 3)
+LL | |         .inspect(|value| assert!(*value > 0))
+LL | |         .fold(0, |sum, value| sum + value);
+   | |__________________________________________^
+   |
+   = help: split it into named steps, or write it as a `for` loop, as the Google Rust Style Guide's "Don't use iterator combinator chains when direct iteration is clearer" asks for long and complex chains
+
+warning: `for` loop header builds a combinator chain with `map`
+  --> $DIR/iterator_chain_in_for.rs:68:18
+   |
+LL |       for value in values
+   |  __________________^
+LL | |         .iter()
+LL | |         .map(|value| value + 1)
+LL | |         .filter(|value| value % 2 == 0)
+LL | |         .map(|value| value * 3)
+LL | |         .inspect(|value| assert!(*value > 0))
+LL | |         .skip_while(|value| *value < 5)
+   | |_______________________________________^
+   |
+   = help: assign the chain to a variable whose name says what it holds, then loop over that variable, as the Google Rust Style Guide's "Don't use iterator combinator chains when direct iteration is clearer" asks
+
+warning: `for` loop header builds a combinator chain with `filter`
+  --> $DIR/iterator_chain_in_for.rs:109:18
+   |
+LL |     for value in r#values.iter().filter(|value| **value > 0) {
+   |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: assign the chain to a variable whose name says what it holds, then loop over that variable, as the Google Rust Style Guide's "Don't use iterator combinator chains when direct iteration is clearer" asks
+
+warning: 6 warnings emitted
+

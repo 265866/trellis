@@ -1,0 +1,27 @@
+warning: `From<u64>` for `Funds` has no matching constructor
+  --> $DIR/from_without_constructor.rs:8:1
+   |
+LL | impl From<u64> for Funds {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: if this conversion is a main way to build a `Funds`, add an inherent `new`, `new_from_*` or `from_*` fn taking a `u64`, as the Google Rust Style Guide's "Pair important `From` impls with explicit constructor methods" asks
+   = note: `#[warn(from_without_constructor)]` on by default
+
+warning: `From<String>` for `Name` has no matching constructor
+  --> $DIR/from_without_constructor.rs:35:1
+   |
+LL | impl From<String> for Name {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: if this conversion is a main way to build a `Name`, add an inherent `new`, `new_from_*` or `from_*` fn taking a `String`, as the Google Rust Style Guide's "Pair important `From` impls with explicit constructor methods" asks
+
+warning: `From<u64>` for `Seconds` has no matching constructor
+  --> $DIR/from_without_constructor.rs:62:1
+   |
+LL | impl From<u64> for Seconds {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: if this conversion is a main way to build a `Seconds`, add an inherent `new`, `new_from_*` or `from_*` fn taking a `u64`, as the Google Rust Style Guide's "Pair important `From` impls with explicit constructor methods" asks
+
+warning: 3 warnings emitted
+

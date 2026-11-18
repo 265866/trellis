@@ -1,0 +1,75 @@
+warning: `true` passed as a `bool` argument
+  --> $DIR/bool_literal_argument.rs:67:32
+   |
+LL |     let mut shelf = Shelf::new(true);
+   |                                ^^^^
+   |
+   = help: make the parameter an `enum` whose variants name both choices, as the Google Rust Style Guide's "Prefer `enum` over `bool` in APIs" asks
+   = note: `#[warn(bool_literal_argument)]` on by default
+
+warning: `false` passed as a `bool` argument
+  --> $DIR/bool_literal_argument.rs:68:24
+   |
+LL |     let _ = order(100, false);
+   |                        ^^^^^
+   |
+   = help: make the parameter an `enum` whose variants name both choices, as the Google Rust Style Guide's "Prefer `enum` over `bool` in APIs" asks
+
+warning: `true` passed as a `bool` argument
+  --> $DIR/bool_literal_argument.rs:69:30
+   |
+LL |     let _ = shelf.order(100, true);
+   |                              ^^^^
+   |
+   = help: make the parameter an `enum` whose variants name both choices, as the Google Rust Style Guide's "Prefer `enum` over `bool` in APIs" asks
+
+warning: `false` passed as a `bool` argument
+  --> $DIR/bool_literal_argument.rs:70:39
+   |
+LL |     let _ = Shelf::order(&shelf, 100, false);
+   |                                       ^^^^^
+   |
+   = help: make the parameter an `enum` whose variants name both choices, as the Google Rust Style Guide's "Prefer `enum` over `bool` in APIs" asks
+
+warning: `true` passed as a `bool` argument
+  --> $DIR/bool_literal_argument.rs:71:27
+   |
+LL |     let _ = shelf.animate(true);
+   |                           ^^^^
+   |
+   = help: make the parameter an `enum` whose variants name both choices, as the Google Rust Style Guide's "Prefer `enum` over `bool` in APIs" asks
+
+warning: `true` passed as a `bool` argument
+  --> $DIR/bool_literal_argument.rs:72:20
+   |
+LL |     shelf.set_both(true, false);
+   |                    ^^^^
+   |
+   = help: make the parameter an `enum` whose variants name both choices, as the Google Rust Style Guide's "Prefer `enum` over `bool` in APIs" asks
+
+warning: `false` passed as a `bool` argument
+  --> $DIR/bool_literal_argument.rs:72:26
+   |
+LL |     shelf.set_both(true, false);
+   |                          ^^^^^
+   |
+   = help: make the parameter an `enum` whose variants name both choices, as the Google Rust Style Guide's "Prefer `enum` over `bool` in APIs" asks
+
+warning: `true` passed as a `bool` argument
+  --> $DIR/bool_literal_argument.rs:73:24
+   |
+LL |     shelf.set_speed(2, true);
+   |                        ^^^^
+   |
+   = help: make the parameter an `enum` whose variants name both choices, as the Google Rust Style Guide's "Prefer `enum` over `bool` in APIs" asks
+
+warning: `false` passed as a `bool` argument
+  --> $DIR/bool_literal_argument.rs:135:18
+   |
+LL |     r#order(100, false)
+   |                  ^^^^^
+   |
+   = help: make the parameter an `enum` whose variants name both choices, as the Google Rust Style Guide's "Prefer `enum` over `bool` in APIs" asks
+
+warning: 9 warnings emitted
+

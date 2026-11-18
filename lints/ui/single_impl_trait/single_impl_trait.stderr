@@ -1,0 +1,16 @@
+warning: trait `Scoring` has one impl and is never used as a bound
+  --> $DIR/single_impl_trait.rs:10:7
+   |
+LL | trait Scoring {
+   |       ^^^^^^^
+   |
+note: the only impl
+  --> $DIR/single_impl_trait.rs:14:1
+   |
+LL | impl Scoring for Order {
+   | ^^^^^^^^^^^^^^^^^^^^^^
+   = help: move its items into an inherent `impl Order`, as the Google Rust Style Guide's "When to define a trait versus an inherent implementation" asks
+   = note: `#[warn(single_impl_trait)]` on by default
+
+warning: 1 warning emitted
+

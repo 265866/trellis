@@ -1,0 +1,4 @@
+/* The counter's stylesheet. A Rust file includes it, so code_comment must not read it as Rust. */
+.counter {
+    background: url(https://example.com/tile.png); // not a Rust comment either
+}

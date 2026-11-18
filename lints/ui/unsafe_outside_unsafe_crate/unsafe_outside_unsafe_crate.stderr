@@ -1,0 +1,67 @@
+warning: `extern` block in a crate not listed in `unsafe_crates`
+  --> $DIR/unsafe_outside_unsafe_crate.rs:5:1
+   |
+LL | unsafe extern "C" {
+   | ^^^^^^^^^^^^^
+   |
+   = help: move it into a small crate that wraps it in a safe API, and list that crate in `unsafe_crates` under `[trellis_lints]` in `dylint.toml`
+   = note: `#[warn(unsafe_outside_unsafe_crate)]` on by default
+
+warning: `unsafe fn` in a crate not listed in `unsafe_crates`
+  --> $DIR/unsafe_outside_unsafe_crate.rs:10:1
+   |
+LL | unsafe fn first(values: &[u32]) -> u32 {
+   | ^^^^^^
+   |
+   = help: move it into a small crate that wraps it in a safe API, and list that crate in `unsafe_crates` under `[trellis_lints]` in `dylint.toml`
+
+warning: `unsafe` block in a crate not listed in `unsafe_crates`
+  --> $DIR/unsafe_outside_unsafe_crate.rs:12:5
+   |
+LL |     unsafe { *values.get_unchecked(0) }
+   |     ^^^^^^
+   |
+   = help: move it into a small crate that wraps it in a safe API, and list that crate in `unsafe_crates` under `[trellis_lints]` in `dylint.toml`
+
+warning: `unsafe trait` in a crate not listed in `unsafe_crates`
+  --> $DIR/unsafe_outside_unsafe_crate.rs:16:1
+   |
+LL | unsafe trait Zeroable {}
+   | ^^^^^^
+   |
+   = help: move it into a small crate that wraps it in a safe API, and list that crate in `unsafe_crates` under `[trellis_lints]` in `dylint.toml`
+
+warning: `unsafe impl` in a crate not listed in `unsafe_crates`
+  --> $DIR/unsafe_outside_unsafe_crate.rs:19:1
+   |
+LL | unsafe impl Zeroable for u32 {}
+   | ^^^^^^
+   |
+   = help: move it into a small crate that wraps it in a safe API, and list that crate in `unsafe_crates` under `[trellis_lints]` in `dylint.toml`
+
+warning: `unsafe fn` in a crate not listed in `unsafe_crates`
+  --> $DIR/unsafe_outside_unsafe_crate.rs:25:5
+   |
+LL |     unsafe fn read(&self) -> u32 {
+   |     ^^^^^^
+   |
+   = help: move it into a small crate that wraps it in a safe API, and list that crate in `unsafe_crates` under `[trellis_lints]` in `dylint.toml`
+
+warning: `#[unsafe(..)]` attribute in a crate not listed in `unsafe_crates`
+  --> $DIR/unsafe_outside_unsafe_crate.rs:31:3
+   |
+LL | #[unsafe(no_mangle)]
+   |   ^^^^^^
+   |
+   = help: move it into a small crate that wraps it in a safe API, and list that crate in `unsafe_crates` under `[trellis_lints]` in `dylint.toml`
+
+warning: `unsafe` block in a crate not listed in `unsafe_crates`
+  --> $DIR/unsafe_outside_unsafe_crate.rs:64:17
+   |
+LL |     let total = unsafe { first(&values) } + second(&values) + sum(&values);
+   |                 ^^^^^^
+   |
+   = help: move it into a small crate that wraps it in a safe API, and list that crate in `unsafe_crates` under `[trellis_lints]` in `dylint.toml`
+
+warning: 8 warnings emitted
+

@@ -1,0 +1,43 @@
+warning: constructor `new` returns a `Result`
+  --> $DIR/try_new_result.rs:16:8
+   |
+LL |     fn new(depth: u32) -> std::result::Result<Self, ParseError> {
+   |        ^^^
+   |
+   = help: name it `try_new`, as the Google Rust Style Guide's "Naming initialization functions" asks
+   = note: `#[warn(try_new_result)]` on by default
+
+warning: constructor `new_from_text` returns a `Result`
+  --> $DIR/try_new_result.rs:25:8
+   |
+LL |     fn new_from_text(text: &str) -> Result<Self> {
+   |        ^^^^^^^^^^^^^
+   |
+   = help: name it `try_new_from_text`, as the Google Rust Style Guide's "Naming initialization functions" asks
+
+warning: constructor `new_from_reader` returns a `Result`
+  --> $DIR/try_new_result.rs:32:8
+   |
+LL |     fn new_from_reader(_reader: &mut dyn io::Read) -> io::Result<Self> {
+   |        ^^^^^^^^^^^^^^^
+   |
+   = help: name it `try_new_from_reader`, as the Google Rust Style Guide's "Naming initialization functions" asks
+
+warning: `try_new` doesn't return a `Result` or an `Option`
+  --> $DIR/try_new_result.rs:37:8
+   |
+LL |     fn try_new() -> Self {
+   |        ^^^^^^^
+   |
+   = help: return a `Result`, or name it `new`, as the Google Rust Style Guide's "Naming initialization functions" asks
+
+warning: constructor `new` returns a `Result`
+  --> $DIR/try_new_result.rs:76:8
+   |
+LL |     fn new(depth: u32) -> std::result::Result<Self, ParseError>;
+   |        ^^^
+   |
+   = help: name it `try_new`, as the Google Rust Style Guide's "Naming initialization functions" asks
+
+warning: 5 warnings emitted
+

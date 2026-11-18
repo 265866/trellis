@@ -1,0 +1,53 @@
+warning: `allow` attribute
+  --> $DIR/suppression_policy_trusted_proc_macros.rs:26:1
+   |
+LL | #[allow(dead_code)]
+   | ^^^^^^^^^^^^^^^^^^^
+   |
+   = help: use `#[expect(lint, reason = "...")]` on the narrowest item, which fails once the lint stops firing
+   = note: `#[warn(suppression_policy)]` on by default
+
+warning: attribute whose path is a macro variable
+  --> $DIR/suppression_policy_trusted_proc_macros.rs:31:11
+   |
+LL |         #[$meta]
+   |           ^^^^^
+   |
+   = help: the lints can't tell which attribute the macro's caller passes, so it may be a lint level they never check: write the attribute out in the macro, or put it on the item at the call
+
+warning: `allow` attribute, which a macro built from tokens that aren't an attribute in the source
+  --> $DIR/suppression_policy_trusted_proc_macros.rs:20:25
+   |
+LL |       hush::hushed_block!({
+   |  _________________________^
+LL | |         let unused = 1;
+LL | |     });
+   | |_____^
+   |
+   = help: use `#[expect(lint, reason = "...")]` on the narrowest item, which fails once the lint stops firing
+
+warning: `allow` attribute, which the macro `with_meta` defined in this crate writes
+  --> $DIR/suppression_policy_trusted_proc_macros.rs:31:9
+   |
+LL |   macro_rules! with_meta {
+LL |       ($meta:meta; $body:block) => {
+LL |           #[$meta]
+   |           ^^^^^^^^
+...
+LL | /     with_meta!(allow(unused_variables); {
+LL | |         let unused = 1;
+LL | |     });
+   | |______- in this macro invocation
+   |
+   = help: use `#[expect(lint, reason = "...")]` on the narrowest item, which fails once the lint stops firing
+
+warning: `allow` attribute, which a macro built from tokens that aren't an attribute in the source
+  --> $DIR/suppression_policy_trusted_proc_macros.rs:51:9
+   |
+LL |         #[quiet(unused_variables)]
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: use `#[expect(lint, reason = "...")]` on the narrowest item, which fails once the lint stops firing
+
+warning: 5 warnings emitted
+

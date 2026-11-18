@@ -1,0 +1,84 @@
+warning: `rustfmt::skip` inside `cfg_attr`
+  --> $DIR/rustfmt_skip_justification.rs:78:1
+   |
+LL | #[cfg_attr(target_os = "freebsd", rustfmt::skip)]
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: rustfmt skips the item whatever the predicate, so the skip needs no `cfg_attr`: write `#[rustfmt::skip]` with its `expect` on the same item
+   = note: `#[warn(rustfmt_skip_justification)]` on by default
+
+warning: `rustfmt::skip` inside `cfg_attr`
+  --> $DIR/rustfmt_skip_justification.rs:81:1
+   |
+LL | #[cfg_attr(windows, rustfmt::skip)]
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: rustfmt skips the item whatever the predicate, so the skip needs no `cfg_attr`: write `#[rustfmt::skip]` with its `expect` on the same item
+
+warning: `rustfmt::skip` inside `cfg_attr`
+  --> $DIR/rustfmt_skip_justification.rs:85:1
+   |
+LL | #[cfg_attr(unix, cfg_attr(windows, rustfmt::skip::macros(vec)))]
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: rustfmt skips the item whatever the predicate, so the skip needs no `cfg_attr`: write `#[rustfmt::skip]` with its `expect` on the same item
+
+warning: `rustfmt::skip` inside `cfg_attr`
+  --> $DIR/rustfmt_skip_justification.rs:91:5
+   |
+LL |     #![cfg_attr(unix, rustfmt::skip)]
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: rustfmt skips the item whatever the predicate, so the skip needs no `cfg_attr`: write `#[rustfmt::skip]` with its `expect` on the same item
+
+warning: `#[rustfmt::skip]` needs a reason
+  --> $DIR/rustfmt_skip_justification.rs:5:1
+   |
+LL | #[rustfmt::skip]
+   | ^^^^^^^^^^^^^^^^
+   |
+   = help: skip formatting only for manual alignment or generated code, and say which with `#[cfg_attr(dylint_lib = "trellis_lints", expect(rustfmt_skip_justification, reason = "..."))]` on the same item
+
+warning: `#[rustfmt::skip]` needs a reason
+  --> $DIR/rustfmt_skip_justification.rs:9:1
+   |
+LL | #[rustfmt::skip::macros(vec)]
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: skip formatting only for manual alignment or generated code, and say which with `#[cfg_attr(dylint_lib = "trellis_lints", expect(rustfmt_skip_justification, reason = "..."))]` on the same item
+
+warning: `#[rustfmt::skip]` needs a reason
+  --> $DIR/rustfmt_skip_justification.rs:16:5
+   |
+LL |     #![rustfmt::skip]
+   |     ^^^^^^^^^^^^^^^^^
+   |
+   = help: skip formatting only for manual alignment or generated code, and say which with `#[cfg_attr(dylint_lib = "trellis_lints", expect(rustfmt_skip_justification, reason = "..."))]` on the same item
+
+warning: `#[rustfmt::skip]` needs a reason
+  --> $DIR/rustfmt_skip_justification.rs:57:5
+   |
+LL |     #[rustfmt::skip]
+   |     ^^^^^^^^^^^^^^^^
+   |
+   = help: skip formatting only for manual alignment or generated code, and say which with `#[cfg_attr(dylint_lib = "trellis_lints", expect(rustfmt_skip_justification, reason = "..."))]` on the same item
+
+warning: this lint expectation is unfulfilled
+  --> $DIR/rustfmt_skip_justification.rs:47:10
+   |
+LL | #[expect(rustfmt_skip_justification, reason = "nothing to justify")]
+   |          ^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: nothing to justify
+   = note: `#[warn(unfulfilled_lint_expectations)]` on by default
+
+warning: this lint expectation is unfulfilled
+  --> $DIR/rustfmt_skip_justification.rs:84:10
+   |
+LL | #[expect(rustfmt_skip_justification, reason = "manual alignment")]
+   |          ^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: manual alignment
+
+warning: 10 warnings emitted
+

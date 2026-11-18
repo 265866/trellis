@@ -1,0 +1,75 @@
+warning: doc comment starts with a lowercase letter
+  --> $DIR/doc_starts_lowercase.rs:1:1
+   |
+LL | //! the crate docs. Flagged: the crate's inner docs start lowercase.
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: start it with a capital letter, or put code in backticks
+   = note: `#[warn(doc_starts_lowercase)]` on by default
+
+warning: doc comment starts with a lowercase letter
+  --> $DIR/doc_starts_lowercase.rs:3:1
+   |
+LL | /// returns one. Flagged: an outer doc comment starts lowercase.
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: start it with a capital letter, or put code in backticks
+
+warning: doc comment starts with a lowercase letter
+  --> $DIR/doc_starts_lowercase.rs:8:1
+   |
+LL | #[doc = "returns two. Flagged: a `doc` attribute starts lowercase."]
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: start it with a capital letter, or put code in backticks
+
+warning: doc comment starts with a lowercase letter
+  --> $DIR/doc_starts_lowercase.rs:13:1
+   |
+LL | /** returns three. Flagged: a block doc comment starts lowercase. */
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: start it with a capital letter, or put code in backticks
+
+warning: doc comment starts with a lowercase letter
+  --> $DIR/doc_starts_lowercase.rs:19:1
+   |
+LL | /// returns four. Flagged: blank doc lines before the first sentence don't count.
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: start it with a capital letter, or put code in backticks
+
+warning: doc comment starts with a lowercase letter
+  --> $DIR/doc_starts_lowercase.rs:65:1
+   |
+LL | /// trellises is flagged: a listed word followed by more letters is another word.
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: start it with a capital letter, or put code in backticks
+
+warning: doc comment starts with a lowercase letter
+  --> $DIR/doc_starts_lowercase.rs:80:5
+   |
+LL |     //! the shelves. Flagged: a module's inner docs start lowercase.
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: start it with a capital letter, or put code in backticks
+
+warning: doc comment starts with a lowercase letter
+  --> $DIR/doc_starts_lowercase.rs:84:9
+   |
+LL |         /// the stop. Flagged: a field doc starts lowercase.
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: start it with a capital letter, or put code in backticks
+
+warning: doc comment starts with a lowercase letter
+  --> $DIR/doc_starts_lowercase.rs:90:5
+   |
+LL |     /// returns ten. Flagged: an item inside a function body.
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: start it with a capital letter, or put code in backticks
+
+warning: 9 warnings emitted
+

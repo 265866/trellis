@@ -1,0 +1,35 @@
+warning: module `settings` isn't named after its primary item `Config`
+  --> $DIR/file_named_after_item.rs:5:5
+   |
+LL | mod settings;
+   |     ^^^^^^^^
+   |
+   = help: rename the module and its file to `config`, as the Google Rust Style Guide's "Name source files and leaf modules after the primary user-defined item" asks
+   = note: `#[warn(file_named_after_item)]` on by default
+
+warning: module `earnings` isn't named after its primary item `Price`
+  --> $DIR/file_named_after_item.rs:9:5
+   |
+LL | mod earnings;
+   |     ^^^^^^^^
+   |
+   = help: rename the module and its file to `price`, as the Google Rust Style Guide's "Name source files and leaf modules after the primary user-defined item" asks
+
+warning: module `shelf` isn't named after its primary item `Rack`
+  --> $DIR/file_named_after_item.rs:13:5
+   |
+LL | mod shelf;
+   |     ^^^^^
+   |
+   = help: rename the module and its file to `rack`, as the Google Rust Style Guide's "Name source files and leaf modules after the primary user-defined item" asks
+
+warning: module `metrics` isn't named after its primary item `Probability`
+  --> $DIR/file_named_after_item.rs:17:5
+   |
+LL | mod metrics;
+   |     ^^^^^^^
+   |
+   = help: rename the module and its file to `probability`, as the Google Rust Style Guide's "Name source files and leaf modules after the primary user-defined item" asks
+
+warning: 4 warnings emitted
+

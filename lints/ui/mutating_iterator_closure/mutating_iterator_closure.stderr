@@ -1,0 +1,133 @@
+warning: closure passed to `map` mutates `error_count`
+  --> $DIR/mutating_iterator_closure.rs:20:14
+   |
+LL |         .map(|result| {
+   |              ^^^^^^^^
+   |
+note: `error_count` is mutated here
+  --> $DIR/mutating_iterator_closure.rs:22:17
+   |
+LL |                 error_count += 1;
+   |                 ^^^^^^^^^^^^^^^^
+   = help: write it as a `for` loop, whose body shows the mutation, as the Google Rust Style Guide's "Don't use iterator combinator chains when direct iteration is clearer" asks
+   = note: `#[warn(mutating_iterator_closure)]` on by default
+
+warning: closure passed to `for_each` mutates `doubled`
+  --> $DIR/mutating_iterator_closure.rs:31:28
+   |
+LL |     parsed.iter().for_each(|value| doubled.push(value * 2));
+   |                            ^^^^^^^
+   |
+note: `doubled` is mutated here
+  --> $DIR/mutating_iterator_closure.rs:31:36
+   |
+LL |     parsed.iter().for_each(|value| doubled.push(value * 2));
+   |                                    ^^^^^^^^^^^^^^^^^^^^^^^
+   = help: write it as a `for` loop, whose body shows the mutation, as the Google Rust Style Guide's "Don't use iterator combinator chains when direct iteration is clearer" asks
+
+warning: closure passed to `filter` mutates `seen`
+  --> $DIR/mutating_iterator_closure.rs:35:50
+   |
+LL |     let unique: Vec<&u32> = parsed.iter().filter(|value| seen.insert(**value)).collect();
+   |                                                  ^^^^^^^
+   |
+note: `seen` is mutated here
+  --> $DIR/mutating_iterator_closure.rs:35:58
+   |
+LL |     let unique: Vec<&u32> = parsed.iter().filter(|value| seen.insert(**value)).collect();
+   |                                                          ^^^^^^^^^^^^^^^^^^^^
+   = help: write it as a `for` loop, whose body shows the mutation, as the Google Rust Style Guide's "Don't use iterator combinator chains when direct iteration is clearer" asks
+
+warning: closure passed to `any` mutates `tally`
+  --> $DIR/mutating_iterator_closure.rs:39:30
+   |
+LL |     let _ = texts.iter().any(|text| {
+   |                              ^^^^^^
+   |
+note: `tally` is mutated here
+  --> $DIR/mutating_iterator_closure.rs:40:9
+   |
+LL |         tally.errors += 1;
+   |         ^^^^^^^^^^^^^^^^^
+   = help: write it as a `for` loop, whose body shows the mutation, as the Google Rust Style Guide's "Don't use iterator combinator chains when direct iteration is clearer" asks
+
+warning: closure passed to `inspect` mutates `total_ref`
+  --> $DIR/mutating_iterator_closure.rs:47:45
+   |
+LL |     let summed: u32 = parsed.iter().inspect(|value| *total_ref += **value).sum();
+   |                                             ^^^^^^^
+   |
+note: `total_ref` is mutated here
+  --> $DIR/mutating_iterator_closure.rs:47:53
+   |
+LL |     let summed: u32 = parsed.iter().inspect(|value| *total_ref += **value).sum();
+   |                                                     ^^^^^^^^^^^^^^^^^^^^^
+   = help: write it as a `for` loop, whose body shows the mutation, as the Google Rust Style Guide's "Don't use iterator combinator chains when direct iteration is clearer" asks
+
+warning: closure passed to `rfind` mutates `checked`
+  --> $DIR/mutating_iterator_closure.rs:51:33
+   |
+LL |     let _ = parsed.iter().rfind(|value| {
+   |                                 ^^^^^^^
+   |
+note: `checked` is mutated here
+  --> $DIR/mutating_iterator_closure.rs:52:9
+   |
+LL |         checked += 1;
+   |         ^^^^^^^^^^^^
+   = help: write it as a `for` loop, whose body shows the mutation, as the Google Rust Style Guide's "Don't use iterator combinator chains when direct iteration is clearer" asks
+
+warning: closure passed to `fold` mutates `folds`
+  --> $DIR/mutating_iterator_closure.rs:58:35
+   |
+LL |     let _ = parsed.iter().fold(0, |sum, value| {
+   |                                   ^^^^^^^^^^^^
+   |
+note: `folds` is mutated here
+  --> $DIR/mutating_iterator_closure.rs:59:9
+   |
+LL |         folds += 1;
+   |         ^^^^^^^^^^
+   = help: write it as a `for` loop, whose body shows the mutation, as the Google Rust Style Guide's "Don't use iterator combinator chains when direct iteration is clearer" asks
+
+warning: closure passed to `map` mutates `lent`
+  --> $DIR/mutating_iterator_closure.rs:80:14
+   |
+LL |         .map(|value| {
+   |              ^^^^^^^
+   |
+note: `lent` is mutated here
+  --> $DIR/mutating_iterator_closure.rs:81:23
+   |
+LL |             push_into(&mut lent, *value);
+   |                       ^^^^^^^^^
+   = help: write it as a `for` loop, whose body shows the mutation, as the Google Rust Style Guide's "Don't use iterator combinator chains when direct iteration is clearer" asks
+
+warning: closure passed to `map` mutates `index`
+  --> $DIR/mutating_iterator_closure.rs:94:14
+   |
+LL |         .map(move |value| {
+   |              ^^^^^^^^^^^^
+   |
+note: `index` is mutated here
+  --> $DIR/mutating_iterator_closure.rs:95:13
+   |
+LL |             index += 1;
+   |             ^^^^^^^^^^
+   = help: write it as a `for` loop, whose body shows the mutation, as the Google Rust Style Guide's "Don't use iterator combinator chains when direct iteration is clearer" asks
+
+warning: closure passed to `for_each` mutates `doubled`
+  --> $DIR/mutating_iterator_closure.rs:208:30
+   |
+LL |     r#values.iter().for_each(|value| doubled.push(value * 2));
+   |                              ^^^^^^^
+   |
+note: `doubled` is mutated here
+  --> $DIR/mutating_iterator_closure.rs:208:38
+   |
+LL |     r#values.iter().for_each(|value| doubled.push(value * 2));
+   |                                      ^^^^^^^^^^^^^^^^^^^^^^^
+   = help: write it as a `for` loop, whose body shows the mutation, as the Google Rust Style Guide's "Don't use iterator combinator chains when direct iteration is clearer" asks
+
+warning: 10 warnings emitted
+

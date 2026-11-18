@@ -1,0 +1,43 @@
+warning: type alias `Cents` for `u64`
+  --> $DIR/primitive_type_alias.rs:4:1
+   |
+LL | type Cents = u64;
+   | ^^^^^^^^^^^^^^^^^
+   |
+   = help: use a newtype such as `struct Cents(u64);`, as the Google Rust Style Guide's "Newtypes versus type aliases" asks
+   = note: `#[warn(primitive_type_alias)]` on by default
+
+warning: type alias `Factor` for `core::primitive::f64`
+  --> $DIR/primitive_type_alias.rs:7:1
+   |
+LL | type Factor = core::primitive::f64;
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: use a newtype such as `struct Factor(core::primitive::f64);`, as the Google Rust Style Guide's "Newtypes versus type aliases" asks
+
+warning: type alias `Enabled` for `bool`
+  --> $DIR/primitive_type_alias.rs:10:1
+   |
+LL | type Enabled = bool;
+   | ^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: use a newtype such as `struct Enabled(bool);`, as the Google Rust Style Guide's "Newtypes versus type aliases" asks
+
+warning: type alias `StoreName` for `String`
+  --> $DIR/primitive_type_alias.rs:13:1
+   |
+LL | type StoreName = String;
+   | ^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: use a newtype such as `struct StoreName(String);`, as the Google Rust Style Guide's "Newtypes versus type aliases" asks
+
+warning: type alias `Label` for `&'static str`
+  --> $DIR/primitive_type_alias.rs:16:1
+   |
+LL | type Label = &'static str;
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: use a newtype such as `struct Label(&'static str);`, as the Google Rust Style Guide's "Newtypes versus type aliases" asks
+
+warning: 5 warnings emitted
+

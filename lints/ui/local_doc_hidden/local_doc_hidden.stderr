@@ -1,0 +1,48 @@
+warning: `#[doc(hidden)]` on an item of this crate
+  --> $DIR/local_doc_hidden.rs:2:1
+   |
+LL | #[doc(hidden)]
+   | ^^^^^^^^^^^^^^
+   |
+   = help: a hidden item skips `missing_docs`: document it, or make it private. If a macro needs it public, say so with `#[cfg_attr(dylint_lib = "trellis_lints", expect(local_doc_hidden, reason = "..."))]` on the item
+   = note: `#[warn(local_doc_hidden)]` on by default
+
+warning: `#[doc(hidden)]` on an item of this crate
+  --> $DIR/local_doc_hidden.rs:8:1
+   |
+LL | #[doc(hidden, alias = "Amount")]
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: a hidden item skips `missing_docs`: document it, or make it private. If a macro needs it public, say so with `#[cfg_attr(dylint_lib = "trellis_lints", expect(local_doc_hidden, reason = "..."))]` on the item
+
+warning: `#[doc(hidden)]` on an item of this crate
+  --> $DIR/local_doc_hidden.rs:10:5
+   |
+LL |     #[doc(hidden)]
+   |     ^^^^^^^^^^^^^^
+   |
+   = help: a hidden item skips `missing_docs`: document it, or make it private. If a macro needs it public, say so with `#[cfg_attr(dylint_lib = "trellis_lints", expect(local_doc_hidden, reason = "..."))]` on the item
+
+warning: `#[doc(hidden)]` on an item of this crate
+  --> $DIR/local_doc_hidden.rs:16:5
+   |
+LL |     #![doc(hidden)]
+   |     ^^^^^^^^^^^^^^^
+   |
+   = help: a hidden item skips `missing_docs`: document it, or make it private. If a macro needs it public, say so with `#[cfg_attr(dylint_lib = "trellis_lints", expect(local_doc_hidden, reason = "..."))]` on the item
+
+warning: `#[doc(hidden)]` on an item of this crate
+  --> $DIR/local_doc_hidden.rs:24:9
+   |
+LL | macro_rules! hidden_constant {
+LL |     ($name:ident) => {
+LL |         #[doc(hidden)]
+   |         ^^^^^^^^^^^^^^
+...
+LL | hidden_constant!(HIDDEN);
+   | ------------------------ in this macro invocation
+   |
+   = help: a hidden item skips `missing_docs`: document it, or make it private. If a macro needs it public, say so with `#[cfg_attr(dylint_lib = "trellis_lints", expect(local_doc_hidden, reason = "..."))]` on the item
+
+warning: 5 warnings emitted
+

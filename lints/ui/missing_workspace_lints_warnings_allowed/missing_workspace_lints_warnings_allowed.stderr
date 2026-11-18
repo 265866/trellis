@@ -1,0 +1,7 @@
+error: crate compiled without the workspace lint levels: `clippy::pedantic` is `allow`, and the workspace needs at least `warn`; `clippy::unwrap_used` is `allow`, and the workspace needs at least `warn`; `disabled_code` is `allow`, and the workspace needs at least `warn`; `missing_docs` is `allow`, and the workspace needs at least `warn`; `suppression_policy` is `allow`, and the workspace needs at least `warn`; `clippy::complexity` is `allow`, and the workspace needs at least `warn`; `clippy::correctness` is `allow`, and the workspace needs at least `warn`; `clippy::perf` is `allow`, and the workspace needs at least `warn`; `clippy::style` is `allow`, and the workspace needs at least `warn`; `clippy::suspicious` is `allow`, and the workspace needs at least `warn`
+   |
+   = help: add `[lints]` with `workspace = true` to the crate's `Cargo.toml`, and don't lower lints through `RUSTFLAGS` or `.cargo/config.toml`
+   = note: `-A warnings`, `--cap-lints` or a lint group on the command line turned off `missing_workspace_lints`, which only `-A missing_workspace_lints` may turn off, so the lint reports an error
+
+error: aborting due to 1 previous error
+

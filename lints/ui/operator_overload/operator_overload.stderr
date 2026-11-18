@@ -1,0 +1,59 @@
+warning: `Add` impl overloads `+`
+  --> $DIR/operator_overload.rs:11:6
+   |
+LL | impl Add<Amount> for History {
+   |      ^^^^^^^^^^^
+   |
+   = help: if `+` keeps its original meaning for this type, say what it means in `#[cfg_attr(dylint_lib = "trellis_lints", expect(operator_overload, reason = "..."))]` on the impl; if it is shorthand for something else, use a named method, as the Google Rust Style Guide's "Avoid overloading for non-mathematical purposes" asks
+   = note: `#[warn(operator_overload)]` on by default
+
+warning: `Shl` impl overloads `<<`
+  --> $DIR/operator_overload.rs:21:16
+   |
+LL | impl<'history> std::ops::Shl<Amount> for &'history mut History {
+   |                ^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: if `<<` keeps its original meaning for this type, say what it means in `#[cfg_attr(dylint_lib = "trellis_lints", expect(operator_overload, reason = "..."))]` on the impl; if it is shorthand for something else, use a named method, as the Google Rust Style Guide's "Avoid overloading for non-mathematical purposes" asks
+
+warning: `AddAssign` impl overloads `+=`
+  --> $DIR/operator_overload.rs:31:6
+   |
+LL | impl AddAssign<Amount> for History {
+   |      ^^^^^^^^^^^^^^^^^
+   |
+   = help: if `+=` keeps its original meaning for this type, say what it means in `#[cfg_attr(dylint_lib = "trellis_lints", expect(operator_overload, reason = "..."))]` on the impl; if it is shorthand for something else, use a named method, as the Google Rust Style Guide's "Avoid overloading for non-mathematical purposes" asks
+
+warning: `Neg` impl overloads `unary -`
+  --> $DIR/operator_overload.rs:38:6
+   |
+LL | impl Neg for Amount {
+   |      ^^^
+   |
+   = help: if `unary -` keeps its original meaning for this type, say what it means in `#[cfg_attr(dylint_lib = "trellis_lints", expect(operator_overload, reason = "..."))]` on the impl; if it is shorthand for something else, use a named method, as the Google Rust Style Guide's "Avoid overloading for non-mathematical purposes" asks
+
+warning: `Not` impl overloads `!`
+  --> $DIR/operator_overload.rs:46:6
+   |
+LL | impl Not for Amount {
+   |      ^^^
+   |
+   = help: if `!` keeps its original meaning for this type, say what it means in `#[cfg_attr(dylint_lib = "trellis_lints", expect(operator_overload, reason = "..."))]` on the impl; if it is shorthand for something else, use a named method, as the Google Rust Style Guide's "Avoid overloading for non-mathematical purposes" asks
+
+warning: `Index` impl overloads `[]`
+  --> $DIR/operator_overload.rs:55:6
+   |
+LL | impl Index<usize> for History {
+   |      ^^^^^^^^^^^^
+   |
+   = help: if `[]` keeps its original meaning for this type, say what it means in `#[cfg_attr(dylint_lib = "trellis_lints", expect(operator_overload, reason = "..."))]` on the impl; if it is shorthand for something else, use a named method, as the Google Rust Style Guide's "Avoid overloading for non-mathematical purposes" asks
+
+warning: `IndexMut` impl overloads `[]`
+  --> $DIR/operator_overload.rs:63:6
+   |
+LL | impl IndexMut<usize> for History {
+   |      ^^^^^^^^^^^^^^^
+   |
+   = help: if `[]` keeps its original meaning for this type, say what it means in `#[cfg_attr(dylint_lib = "trellis_lints", expect(operator_overload, reason = "..."))]` on the impl; if it is shorthand for something else, use a named method, as the Google Rust Style Guide's "Avoid overloading for non-mathematical purposes" asks
+
+warning: 7 warnings emitted
+

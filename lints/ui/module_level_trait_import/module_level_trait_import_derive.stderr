@@ -1,0 +1,43 @@
+warning: trait `Named` is imported for the whole module but used only in `describe`
+  --> $DIR/module_level_trait_import_derive.rs:45:5
+   |
+LL |     use crate::facade::Named;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: move the `use` into `describe`, as the Google Rust Style Guide's "Prefer locally-scoped trait imports" asks
+   = note: `#[warn(module_level_trait_import)]` on by default
+
+warning: trait `Named` is imported for the whole module but used only in `describe`
+  --> $DIR/module_level_trait_import_derive.rs:57:5
+   |
+LL |     use crate::facade::Named;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: move the `use` into `describe`, as the Google Rust Style Guide's "Prefer locally-scoped trait imports" asks
+
+warning: trait `Named` is imported for the whole module but used only in `describe`
+  --> $DIR/module_level_trait_import_derive.rs:70:5
+   |
+LL |     use crate::facade::Named;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: move the `use` into `describe`, as the Google Rust Style Guide's "Prefer locally-scoped trait imports" asks
+
+warning: trait `Named` is imported for the whole module but used only in `describe`
+  --> $DIR/module_level_trait_import_derive.rs:91:5
+   |
+LL |     use crate::facade::Named;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: move the `use` into `describe`, as the Google Rust Style Guide's "Prefer locally-scoped trait imports" asks
+
+warning: trait `Hash` is imported for the whole module but used only in `digest`
+  --> $DIR/module_level_trait_import_derive.rs:140:5
+   |
+LL |     use std::hash::Hash;
+   |     ^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: move the `use` into `digest`, as the Google Rust Style Guide's "Prefer locally-scoped trait imports" asks
+
+warning: 5 warnings emitted
+

@@ -1,0 +1,43 @@
+warning: `str::replace` on a string literal
+  --> $DIR/str_replace_on_literal.rs:15:18
+   |
+LL |     let banner = "You won {amount}!".replace("{amount}", &amount.to_string());
+   |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: write the template as a `format!` string with named arguments, as the Google Rust Style Guide's "Prefer `format!` / `write!` for concatenation and substitution" asks
+   = note: `#[warn(str_replace_on_literal)]` on by default
+
+warning: `str::replacen` on a string literal
+  --> $DIR/str_replace_on_literal.rs:18:17
+   |
+LL |     let first = r"{x} and {x}".replacen("{x}", "1", 1);
+   |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: write the template as a `format!` string with named arguments, as the Google Rust Style Guide's "Prefer `format!` / `write!` for concatenation and substitution" asks
+
+warning: `str::replace` on a `const` string
+  --> $DIR/str_replace_on_literal.rs:25:17
+   |
+LL |     let order = TEMPLATE.replace("{n}", "3");
+   |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: write the template as a `format!` string with named arguments, as the Google Rust Style Guide's "Prefer `format!` / `write!` for concatenation and substitution" asks
+
+warning: `str::replace` on a `String` made from a literal
+  --> $DIR/str_replace_on_literal.rs:26:17
+   |
+LL |     let owned = String::from("Order {n}").replace("{n}", "4");
+   |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: write the template as a `format!` string with named arguments, as the Google Rust Style Guide's "Prefer `format!` / `write!` for concatenation and substitution" asks
+
+warning: `str::replace` on a `String` made from a literal
+  --> $DIR/str_replace_on_literal.rs:27:21
+   |
+LL |     let converted = "Order {n}".to_owned().replace("{n}", "5");
+   |                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: write the template as a `format!` string with named arguments, as the Google Rust Style Guide's "Prefer `format!` / `write!` for concatenation and substitution" asks
+
+warning: 5 warnings emitted
+

@@ -1,0 +1,19 @@
+warning: `cfg` predicate that holds on no target CI builds
+  --> $DIR/disabled_code_unix.rs:12:1
+   |
+LL | #[cfg(not(unix))]
+   | ^^^^^^^^^^^^^^^^^
+   |
+   = help: CI builds only the systems `ci_targets` in `dylint.toml` lists (`linux`, `macos`), so no check compiles what it guards: delete that code, or list the system it is for
+   = note: `#[warn(disabled_code)]` on by default
+
+warning: `cfg` predicate on `target_os = "windows"`, a target CI doesn't build
+  --> $DIR/disabled_code_unix.rs:16:1
+   |
+LL | #[cfg(target_os = "windows")]
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: CI builds one target for each system `ci_targets` in `dylint.toml` lists (`linux`, `macos`), so no check compiles code that only other targets or architectures build: name only the `target_os` of a listed system, or `unix` or `windows` when it covers one
+
+warning: 2 warnings emitted
+

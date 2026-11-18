@@ -1,0 +1,155 @@
+warning: `_ = ..` discards a `Result`
+  --> $DIR/discarded_result.rs:41:5
+   |
+LL |     _ = save();
+   |     ^^^^^^^^^^
+   |
+   = help: handle the error, or propagate it with `?`; code fails closed, so a dropped error is a bug
+   = note: `#[warn(discarded_result)]` on by default
+
+warning: `_ = ..` discards a `Result`
+  --> $DIR/discarded_result.rs:42:5
+   |
+LL |     _ = std::fs::remove_file("amount.log");
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: handle the error, or propagate it with `?`; code fails closed, so a dropped error is a bug
+
+warning: `_ = ..` discards a `Result`
+  --> $DIR/discarded_result.rs:43:5
+   |
+LL |     _ = write!(out, "{}", 1);
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: handle the error, or propagate it with `?`; code fails closed, so a dropped error is a bug
+
+warning: `_ = ..` discards a `Result`
+  --> $DIR/discarded_result.rs:45:5
+   |
+LL |     _ = loaded;
+   |     ^^^^^^^^^^
+   |
+   = help: handle the error, or propagate it with `?`; code fails closed, so a dropped error is a bug
+
+warning: `_ = ..` discards the `.is_ok()` of a `Result`
+  --> $DIR/discarded_result.rs:48:5
+   |
+LL |     _ = save().is_ok();
+   |     ^^^^^^^^^^^^^^^^^^
+   |
+   = help: handle the error, or propagate it with `?`; code fails closed, so a dropped error is a bug
+
+warning: `_ = ..` discards a value of the `#[must_use]` type `Receipt`
+  --> $DIR/discarded_result.rs:51:5
+   |
+LL |     _ = receipt();
+   |     ^^^^^^^^^^^^^
+   |
+   = help: use the value; `#[must_use]` marks a value that is a mistake to ignore
+
+warning: `_ = ..` discards the value of a `#[must_use]` function
+  --> $DIR/discarded_result.rs:52:5
+   |
+LL |     _ = total();
+   |     ^^^^^^^^^^^
+   |
+   = help: use the value; `#[must_use]` marks a value that is a mistake to ignore
+
+warning: `_ = ..` discards a value of the `#[must_use]` type `impl Future<Output = u64>`
+  --> $DIR/discarded_result.rs:53:5
+   |
+LL |     _ = fetch();
+   |     ^^^^^^^^^^^
+   |
+   = help: use the value; `#[must_use]` marks a value that is a mistake to ignore
+
+warning: `let _saved = ..` binds a `Result` and never reads it
+  --> $DIR/discarded_result.rs:56:5
+   |
+LL |     let _saved = save();
+   |     ^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: handle the error, or propagate it with `?`; code fails closed, so a dropped error is a bug
+
+warning: `let _loaded = ..` binds a `Result` and never reads it
+  --> $DIR/discarded_result.rs:57:5
+   |
+LL |     let _loaded: Result<u64, Error> = load();
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: handle the error, or propagate it with `?`; code fails closed, so a dropped error is a bug
+
+warning: `let _ok = ..` binds the `.is_ok()` of a `Result` and never reads it
+  --> $DIR/discarded_result.rs:60:5
+   |
+LL |     let _ok = save().is_ok();
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: handle the error, or propagate it with `?`; code fails closed, so a dropped error is a bug
+
+warning: `let _failed = ..` binds the `.is_err()` of a `Result` and never reads it
+  --> $DIR/discarded_result.rs:61:5
+   |
+LL |     let _failed = save().is_err();
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: handle the error, or propagate it with `?`; code fails closed, so a dropped error is a bug
+
+warning: `let _value = ..` binds the `.ok()` of a `Result` and never reads it
+  --> $DIR/discarded_result.rs:62:5
+   |
+LL |     let _value = load().ok();
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: handle the error, or propagate it with `?`; code fails closed, so a dropped error is a bug
+
+warning: `let _error = ..` binds the `.err()` of a `Result` and never reads it
+  --> $DIR/discarded_result.rs:63:5
+   |
+LL |     let _error = load().err();
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: handle the error, or propagate it with `?`; code fails closed, so a dropped error is a bug
+
+warning: an `if` with an empty body and no `else` discards a `Result`
+  --> $DIR/discarded_result.rs:67:5
+   |
+LL |     if let Ok(()) = save() {}
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: handle the error, or propagate it with `?`; code fails closed, so a dropped error is a bug
+
+warning: an `if` with an empty body and no `else` discards a `Result`
+  --> $DIR/discarded_result.rs:68:5
+   |
+LL |     if let Err(_) = save() {}
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: handle the error, or propagate it with `?`; code fails closed, so a dropped error is a bug
+
+warning: an `if` with an empty body and no `else` discards the `.is_ok()` of a `Result`
+  --> $DIR/discarded_result.rs:69:5
+   |
+LL |     if save().is_ok() {}
+   |     ^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: handle the error, or propagate it with `?`; code fails closed, so a dropped error is a bug
+
+warning: an `if` with an empty body and no `else` discards the `.ok()` of a `Result`
+  --> $DIR/discarded_result.rs:70:5
+   |
+LL |     if let Some(_) = load().ok() {}
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: handle the error, or propagate it with `?`; code fails closed, so a dropped error is a bug
+
+warning: `let _parsed = ..` binds a `Result` and never reads it
+  --> $DIR/discarded_result.rs:162:5
+   |
+LL |     let r#_parsed = "1".parse::<u8>();
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: handle the error, or propagate it with `?`; code fails closed, so a dropped error is a bug
+
+warning: 19 warnings emitted
+
