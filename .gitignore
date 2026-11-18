@@ -1,0 +1,9 @@
+/target
+/lints/target
+
+# Local agent and editor state.
+/.claude/
+.DS_Store
+/.idea/
+/.vscode/
+*.swp
