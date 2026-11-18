@@ -1,0 +1,5 @@
+/// The line `{{ project_name }}` prints, such as `{{ project_name }} 0.1.0`.
+#[must_use]
+pub fn version_line() -> String {
+    format!("{{ project_name }} {}", env!("CARGO_PKG_VERSION"))
+}

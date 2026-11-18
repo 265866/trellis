@@ -1,0 +1,377 @@
+{% raw -%}
+name: Release
+
+{% endraw -%}
+{%- if kind == 'library' -%}
+# On every push to main, release-plz either releases (when the push is a merged release PR) or
+# opens and updates the release PR. A release tags the version and creates its GitHub release
+{%- if publish_crate %}, and
+# publishes the crate to crates.io through trusted publishing, which crates.io sets up per crate
+# after the first manual `cargo publish`.
+{%- else %}.
+{%- endif %}
+{%- elif kind == 'binary' -%}
+# On every push to main, release-plz either tags a release (when the push is a merged release PR)
+# or opens and updates the release PR. A tagged release is built from its tag, attested, and only
+# then published on GitHub with its archives, checksums and attestation, so a published release has
+# them. If building or publishing fails, re-running the failed jobs picks up from the same tag.
+{%- else -%}
+# On every push to main, release-plz either tags a release (when the push is a merged release PR)
+# or opens and updates the release PR. A tagged release builds the container image from its tag,
+# pushes it by version, attests and signs it, verifies both, and only then moves the minor and
+# `latest` tags to it and publishes the GitHub release.
+{%- endif %}
+#
+# A PR that GITHUB_TOKEN opens starts no pull_request_target workflow, so the release PR needs the
+# RELEASE_PLZ_TOKEN secret (see CONTRIBUTING.md) to get its rule-change status.
+{% raw -%}
+on:
+  push:
+    branches: [main]
+
+permissions: {}
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  release:
+{%- endraw %}
+    name: {{ 'Release' if kind == 'library' else 'Tag' }}
+{%- raw %}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      pull-requests: read
+{%- endraw %}
+{%- if kind == 'library' and publish_crate %}
+      id-token: write
+{%- endif %}
+{%- if kind != 'library' %}
+{%- raw %}
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+{%- endraw %}
+{%- endif %}
+{%- raw %}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install the pinned toolchain
+        run: rustup toolchain install
+
+      # In git_only mode, which every project but a published library uses, release-plz 0.4.3 looks
+      # every crate up by name at the last release tag and stops on one added or renamed since. A
+      # crate missing there gets its own tag name for this run, so release-plz treats it as new;
+      # release-plz.toml can't name it before it exists.
+      - name: Write the release-plz config
+        id: config
+        run: |
+          config="$RUNNER_TEMP/release-plz.toml"
+          cp release-plz.toml "$config"
+          if tag=$(git describe --tags --abbrev=0 --match 'v[0-9]*' 2> /dev/null); then
+            at_tag=$(git ls-tree -r --name-only "$tag" | grep -E '(^|/)Cargo\.toml$' \
+              | while read -r manifest; do
+                  git show "$tag:$manifest" \
+                    | awk '/^\[/ { package = ($0 == "[package]") } package && /^name = "/ { print; exit }'
+                done)
+            cargo metadata --locked --no-deps --format-version 1 | jq -r '.packages[].name' \
+              | while read -r name; do
+                  if ! grep --quiet --line-regexp --fixed-strings "name = \"$name\"" <<< "$at_tag"; then
+                    if grep --quiet --line-regexp --fixed-strings "name = \"$name\"" release-plz.toml; then
+                      echo "::error::$name has an entry in release-plz.toml but isn't in $tag, so release-plz can't version it. Bump the version, update CHANGELOG.md, push the tag by hand, then re-run this workflow."
+                      exit 1
+                    fi
+                    printf '\n[[package]]\nname = "%s"\ngit_tag_name = "{{ package }}-v{{ version }}"\n' \
+                      "$name" >> "$config"
+                  fi
+                done
+          fi
+          echo "path=$config" >> "$GITHUB_OUTPUT"
+
+      - name: Release if this push merged the release PR
+        id: release-plz
+        uses: release-plz/action@66b324fd6c72d05d2a08568492ecdd62bfb8a62b # v0.5.148
+        with:
+          command: release
+          version: 0.4.3
+          config: ${{ steps.config.outputs.path }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+{%- endraw %}
+{%- if kind != 'library' %}
+
+      # Every workspace crate shares the tag, so take it from the main package. On a re-run after a
+      # failed build or publish, release-plz finds the tag already made and releases nothing, so a
+      # `v*` tag on this commit without a published release is picked up again.
+      - name: Read the tag
+        id: tag
+        env:
+          GH_TOKEN: {% raw %}${{ github.token }}{% endraw %}
+          RELEASES: {% raw %}${{ steps.release-plz.outputs.releases }}{% endraw %}
+        run: |
+          tag=$(jq -r '.[] | select(.package_name == "{{ crate_name }}") | .tag' <<< "${RELEASES:-[]}")
+          if [ -z "$tag" ] && [ "$(jq length <<< "${RELEASES:-[]}")" -gt 0 ]; then
+            echo "::error::release-plz released packages but not {{ crate_name }}: $RELEASES"
+            exit 1
+          fi
+          if [ -z "$tag" ]; then
+            tag=$(git tag --points-at HEAD --list 'v*' | head -n 1)
+            if [ -n "$tag" ] && [ "$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft 2> /dev/null)" = false ]; then
+              tag=
+            fi
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+{%- endif %}
+{%- if kind == 'binary' %}
+{%- raw %}
+
+  build:
+    name: Build
+    needs: release
+    if: needs.release.outputs.tag != ''
+    permissions:
+      contents: read
+    # actionlint 1.7.12 rejects the `$/` form that zizmor's self-repository audit suggests.
+    uses: ./.github/workflows/build-release.yml # zizmor: ignore[self-repository]
+    with:
+      ref: ${{ needs.release.outputs.tag }}
+
+  publish:
+    name: Attest and publish
+    needs: [release, build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.release.outputs.tag }}
+          sparse-checkout: CHANGELOG.md
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      # The notes are the version's section of CHANGELOG.md, which release-plz wrote.
+      - name: Read the release notes
+        env:
+          TAG: ${{ needs.release.outputs.tag }}
+        run: |
+          awk -v heading="## [${TAG#v}]" \
+            '/^## \[/ { keep = index($0, heading) == 1; next } keep' CHANGELOG.md > "$RUNNER_TEMP/notes.md"
+          if [ ! -s "$RUNNER_TEMP/notes.md" ]; then
+            echo "::error::CHANGELOG.md has no section for ${TAG#v}."
+            exit 1
+          fi
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Write the checksums
+        working-directory: dist
+        run: sha256sum -- * > SHA256SUMS
+
+      - name: Attest the archives
+        id: attest
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-checksums: dist/SHA256SUMS
+
+      # The release carries the attestation as attestation.json, so `gh attestation verify --bundle`
+      # works without signing in. gh keeps a new release a draft until its files are uploaded.
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.release.outputs.tag }}
+          BUNDLE: ${{ steps.attest.outputs.bundle-path }}
+        run: |
+          cp "$BUNDLE" dist/attestation.json
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            # A draft survives only if a run was killed mid-upload; gh deletes it on a failed one.
+            gh release upload "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --clobber
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest
+          else
+            gh release create "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --verify-tag \
+{%- endraw %}
+              --title "{{ project_name }} ${TAG#v}" --notes-file "$RUNNER_TEMP/notes.md" --latest
+          fi
+{%- endif %}
+{%- if kind == 'service' %}
+
+  image:
+    name: Build, attest and sign the image
+    needs: release
+    if: needs.release.outputs.tag != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
+      attestations: write
+    env:
+      IMAGE: ghcr.io/{{ github_owner | lower }}/{{ project_name }}
+      TAG: {% raw %}${{ needs.release.outputs.tag }}{% endraw %}
+{%- raw %}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.release.outputs.tag }}
+          persist-credentials: false
+
+      # The notes are the version's section of CHANGELOG.md, which release-plz wrote.
+      - name: Read the release notes
+        env:
+          TAG: ${{ needs.release.outputs.tag }}
+        run: |
+          awk -v heading="## [${TAG#v}]" \
+            '/^## \[/ { keep = index($0, heading) == 1; next } keep' CHANGELOG.md > "$RUNNER_TEMP/notes.md"
+          if [ ! -s "$RUNNER_TEMP/notes.md" ]; then
+            echo "::error::CHANGELOG.md has no section for ${TAG#v}."
+            exit 1
+          fi
+
+      - name: Install the pinned toolchain
+        run: rustup toolchain install
+
+      - uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2.90.5
+        with:
+          tool: just@1.59.0,cargo-about@0.9.3
+
+      - name: Write the license notices the image carries
+        run: just notices
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      # Pushed under its version only. No cache: a cache written by another workflow could change
+      # what ships.
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: Containerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ env.IMAGE }}:${{ needs.release.outputs.tag }}
+          sbom: true
+          provenance: mode=max
+          no-cache: true
+
+      - name: Attest the image
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+      - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+
+      # docs/verifying-releases.md gives users this same check.
+      - name: Sign the image and verify the signature and attestation
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cosign sign --yes "$IMAGE@$DIGEST"
+          cosign verify "$IMAGE@$DIGEST" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --certificate-identity "https://github.com/$GITHUB_REPOSITORY/.github/workflows/release.yml@refs/heads/main" \
+            > /dev/null
+          gh attestation verify "oci://$IMAGE@$DIGEST" --repo "$GITHUB_REPOSITORY" \
+            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" \
+            --source-ref refs/heads/main
+
+      # Only a signed and verified digest gets the tags people pull.
+      - name: Move the minor and latest tags
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          version=${TAG#v}
+          docker buildx imagetools create "$IMAGE@$DIGEST" \
+            --tag "$IMAGE:${version%.*}" --tag "$IMAGE:latest"
+
+      # The notes name the digest, which docs/verifying-releases.md tells users to verify and run.
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          printf "\nImage: \`%s@%s\`\n" "$IMAGE" "$DIGEST" >> "$RUNNER_TEMP/notes.md"
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag \
+{%- endraw %}
+            --title "{{ project_name }} ${TAG#v}" --notes-file "$RUNNER_TEMP/notes.md" --latest
+{%- endif %}
+{%- raw %}
+
+  release-pr:
+    name: Update the release PR
+    needs: release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      pull-requests: write
+    concurrency:
+      group: release-pr
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install the pinned toolchain
+        run: rustup toolchain install
+
+      # In git_only mode, which every project but a published library uses, release-plz 0.4.3 looks
+      # every crate up by name at the last release tag and stops on one added or renamed since. A
+      # crate missing there gets its own tag name for this run, so release-plz treats it as new;
+      # release-plz.toml can't name it before it exists.
+      - name: Write the release-plz config
+        id: config
+        run: |
+          config="$RUNNER_TEMP/release-plz.toml"
+          cp release-plz.toml "$config"
+          if tag=$(git describe --tags --abbrev=0 --match 'v[0-9]*' 2> /dev/null); then
+            at_tag=$(git ls-tree -r --name-only "$tag" | grep -E '(^|/)Cargo\.toml$' \
+              | while read -r manifest; do
+                  git show "$tag:$manifest" \
+                    | awk '/^\[/ { package = ($0 == "[package]") } package && /^name = "/ { print; exit }'
+                done)
+            cargo metadata --locked --no-deps --format-version 1 | jq -r '.packages[].name' \
+              | while read -r name; do
+                  if ! grep --quiet --line-regexp --fixed-strings "name = \"$name\"" <<< "$at_tag"; then
+                    if grep --quiet --line-regexp --fixed-strings "name = \"$name\"" release-plz.toml; then
+                      echo "::error::$name has an entry in release-plz.toml but isn't in $tag, so release-plz can't version it. Bump the version, update CHANGELOG.md, push the tag by hand, then re-run this workflow."
+                      exit 1
+                    fi
+                    printf '\n[[package]]\nname = "%s"\ngit_tag_name = "{{ package }}-v{{ version }}"\n' \
+                      "$name" >> "$config"
+                  fi
+                done
+          fi
+          echo "path=$config" >> "$GITHUB_OUTPUT"
+
+      - uses: release-plz/action@66b324fd6c72d05d2a08568492ecdd62bfb8a62b # v0.5.148
+        with:
+          command: release-pr
+          version: 0.4.3
+          config: ${{ steps.config.outputs.path }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
+{%- endraw %}

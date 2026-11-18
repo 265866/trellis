@@ -1,0 +1,13 @@
+[package]
+name = "{{ crate_name }}"
+description = {{ description | tojson }}
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+readme.workspace = true
+{% if license != 'none' %}license.workspace = true
+{% endif %}publish.workspace = true
+
+[lints]
+workspace = true

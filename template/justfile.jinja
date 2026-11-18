@@ -1,0 +1,192 @@
+{% raw -%}
+# Every check CI runs on a pull request is a recipe here, so `just ci` before pushing runs the same
+# checks. The exceptions are the pull request title, which only exists on GitHub, and the release
+# builds for each platform and the container image, which CI runs on their own runners. CI runs
+# `rule-changes` against the pull request's base, with the checker the base branch pins.
+# On Windows, recipes run in Windows PowerShell, which every Windows install has.
+
+set windows-shell := ["powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-Command"]
+
+# Only the formatter runs on this nightly: the Google Rust Style Guide asks for rustfmt options that
+# stable rustfmt lacks. Everything else builds on the stable toolchain in rust-toolchain.toml.
+nightly := "nightly-2026-10-28"
+
+# The nightly the trellis lints build on. `cargo dylint` installs it on first use; CI installs it
+# first so the toolchain download shows as its own step.
+lints_nightly := "nightly-2026-11-12"
+
+{% endraw -%}
+# The trellis commit the lints in Cargo.toml and the checker below come from. `uvx copier update`
+# moves both.
+trellis_rev := "{{ trellis_rev }}"
+{%- raw %}
+
+# rustdoc warnings fail `just docs` and the doctests.
+export RUSTDOCFLAGS := "-D warnings"
+
+# clippy reads only the root `clippy.toml`, whatever other clippy configuration a directory holds.
+export CLIPPY_CONF_DIR := justfile_directory()
+
+# Lists the recipes.
+default:
+    @just --list
+
+# Runs every check CI runs.
+{%- endraw %}
+ci: fmt-check typos actionlint zizmor shear deny links policy lint dylint test docs build-release{{ ' notices' if kind != 'library' else '' }}{{ ' package' if kind == 'library' and publish_crate else '' }} rule-changes
+{%- raw %}
+
+# Installs the pinned toolchains: stable, the nightly rustfmt, and the lints' nightly.
+install-toolchains:
+    rustup toolchain install
+    rustup toolchain install {{ nightly }} --profile minimal --component rustfmt
+    rustup toolchain install {{ lints_nightly }} --profile minimal --component rustc-dev,llvm-tools-preview
+
+# The `trellis-policy` this project runs, installed under `target/` so each project keeps the one
+# its trellis commit pins. Recipes run from this directory, so the relative path works whatever
+# the project's path holds, spaces included, in sh and PowerShell alike.
+policy_root := justfile_directory() / "target" / "trellis-policy"
+trellis_policy := "./target/trellis-policy/bin/trellis-policy"
+
+# Installs `trellis-policy` at the pinned commit. Cargo skips the build when it is already installed.
+install-policy:
+{%- endraw %}
+{%- if trellis_path %}
+    cargo install --locked --root {% raw %}"{{ policy_root }}"{% endraw %} --path {{ trellis_path }}/policy
+{%- else %}
+    cargo install --locked --root {% raw %}"{{ policy_root }}"{% endraw %} --git https://github.com/265866/trellis --rev {% raw %}{{ trellis_rev }}{% endraw %} trellis-policy
+{%- endif %}
+{%- raw %}
+
+# Formats the Rust and TOML files.
+fmt:
+    cargo +{{ nightly }} fmt --all
+    taplo fmt
+
+# Checks the Rust and TOML files are formatted.
+fmt-check:
+    cargo +{{ nightly }} fmt --all -- --check
+    taplo fmt --check
+
+# Checks spelling in code and docs.
+typos:
+    typos
+
+# Checks the GitHub workflows, and their shell scripts if shellcheck is installed.
+actionlint:
+    actionlint
+
+# Audits the GitHub workflows for security problems.
+zizmor:
+    zizmor .github
+
+# Checks every declared dependency is used.
+shear:
+    cargo shear
+
+# Checks dependencies for advisories, licenses, bans and sources.
+deny:
+    cargo deny --locked check
+
+# Checks that every relative link and anchor in the Markdown files resolves.
+links:
+    lychee --offline --include-fragments --no-progress --exclude-path target './**/*.md'
+
+# The structure rules: workspace lints, manifests, build scripts, config files, crate
+# dependencies, the release changelog and the docs index.
+#
+# Checks the structure rules.
+policy: install-policy
+    {{ trellis_policy }} check
+
+# Runs clippy on every target with warnings as errors.
+lint:
+    cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+
+# The first run builds the lint library on its nightly, so it takes a while.
+#
+# Runs the custom lints from trellis, warnings as errors.
+dylint: (_dylint "-D warnings")
+
+[private]
+_dylint $DYLINT_RUSTFLAGS:
+    cargo dylint --all --fail-on-no-libraries -- --locked --workspace --all-targets --all-features
+
+# Runs the tests, then the doctests, which nextest does not run.
+test:
+    cargo nextest run --locked --workspace --all-features --run-ignored all
+    cargo test --locked --workspace --doc --all-features -- --include-ignored
+
+# Builds the docs, private items included.
+docs:
+    cargo doc --locked --workspace --no-deps --document-private-items --all-features
+
+# Builds the release binaries.
+build-release:
+    cargo build --locked --workspace --release
+{%- endraw %}
+{%- if kind != 'library' %}
+{%- raw %}
+
+# A clarification in about.toml that no longer applies is only logged, and a clean run logs
+# nothing, so any output fails it.
+#
+# Writes the license notices every release ships to target/THIRD-PARTY-LICENSES.html.
+[unix]
+notices:
+    #!/usr/bin/env bash
+    set -uo pipefail
+    mkdir -p target
+    log=$(cargo about generate --locked --fail about.hbs -o target/THIRD-PARTY-LICENSES.html 2>&1)
+    status=$?
+    if [ -n "$log" ]; then echo "$log" >&2; fi
+    [ "$status" -eq 0 ] && [ -z "$log" ]
+
+# Writes the license notices every release ships to target/THIRD-PARTY-LICENSES.html.
+[windows]
+notices:
+    New-Item -ItemType Directory -Force target > $null; $log = cargo about generate --locked --fail about.hbs -o target/THIRD-PARTY-LICENSES.html 2>&1; $status = $LASTEXITCODE; $log | ForEach-Object { [Console]::Error.WriteLine("$_") }; if ($status -ne 0 -or $log) { exit 1 }
+{%- endraw %}
+{%- endif %}
+{%- raw %}
+
+# A pull request changes either the rules or the code, never both; see CONTRIBUTING.md. Compares
+# the working tree, staged, unstaged and untracked files included, with its merge base with
+# `base`. CI passes `--head <sha>` to judge a pull request's head commit.
+#
+# Checks that rules and code change in separate pull requests.
+rule-changes base="origin/main": install-policy
+    {{ trellis_policy }} rule-changes {{ base }}
+{%- endraw %}
+{%- if kind != 'library' %}
+
+# Runs it; put its own arguments after `--`.
+run *args:
+    cargo run --locked --package {{ crate_name }} -- {% raw %}{{ args }}{% endraw %}
+{%- endif %}
+{%- if kind == 'library' and publish_crate %}
+
+# The license files have to be inside the crate's directory, since a package holds only the files
+# under it; the README comes from `readme.workspace`.
+#
+# Checks the crate packages its README and license files.
+[unix]
+package:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    files=$(cargo package --locked --allow-dirty --list --package {{ crate_name }})
+    for file in README.md {{ {'MIT': 'LICENSE', 'MIT OR Apache-2.0': 'LICENSE-MIT LICENSE-APACHE'}[license] }}; do
+      grep --quiet --line-regexp "$file" <<< "$files" || { echo "error: the package lacks $file" >&2; exit 1; }
+    done
+
+# Checks the crate packages its README and license files.
+[windows]
+package:
+    $files = cargo package --locked --allow-dirty --list --package {{ crate_name }}; if ($LASTEXITCODE -ne 0) { exit 1 }; foreach ($file in @('README.md', {{ {'MIT': "'LICENSE'", 'MIT OR Apache-2.0': "'LICENSE-MIT', 'LICENSE-APACHE'"}[license] }})) { if ($files -notcontains $file) { Write-Error "the package lacks $file"; exit 1 } }
+{%- endif %}
+{%- if kind == 'service' %}
+
+# Builds the container image, with the license notices, as the release workflow does.
+image: notices
+    docker build --file Containerfile --tag {{ project_name }}:dev .
+{%- endif %}

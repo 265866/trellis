@@ -1,0 +1,17 @@
+# The build stage reads rust-toolchain.toml, so the image builds with the same Rust as CI. trellis's
+# Renovate moves the pinned digests, and they arrive with trellis updates. `just notices` writes
+# target/THIRD-PARTY-LICENSES.html first; `just image` and the workflows run it.
+FROM docker.io/library/rust:slim-trixie@sha256:6f14b2b4b278ec0d50aa1d69541c304ce0f95e0f6268487aa9924af1c2e9aebe AS build
+WORKDIR /src
+COPY . .
+RUN cargo build --locked --release --package {{ crate_name }}
+
+FROM gcr.io/distroless/cc-debian13:nonroot@sha256:cb87acc574abe719b6e5c547384defa2f7b1f24af9605d3f618cf852495d8be2
+LABEL org.opencontainers.image.source="https://github.com/{{ github_owner }}/{{ project_name }}" \
+      org.opencontainers.image.description="{{ description | replace('\\', '\\\\') | replace('"', '\\"') | replace('$', '\\$') }}"
+{%- if license != 'none' %} \
+      org.opencontainers.image.licenses="{{ license }}"
+{%- endif %}
+COPY --from=build /src/target/THIRD-PARTY-LICENSES.html {{ {'MIT': '/src/LICENSE ', 'MIT OR Apache-2.0': '/src/LICENSE-MIT /src/LICENSE-APACHE '}.get(license, '') }}/usr/share/doc/{{ project_name }}/
+COPY --from=build /src/target/release/{{ project_name }} /usr/local/bin/{{ project_name }}
+ENTRYPOINT ["/usr/local/bin/{{ project_name }}"]

@@ -1,0 +1,97 @@
+_min_copier_version: "9.10.0"
+_subdirectory: template
+_answers_file: .copier-answers.yml
+# The scaffold is the project's own code and history once generated, so an update leaves it alone.
+_exclude:
+  - copier.yml
+  - "~*"
+  - .git
+  - .DS_Store
+  - "{% if _copier_operation == 'update' %}crates{% endif %}"
+  - "{% if _copier_operation == 'update' %}Cargo.lock{% endif %}"
+  - "{% if _copier_operation == 'update' %}CHANGELOG.md{% endif %}"
+  - "{% if _copier_operation == 'update' %}docs/design.md{% endif %}"
+
+project_name:
+  type: str
+  help: The repository and binary name, in kebab-case, such as `my-tool`
+  validator: >-
+    {% if not (project_name | regex_search('^[a-z][a-z0-9]*(-[a-z0-9]+)*$')) %}
+    Use lowercase letters and digits, with single hyphens between words.
+    {% endif %}
+
+description:
+  type: str
+  help: >-
+    One sentence that says what it does, in plain words. It becomes the crate docs, which the
+    lints check, so put a code name such as `JsonValue` in backticks.
+  validator: >-
+    {% if not (description | regex_search('^[A-Z][^<>\\[\\]\\n]*[.!?]$')) %}
+    Start with a capital letter, end with a period, and leave out <, >, [ and ].
+    {% endif %}
+
+kind:
+  type: str
+  help: What it ships
+  choices:
+    A binary that people download: binary
+    A long-running service shipped as a container image: service
+    A library: library
+
+platforms:
+  type: str
+  help: The platforms CI tests on and releases for
+  multiselect: true
+  choices:
+    Linux: linux
+    macOS: macos
+    Windows: windows
+  default: [linux, macos, windows]
+  when: "{{ kind != 'service' }}"
+  validator: "{% if not platforms %}Pick at least one platform.{% endif %}"
+
+publish_crate:
+  type: bool
+  help: >-
+    Publish the library to crates.io. The lints allow no `cfg(feature = ...)`, so a published
+    library has no optional features.
+  default: false
+  when: "{{ kind == 'library' }}"
+
+license:
+  type: str
+  help: The license
+  choices:
+    MIT: MIT
+    MIT or Apache-2.0: MIT OR Apache-2.0
+    None (all rights reserved): none
+  default: MIT
+  validator: >-
+    {% if kind == 'library' and publish_crate and license == 'none' %}
+    crates.io needs a license for a published crate.
+    {% endif %}
+
+author:
+  type: str
+  help: The copyright holder
+  default: Colton
+
+github_owner:
+  type: str
+  help: The GitHub user or organization that owns the repository
+  default: "265866"
+
+crate_name:
+  type: str
+  default: "{{ project_name | replace('-', '_') }}"
+  when: false
+
+trellis_rev:
+  type: str
+  default: "{{ _copier_conf.vcs_ref_hash }}"
+  when: false
+
+trellis_path:
+  type: str
+  default: ""
+  when: false
