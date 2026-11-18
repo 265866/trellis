@@ -1,2 +1,70 @@
 # trellis
-A very opinionated Copier template for new Rust projects. You probably shouldn't use it.
+
+> [!WARNING]
+> This is very opinionated, and it is built for one person's projects. You should not be using
+> it. Read it, take the parts you like, and leave the rest.
+
+trellis is a [Copier](https://copier.readthedocs.io/) template for new Rust projects. A project it
+generates starts with:
+
+- **Strict lints.** All of clippy's pedantic group, about 40 more rustc and clippy lints, and the
+  custom lints in [`lints/`](lints) for the
+  [Google Rust Style Guide](https://google.github.io/styleguide/rustguide.html) rules clippy doesn't
+  check. Every exception is an `expect` with a reason.
+- **A structure checker.** [`trellis-policy`](policy) checks crate manifests, the dependencies
+  between crates, where config files live, and that every docs page is linked from the README.
+- **Rules apart from code.** A pull request changes the rules or the code, never both.
+- **CI and releases.** Checks on Linux, macOS and Windows; release-plz versions and changelogs;
+  attested release archives or a signed container image; Renovate for updates.
+- **The same docs layout.** A short README with a docs index, task pages under `docs/`,
+  `CONTRIBUTING.md`, `SECURITY.md`, and one `AGENTS.md` for coding agents.
+
+[docs/style.md](docs/style.md) lists every rule and what checks it.
+
+## Generate a project
+
+You need [uv](https://docs.astral.sh/uv/) and [rustup](https://rustup.rs/).
+
+```sh
+uvx copier copy https://github.com/265866/trellis.git my-project
+```
+
+It asks for a name, a description, what the project ships (a binary, a container service or a
+library), the platforms and a license. Then put it on GitHub, install the tools that the generated
+`CONTRIBUTING.md` lists, follow its "Set up once per repository" list, and run every check:
+
+```sh
+cd my-project
+git init && git add -A && git commit -m "chore: generate from trellis"
+gh repo create 265866/my-project --public --source . --push
+just install-toolchains
+just ci
+```
+
+`just ci` compares the working tree with `origin/main`, so it needs the pushed `main`. A binary or
+a service must be public: on a personal account, GitHub attests release artifacts only in public
+repositories, and the release workflow stops when it can't attest.
+
+## Update a project
+
+```sh
+uvx copier update --defaults
+```
+
+Copier merges the newer template into the project and keeps your changes. Conflicts show as merge
+markers. Renovate opens the same update as a pull request when trellis tags a release.
+
+## What's here
+
+| Path | Holds |
+| --- | --- |
+| [`template/`](template) | The files a generated project gets. [`copier.yml`](copier.yml) has the questions. |
+| [`lints/`](lints) | The custom lints, a [dylint](https://github.com/trailofbits/dylint) library. |
+| [`policy/`](policy) | `trellis-policy`, the structure and rule-change checker. |
+| [`docs/style.md`](docs/style.md) | The style guide the lints and the checker enforce. |
+
+[CONTRIBUTING.md](CONTRIBUTING.md) covers working on trellis itself.
+
+## License
+
+[MIT](LICENSE).
