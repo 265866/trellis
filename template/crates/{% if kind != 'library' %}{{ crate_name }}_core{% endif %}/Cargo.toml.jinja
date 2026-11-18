@@ -1,0 +1,12 @@
+[package]
+name = "{{ crate_name }}_core"
+description = "The logic behind {{ project_name }}, apart from its binary so tests can use it"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+{% if license != 'none' %}license.workspace = true
+{% endif %}publish.workspace = true
+
+[lints]
+workspace = true

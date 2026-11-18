@@ -1,0 +1,74 @@
+{%- set os_list = ['linux'] if kind == 'service' else platforms -%}
+{%- set names = {'linux': 'Linux', 'macos': 'macOS', 'windows': 'Windows'} -%}
+name: Bug report
+description: Something doesn't work as documented
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        Report a vulnerability privately, as
+        [SECURITY.md](https://github.com/{{ github_owner }}/{{ project_name }}/blob/main/SECURITY.md)
+        says, not here.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The version you ran, such as 0.1.0
+    validations:
+      required: true
+{%- if kind == 'service' %}
+  - type: dropdown
+    id: runtime
+    attributes:
+      label: Container runtime
+      options:
+        - Docker
+        - Podman
+        - Other
+    validations:
+      required: true
+{%- else %}
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+{%- for os in os_list %}
+        - {{ names[os] }}
+{%- endfor %}
+    validations:
+      required: true
+{%- endif %}
+{%- if kind == 'binary' %}
+  - type: dropdown
+    id: install
+    attributes:
+      label: Install method
+      options:
+        - Release archive
+        - cargo install from source
+    validations:
+      required: true
+{%- elif kind == 'service' %}
+  - type: input
+    id: image
+    attributes:
+      label: Image
+      description: The tag or digest you ran, such as 1.4 or sha256:...
+    validations:
+      required: true
+{%- endif %}
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead. Remove secrets first.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: The output or error message, if any. Remove secrets first.
+      render: text

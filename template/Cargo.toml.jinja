@@ -1,0 +1,119 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+# The custom lints from trellis, at the commit this project was last generated or updated from.
+[workspace.metadata.dylint]
+{% if trellis_path -%}
+libraries = [{ path = {{ (trellis_path ~ "/lints") | tojson }} }]
+{%- else -%}
+libraries = [
+    { git = "https://github.com/265866/trellis", rev = "{{ trellis_rev }}", pattern = "lints" },
+]
+{%- endif %}
+
+# Settings for `trellis-policy check`, which `just policy` runs. Changing them is a rule change.
+[workspace.metadata.policy]
+# Crates allowed a build script. A build script can emit `cargo::rustc-cfg` and hide code from the
+# lint runs, so each one listed here needs a reason.
+build_script_crates = []
+# Proc-macro crates that members may depend on directly. A proc macro writes code the custom lints
+# don't check, so each one listed here needs a reason.
+proc_macro_crates = []
+# Test-support crates: members may depend on one only as a dev-dependency.
+dev_only_crates = []
+
+# The workspace crates each member may depend on directly. A new crate, or a new edge between
+# crates, is a rule change.
+[workspace.metadata.policy.internal_dependencies]
+{% if kind == 'library' -%}
+{{ crate_name }} = []
+{%- else -%}
+{{ crate_name }}_core = []
+{{ crate_name }} = ["{{ crate_name }}_core"]
+{%- endif %}
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.100"
+repository = "https://github.com/{{ github_owner }}/{{ project_name }}"
+{% if license != 'none' -%}
+license = "{{ license }}"
+{% endif -%}
+{% if kind == 'library' -%}
+readme = "README.md"
+{% endif -%}
+publish = {{ 'true' if kind == 'library' and publish_crate else 'false' }}
+
+[workspace.dependencies]
+
+# docs/style.md explains how these lints map to the Google Rust Style Guide.
+[workspace.lints.rust]
+rust_2018_idioms = { level = "warn", priority = -1 }
+# Exceptions to the custom lints are written `#[cfg_attr(dylint_lib = "trellis_lints", expect(...))]`.
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(dylint_lib, values(any()))"] }
+let_underscore_drop = "warn"
+meta_variable_misuse = "warn"
+missing_debug_implementations = "warn"
+missing_docs = "warn"
+redundant_lifetimes = "warn"
+single_use_lifetimes = "warn"
+trivial_casts = "warn"
+trivial_numeric_casts = "warn"
+unit_bindings = "warn"
+unreachable_pub = "warn"
+unsafe_code = "deny"
+unsafe_op_in_unsafe_fn = "deny"
+unstable_features = "deny"
+unused_lifetimes = "warn"
+unused_qualifications = "warn"
+
+[workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+# The custom `enum_glob_outside_fn` lint replaces it: the Google guide allows `use Enum::*` inside
+# a function that handles the enum, which this flags too.
+enum_glob_use = "allow"
+absolute_paths = "warn"
+allow_attributes = "warn"
+allow_attributes_without_reason = "warn"
+dbg_macro = "warn"
+let_underscore_must_use = "warn"
+doc_paragraphs_missing_punctuation = "warn"
+exit = "warn"
+missing_assert_message = "warn"
+mod_module_files = "warn"
+multiple_unsafe_ops_per_block = "warn"
+print_stderr = "warn"
+print_stdout = "warn"
+rc_buffer = "warn"
+rc_mutex = "warn"
+todo = "warn"
+unused_result_ok = "warn"
+undocumented_unsafe_blocks = "warn"
+unimplemented = "warn"
+unnecessary_safety_comment = "warn"
+unnecessary_safety_doc = "warn"
+unwrap_used = "warn"
+{%- if kind == 'library' %}
+# A library's public enums and structs are `#[non_exhaustive]`, as the guide asks of APIs others
+# use; an `expect` with the reason keeps one exhaustive.
+exhaustive_enums = "warn"
+exhaustive_structs = "warn"
+{%- endif %}
+
+[workspace.lints.rustdoc]
+missing_crate_level_docs = "warn"
+unescaped_backticks = "warn"
+
+[profile.release]
+overflow-checks = true
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+
+
+# Release code with line tables, for sampling profilers: `cargo build --profile profiling`.
+[profile.profiling]
+inherits = "release"
+debug = "line-tables-only"
