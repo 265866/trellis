@@ -1,0 +1,26 @@
+# Settings for the custom lints in `lints/`, which `just dylint` runs over `policy/`. Every key is
+# required: the lints have no built-in defaults.
+[trellis_lints]
+unsafe_crates = []
+ambiguous_type_names = ["Error", "Result"]
+owned_crate_prefixes = ["trellis"]
+lowercase_doc_words = ["trellis", "e.g.", "i.e."]
+macro_crates = []
+# `core`, `alloc` and `std` are the standard library.
+trusted_macro_crates = ["alloc", "core", "std"]
+# CI builds and lints `policy/` on Linux only.
+ci_targets = ["linux"]
+
+# The lints trusted macros may set the level of over code written in the source.
+[trellis_lints.trusted_macro_lints]
+# `matches!` writes `allow(non_exhaustive_omitted_patterns)` over its scrutinee and guard. The lint
+# is unstable and off by default, and a stable build can't turn it on, so it hides nothing.
+core = ["non_exhaustive_omitted_patterns"]
+
+[trellis_lints.required_lint_levels]
+missing_docs = "warn"
+unsafe_code = "deny"
+"clippy::pedantic" = "warn"
+"clippy::unwrap_used" = "warn"
+suppression_policy = "warn"
+disabled_code = "warn"
