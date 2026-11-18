@@ -1,0 +1,72 @@
+# {{ project_name }}
+
+[![CI](https://github.com/{{ github_owner }}/{{ project_name }}/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/{{ github_owner }}/{{ project_name }}/actions/workflows/ci.yml?query=branch%3Amain)
+{%- if kind != 'library' %}
+[![Latest release](https://img.shields.io/github/v/release/{{ github_owner }}/{{ project_name }})](https://github.com/{{ github_owner }}/{{ project_name }}/releases/latest)
+{%- endif %}
+
+{{ description }}
+{% if kind == 'binary' %}
+## Install
+
+Download the archive for your platform from the
+[latest release](https://github.com/{{ github_owner }}/{{ project_name }}/releases/latest), check it
+as [Verify a release](docs/verifying-releases.md) shows, and put `{{ project_name }}` on your `PATH`.
+[Install](docs/install.md) has the details.
+{%- elif kind == 'service' %}
+## Run it
+
+```sh
+docker run --rm ghcr.io/{{ github_owner | lower }}/{{ project_name }}:latest
+```
+
+[Install](docs/install.md) has the details.
+{%- else %}
+## Use it
+
+```toml
+[dependencies]
+{%- if publish_crate %}
+{{ crate_name }} = "<version>"
+{%- else %}
+{{ crate_name }} = { git = "https://github.com/{{ github_owner }}/{{ project_name }}", tag = "<tag>" }
+{%- endif %}
+```
+{%- if publish_crate %}
+
+`cargo add {{ crate_name }}` writes the latest version.
+{%- else %}
+
+Replace `<tag>` with a release tag, such as the
+[latest](https://github.com/{{ github_owner }}/{{ project_name }}/releases/latest).
+{%- endif %}
+{%- endif %}
+
+## Documentation
+{% if kind != 'library' %}
+- [Install](docs/install.md): every way to install and update it.
+- [Verify a release](docs/verifying-releases.md): check that a download came from this repository.
+{%- endif %}
+- [Design](docs/design.md): the goals, the architecture, and the decisions behind them.
+- [Stability](docs/stability.md): what a release can change, and what to read before you upgrade.
+- [Code style](docs/style.md): which style rules a tool checks, and the review checklist for the rest.
+- [Contributing](CONTRIBUTING.md): the checks, the rules for changes, and how releases work.
+- [Security policy](SECURITY.md): how to report a vulnerability.
+- [Changelog](CHANGELOG.md): what changed in each release.
+{%- if license != 'none' or kind != 'library' %}
+
+## License
+{% if license == 'MIT' %}
+Released under the [MIT License](LICENSE).
+{%- elif license == 'MIT OR Apache-2.0' %}
+Released under either the [MIT License](LICENSE-MIT) or the [Apache License 2.0](LICENSE-APACHE), at
+your option.
+{%- endif %}
+{%- if kind == 'binary' %}
+Each release archive holds `THIRD-PARTY-LICENSES.html`, the licenses of the crates it is built
+with.
+{%- elif kind == 'service' %}
+The image holds the licenses of the crates it is built with in
+`/usr/share/doc/{{ project_name }}/THIRD-PARTY-LICENSES.html`.
+{%- endif %}
+{%- endif %}

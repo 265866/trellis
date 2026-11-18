@@ -1,0 +1,63 @@
+# Install {{ project_name }}
+{% if kind == 'binary' %}
+Each [release](https://github.com/{{ github_owner }}/{{ project_name }}/releases) has one archive per
+platform:
+{% if 'linux' in platforms %}
+- Linux on x86-64: `{{ project_name }}-<version>-x86_64-unknown-linux-gnu.tar.gz`
+{%- endif %}
+{%- if 'macos' in platforms %}
+- macOS on Apple silicon: `{{ project_name }}-<version>-aarch64-apple-darwin.tar.gz`
+{%- endif %}
+{%- if 'windows' in platforms %}
+- Windows on x86-64: `{{ project_name }}-<version>-x86_64-pc-windows-msvc.zip`
+{%- endif %}
+
+## Install a release
+
+1. Download the archive for your platform and `SHA256SUMS` from the release.
+2. Check the download as [Verify a release](verifying-releases.md) shows.
+3. Unpack the archive and move `{{ project_name }}` to a directory on your `PATH`.
+
+To update, install the new release the same way.
+
+## Build from source
+
+You need [Rust](https://rustup.rs/).
+
+```sh
+cargo install --locked --git https://github.com/{{ github_owner }}/{{ project_name }} {{ crate_name }}
+```
+{%- else %}
+The image is `ghcr.io/{{ github_owner | lower }}/{{ project_name }}`, for Linux on x86-64. Each release
+pushes three tags, such as these for 1.4.2:
+
+| Tag | Follows |
+| --- | --- |
+| `v1.4.2`, the version | That release only |
+| `1.4`, the minor version | The latest patch release of 1.4 |
+| `latest` | The latest release |
+
+## Run the image
+
+```sh
+docker run -d --name {{ project_name }} --restart unless-stopped \
+  ghcr.io/{{ github_owner | lower }}/{{ project_name }}:<minor>
+```
+
+Replace `<minor>` with the latest release's minor version, such as `1.4`, so updates within it
+arrive when you pull.
+
+Podman takes the same arguments. Check the image first as
+[Verify a release](verifying-releases.md) shows.
+
+## Update
+
+Pull the tag again and recreate the container:
+
+```sh
+docker pull ghcr.io/{{ github_owner | lower }}/{{ project_name }}:<minor>
+docker rm -f {{ project_name }}
+```
+
+Then run the image again as above. To roll back, run the previous version's tag, such as `v1.4.1`.
+{%- endif %}
