@@ -49,7 +49,7 @@ The options in `rustfmt.toml` exist only in nightly rustfmt. For rust-analyzer, 
 | `just shear` | Every declared dependency is used. |
 | `just deny` | Advisories, licenses, banned crates and sources (`deny.toml`). |
 | `just links` | Every relative link and anchor in the Markdown files. |
-| `just policy` | The structure rules: workspace lints, manifests, crate dependencies, the release changelog, and the docs layout (the files `docs_files` lists, the README's title and the sections `readme_sections` lists, the Documentation index, the links to every page, and how each page in `docs/` opens). |
+| `just policy` | The structure and docs rules that [docs/style.md](docs/style.md#checked-by-tools) lists. |
 | `just lint` | clippy on every target, warnings as errors. |
 | `just dylint` | The custom lints from trellis, warnings as errors. |
 | `just test` | The tests through nextest, then the doctests. |
@@ -68,8 +68,8 @@ To silence a lint, put an `expect` with a reason on the smallest item it applies
 - a clippy or rustc lint: `#[expect(clippy::lint_name, reason = "...")]`;
 - a custom lint: `#[cfg_attr(dylint_lib = "trellis_lints", expect(lint_name, reason = "..."))]`.
 
-Nothing else silences a lint: no `allow`, no inner `#![...]` attributes, and no reason shorter than
-20 characters. An `expect` fails once its lint stops firing, so a stale exception doesn't linger.
+Nothing else silences a lint. [docs/style.md](docs/style.md#silencing-a-lint) has the rules for
+the reason and the forms that fail.
 
 ### Tests
 
@@ -88,24 +88,15 @@ Pull requests are squash-merged, so the title becomes the commit on `main`. It m
 [conventional commit](https://www.conventionalcommits.org/), such as `feat(cli): add a --json flag`
 or `fix(config)!: reject unknown keys`. A `!` marks a breaking change.
 
-A pull request changes either the rules or the code, never both. When a new rule would flag
-existing code, either fix the code in one pull request and add the rule in the next, or add the
-rule together with an `expect` and a real reason at each place it flags. `just rule-changes` sorts
-the changed files:
-
-- **Neither:** the root `README.md`, `CHANGELOG.md`, `SECURITY.md`, `LICENSE*`, `.editorconfig` and
-  `Cargo.lock`, the `LICENSE*` files in a crate's directory, the Markdown files in `docs/` other
-  than `docs/style.md` and agent instruction files, and a `.rs` change that only adds or removes
-  `expect` attributes.
-- **Code:** every other file under `crates/` and every `.rs` file, apart from the rule files
-  below. A crate's `Cargo.toml` is code, but the part of a change that touches its
-  `[build-dependencies]` or its `build` key is a rule, so a change to both is both. A proc-macro
-  dependency is code: list the crate in `proc_macro_crates` in one pull request, then add the
-  dependency and its first use in the next.
-- **Rules:** everything else, including the root `Cargo.toml` outside `[workspace.dependencies]`
-  and `[patch]`, the tool configuration files, the `justfile`, build scripts, `.github/`,
-  `.copier-answers.yml`, this file, `docs/style.md` and `AGENTS.md`. A file the checker doesn't
-  know{{ ', such as `Containerfile`,' if kind == 'service' else '' }} is a rule too.
+A pull request changes either the rules or the code, never both. Roughly, code is what's under
+`crates/` and every `.rs` file; the README, changelog, licenses, `Cargo.lock`, the root
+`Cargo.toml` dependency tables and pages in `docs/` other than `docs/style.md` are neither; and
+anything else, build scripts included, is a rule. When a new rule would flag existing
+code, either fix the code in one pull request and add the rule in the next, or add the rule
+together with an `expect` and a real reason at each place it flags. A proc-macro dependency
+is code: list the crate in `proc_macro_crates` in one pull request, then add the dependency and
+its first use in the next. Run `just rule-changes` to see how your changes sort: it counts the
+rule and code files, and lists both when a change mixes them.
 {%- if license == 'MIT' %}
 
 ## License
