@@ -173,7 +173,8 @@ templates: (template "binary") (template "service") (template "library") shapes 
 # template's scaffold, a rule file and a docs page, and runs `copier update` to the second. The
 # rule file and docs page must move, and the owner's code and changelog must not. Then it makes the
 # project private and public again with `--vcs-ref=:current:`, which must keep v2 and the owner's
-# code.
+# code, and publishes the crate under each license, which must deliver only that license's files
+# to the crate's directory.
 #
 # Checks that `copier update` moves the rules and leaves the owner's code alone.
 update:
@@ -235,6 +236,26 @@ update:
         || fail "SECURITY.md doesn't match a $visibility repository"
       grep --quiet '^//! Mine.$' "$lib/lib.rs" || fail "making it $visibility rewrote the owner's lib.rs"
       if grep --recursive --quiet '^<<<<<<<' --exclude-dir=.git .; then fail "making it $visibility left conflict markers"; fi
+    done
+    for license in 'MIT OR Apache-2.0' MIT; do
+      git add --all
+      commit commit --quiet --allow-empty --message "chore: publish the crate under $license"
+      copier update --quiet --defaults --vcs-ref=:current: --data publish_crate=true --data "license=$license"
+      if [ "$license" = MIT ]; then
+        delivered=(LICENSE) removed=(LICENSE-MIT LICENSE-APACHE)
+      else
+        delivered=(LICENSE-MIT LICENSE-APACHE) removed=(LICENSE)
+      fi
+      for file in "${delivered[@]}"; do
+        cmp --quiet "$file" "crates/demo/$file" || fail "publishing under $license didn't deliver crates/demo/$file"
+      done
+      for file in "${removed[@]}"; do
+        [ ! -e "crates/demo/$file" ] || fail "publishing under $license left crates/demo/$file"
+      done
+      grep --quiet '^//! Mine.$' "$lib/lib.rs" || fail "publishing under $license rewrote the owner's lib.rs"
+      [ ! -e "$lib/greeting.rs" ] || fail "publishing under $license brought back greeting.rs"
+      [ ! -e "$lib/added.rs" ] || fail "publishing under $license added a scaffold file to the owner's crate"
+      if grep --recursive --quiet '^<<<<<<<' --exclude-dir=.git .; then fail "publishing under $license left conflict markers"; fi
     done
     echo "copier update moved the rules and left the owner's code alone."
 

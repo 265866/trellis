@@ -25,6 +25,27 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
+{%- endraw %}
+{%- if visibility == 'public' %}
+      # The answer is public, so the releases and SECURITY.md rely on what only a public repository
+      # has, and a private one would fail first at a release. It checks one way only, since the
+      # documented switch to public makes the repository public before the answer.
+      - name: Check the repository is public
+        env:
+          VISIBILITY: {{ '${{ github.event.repository.visibility }}' }}
+        run: |
+          if [ -z "$VISIBILITY" ]; then
+            echo "::notice::This event doesn't say the repository's visibility, so it isn't checked."
+          elif [ "$VISIBILITY" != public ]; then
+{%- if kind == 'library' and publish_crate %}
+            echo "::error::The repository is $VISIBILITY, but a crate on crates.io is public, so the project was generated for a public repository. Make the repository public; docs/maintaining.md says why it stays public."
+{%- else %}
+            echo "::error::The repository is $VISIBILITY, but the project was generated for a public one. Make it public, or keep it $VISIBILITY and run \`uvx copier update --defaults --vcs-ref=:current: --data visibility=private\` on a branch, as docs/maintaining.md says."
+{%- endif %}
+            exit 1
+          fi
+{% endif %}
+{%- raw %}
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false

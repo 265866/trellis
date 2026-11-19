@@ -13,7 +13,9 @@ agent needs on top. Its rules apply to people and agents alike. Changing it is a
 {%- if kind == 'library' %}
 | `crates/{{ crate_name }}` | The library. |
 {%- else %}
-| `crates/{{ crate_name }}` | The {{ 'service' if kind == 'service' else 'program' }}: `main.rs` starts it and wires the parts together. No logic that a test would want to call. |
+| `crates/{{ crate_name }}` | The {{ 'service' if kind == 'service' else 'program' }}: `main.rs` starts it and wires the parts together. No logic that a test would want to call.
+{%- if kind == 'service' %} `{{ project_name }} --version` prints the version line and exits 0 without starting the service, since CI's `Container image` job runs the image that way; `tests/command_line.rs` checks it.
+{%- endif %} |
 | `crates/{{ crate_name }}_core` | The logic, apart from the binary so tests can use it. |
 {%- endif %}
 
@@ -166,6 +168,12 @@ Each crate has one job. `just policy` checks every crate against these rules:
   over your code names only lints `trusted_macro_lints` lists for that crate.
 - **Releases.** List the crate in `changelog_include` in `release-plz.toml`, in the rule change
   that allows it, so its commits reach the release notes; `just policy` fails until you do.
+{%- if kind == 'library' and publish_crate %}
+- **Publishing.** Every crate is published to crates.io. A new crate needs a first manual publish
+  and a trusted publisher on crates.io before the next release. That is the owner's work, so
+  tell the user when you add a crate;
+  [docs/maintaining.md](docs/maintaining.md#add-a-crate-to-a-published-library) has the steps.
+{%- endif %}
 - **Configuration.** Tool configuration files such as `clippy.toml`, `rustfmt.toml` or
   `.cargo/config.toml` live only at the root, under their exact names.
 - **Agent instructions.** This file is the only one for coding agents: any other `AGENTS.md` or
