@@ -4,8 +4,9 @@ use crate::policy_error::PolicyError;
 use crate::violation::Violation;
 use crate::workspace::Workspace;
 use crate::{
-    agent_files, build_scripts, config_files, docs_index, internal_dependencies, lints_tables,
-    member_manifests, member_sources, proc_macros, release_changelog, workspace_shape,
+    agent_files, build_scripts, config_files, docs_index, docs_layout, internal_dependencies,
+    lints_tables, member_manifests, member_sources, proc_macros, release_changelog,
+    workspace_shape,
 };
 
 /// A structure rule of the workspace, which one check enforces.
@@ -30,8 +31,13 @@ pub enum Rule {
     /// Every member depends only on the workspace crates its entry in `internal_dependencies`
     /// lists.
     InternalDependencies,
-    /// The root `README.md` links every page directly under `docs/`.
+    /// The `Documentation` section of the root `README.md` links every page directly under
+    /// `docs/`, and a page in the directory above links each page in a subdirectory.
     DocsIndex,
+    /// The docs files `docs_files` lists exist, the root `README.md` has one title, the
+    /// sections `readme_sections` lists and an index for its `Documentation` section, and every
+    /// page in `docs/` opens with its title and a paragraph.
+    DocsLayout,
     /// The main package's entry in `release-plz.toml` takes every other member into its
     /// changelog.
     ReleaseChangelog,
@@ -39,7 +45,7 @@ pub enum Rule {
 
 impl Rule {
     /// Every rule, in the order `trellis-policy check` runs them.
-    pub const ALL: [Self; 11] = [
+    pub const ALL: [Self; 12] = [
         Self::WorkspaceShape,
         Self::LintsTables,
         Self::MemberManifests,
@@ -50,6 +56,7 @@ impl Rule {
         Self::ConfigFiles,
         Self::AgentFiles,
         Self::DocsIndex,
+        Self::DocsLayout,
         Self::ReleaseChangelog,
     ];
 
@@ -67,6 +74,7 @@ impl Rule {
             Self::AgentFiles => "agent_files",
             Self::InternalDependencies => "internal_dependencies",
             Self::DocsIndex => "docs_index",
+            Self::DocsLayout => "docs_layout",
             Self::ReleaseChangelog => "release_changelog",
         }
     }
@@ -88,6 +96,7 @@ impl Rule {
             Self::AgentFiles => agent_files::check(workspace),
             Self::InternalDependencies => Ok(internal_dependencies::check(workspace)),
             Self::DocsIndex => docs_index::check(workspace),
+            Self::DocsLayout => docs_layout::check(workspace),
             Self::ReleaseChangelog => release_changelog::check(workspace),
         }
     }

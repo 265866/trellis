@@ -22,6 +22,33 @@ build_script_crates = []
 proc_macro_crates = []
 # Test-support crates: members may depend on one only as a dev-dependency.
 dev_only_crates = []
+# The docs files that must exist. The "Docs" section of AGENTS.md says what goes where.
+docs_files = [
+    "README.md",
+    "AGENTS.md",
+    "CONTRIBUTING.md",
+    "SECURITY.md",
+    "CHANGELOG.md",
+{%- if license == 'MIT' %}
+    "LICENSE",
+{%- elif license == 'MIT OR Apache-2.0' %}
+    "LICENSE-APACHE",
+    "LICENSE-MIT",
+{%- endif %}
+    "docs/design.md",
+{%- if kind != 'library' %}
+    "docs/install.md",
+{%- endif %}
+    "docs/stability.md",
+    "docs/style.md",
+{%- if kind != 'library' %}
+    "docs/verifying-releases.md",
+{%- endif %}
+]
+# The `##` headings of README.md, exactly and in order.
+{%- set usage_section = {'binary': 'Install', 'service': 'Run it', 'library': 'Use it'}[kind] %}
+{%- set license_section = ', "License"' if license != 'none' or kind != 'library' else '' %}
+readme_sections = ["{{ usage_section }}", "Documentation"{{ license_section }}]
 
 # The workspace crates each member may depend on directly. A new crate, or a new edge between
 # crates, is a rule change.

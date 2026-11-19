@@ -2,5 +2,5 @@
 extend-exclude = [
     "Cargo.lock",
     "lints/Cargo.lock",
-    "template/{% if license == 'MIT OR Apache-2.0' %}LICENSE-APACHE{% endif %}",
+    "template/LICENSE-APACHE",
 ]

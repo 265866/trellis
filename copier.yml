@@ -1,12 +1,29 @@
 _min_copier_version: "9.10.0"
 _subdirectory: template
 _answers_file: .copier-answers.yml
-# The scaffold is the project's own code and history once generated, so an update leaves it alone.
 _exclude:
   - copier.yml
   - "~*"
   - .git
   - .DS_Store
+  # The files only some answers get. An item that renders empty excludes nothing, and a leading
+  # `/` matches only at the project's root.
+  - "{% if kind != 'binary' %}/.github/workflows/build-release.yml{% endif %}"
+  - "{% if not (kind == 'binary' and 'windows' in platforms) %}/.cargo{% endif %}"
+  - "{% if kind != 'service' %}/.dockerignore{% endif %}"
+  - "{% if kind != 'service' %}/Containerfile{% endif %}"
+  - "{% if kind == 'library' %}/about.hbs{% endif %}"
+  - "{% if kind == 'library' %}/about.toml{% endif %}"
+  - "{% if kind == 'library' %}/docs/install.md{% endif %}"
+  - "{% if kind == 'library' %}/docs/verifying-releases.md{% endif %}"
+  - "{% if license != 'MIT' %}/LICENSE{% endif %}"
+  - "{% if license != 'MIT OR Apache-2.0' %}/LICENSE-MIT{% endif %}"
+  - "{% if license != 'MIT OR Apache-2.0' %}/LICENSE-APACHE{% endif %}"
+  - "{% if not (publish_crate and license == 'MIT') %}/crates/{{ crate_name }}/LICENSE{% endif %}"
+  - "{% if not (publish_crate and license == 'MIT OR Apache-2.0') %}/crates/{{ crate_name }}/LICENSE-MIT{% endif %}"
+  - "{% if not (publish_crate and license == 'MIT OR Apache-2.0') %}/crates/{{ crate_name }}/LICENSE-APACHE{% endif %}"
+  # The scaffold is the project's own code and history once generated, so an update leaves it
+  # alone.
   - "{% if _copier_operation == 'update' %}crates{% endif %}"
   - "{% if _copier_operation == 'update' %}Cargo.lock{% endif %}"
   - "{% if _copier_operation == 'update' %}CHANGELOG.md{% endif %}"

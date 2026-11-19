@@ -8,8 +8,9 @@ use crate::policy_error::PolicyError;
 use crate::toml_file;
 
 /// The settings of the checks, from the `[workspace.metadata.policy]` table of the root
-/// `Cargo.toml`. A missing key takes the strictest setting, and a key the checks don't know is an
-/// error, so a misspelled setting can't leave a check on its default.
+/// `Cargo.toml`. A missing key takes the strictest setting: it allows nothing, or, for the keys
+/// that say what the docs layout requires, it is a violation until they are set. A key the checks
+/// don't know is an error, so a misspelled setting can't leave a check on its default.
 #[derive(Debug, Default)]
 pub(crate) struct PolicyConfig {
     /// The crates allowed a build script (`build_scripts`).
@@ -22,14 +23,22 @@ pub(crate) struct PolicyConfig {
     /// The test-support crates members may depend on only as dev-dependencies
     /// (`internal_dependencies`).
     dev_only_crates: Vec<String>,
+    /// The docs files that must exist, relative to the root, or `None` if the key is missing
+    /// (`docs_layout`).
+    docs_files: Option<Vec<String>>,
+    /// The level-2 headings of the root `README.md`, in order, or `None` if the key is missing
+    /// (`docs_layout`).
+    readme_sections: Option<Vec<String>>,
 }
 
 /// The keys of `[workspace.metadata.policy]`.
-const KEYS: [&str; 4] = [
+const KEYS: [&str; 6] = [
     "build_script_crates",
     "proc_macro_crates",
     "internal_dependencies",
     "dev_only_crates",
+    "docs_files",
+    "readme_sections",
 ];
 
 impl PolicyConfig {
@@ -50,6 +59,10 @@ impl PolicyConfig {
                     config.internal_dependencies = dependency_map(key, value)?;
                 }
                 "dev_only_crates" => config.dev_only_crates = crate_names(key, value)?,
+                "docs_files" => config.docs_files = Some(relative_paths(key, value)?),
+                "readme_sections" => {
+                    config.readme_sections = Some(strings(key, value, "headings")?);
+                }
                 _ => {
                     return Err(PolicyError::Config(format!(
                         "it has a key `{key}` the checks don't know; the keys are {}",
@@ -76,6 +89,18 @@ impl PolicyConfig {
     /// `internal_dependencies` doesn't map it.
     pub(crate) fn internal_dependencies(&self, name: &str) -> Option<&[String]> {
         self.internal_dependencies.get(name).map(Vec::as_slice)
+    }
+
+    /// The docs files that must exist, relative to the root, or `None` if `docs_files` isn't
+    /// set.
+    pub(crate) fn docs_files(&self) -> Option<&[String]> {
+        self.docs_files.as_deref()
+    }
+
+    /// The level-2 headings the root `README.md` has, in order, or `None` if `readme_sections`
+    /// isn't set.
+    pub(crate) fn readme_sections(&self) -> Option<&[String]> {
+        self.readme_sections.as_deref()
     }
 
     /// Whether `name` is a test-support crate that members may depend on only as a
@@ -125,13 +150,36 @@ impl PolicyConfig {
 
 /// The crate names in `value`, the setting `key`, which must be an array of strings.
 fn crate_names(key: &str, value: &Value) -> Result<Vec<String>, PolicyError> {
-    let not_names = || PolicyError::Config(format!("`{key}` must be an array of crate names"));
-    let array = value.as_array().ok_or_else(not_names)?;
-    let mut names = Vec::with_capacity(array.len());
+    strings(key, value, "crate names")
+}
+
+/// The strings in `value`, the setting `key`, which must be an array of `what`.
+fn strings(key: &str, value: &Value, what: &str) -> Result<Vec<String>, PolicyError> {
+    let not_strings = || PolicyError::Config(format!("`{key}` must be an array of {what}"));
+    let array = value.as_array().ok_or_else(not_strings)?;
+    let mut strings = Vec::with_capacity(array.len());
     for item in array {
-        names.push(item.as_str().ok_or_else(not_names)?.to_owned());
+        strings.push(item.as_str().ok_or_else(not_strings)?.to_owned());
     }
-    Ok(names)
+    Ok(strings)
+}
+
+/// The paths in `value`, the setting `key`, which must be an array of file paths relative to the
+/// root, with `/` separators and no `.` or `..` parts, so each names one file in the repository.
+fn relative_paths(key: &str, value: &Value) -> Result<Vec<String>, PolicyError> {
+    let paths = strings(key, value, "file paths")?;
+    for path in &paths {
+        let relative =
+            path.split('/').all(|part| !matches!(part, "" | "." | "..")) && !path.contains('\\');
+        if !relative {
+            return Err(PolicyError::Config(format!(
+                "`{key}` lists `{path}`, which isn't a file path relative to the root; write \
+                 it with `/` separators and no leading `/`, `.` or `..` parts, such as \
+                 `docs/install.md`"
+            )));
+        }
+    }
+    Ok(paths)
 }
 
 /// The map in `value`, the setting `key`, which must be a table from crate names to arrays of
@@ -284,6 +332,66 @@ mod tests {
         assert!(
             error.to_string().contains("which `dev_only_crates` lists"),
             "a dev-only crate in a list of dependencies should fail: {error}"
+        );
+    }
+
+    #[test]
+    fn docs_files_and_readme_sections_are_read_and_stay_unset_when_missing() {
+        let set = config(
+            "[workspace.metadata.policy]\ndocs_files = [\"README.md\", \"docs/design.md\"]\n\
+             readme_sections = [\"Install\", \"Documentation\"]\n",
+        )
+        .unwrap();
+        assert_eq!(
+            set.docs_files(),
+            Some(["README.md".to_owned(), "docs/design.md".to_owned()].as_slice()),
+            "the listed files should be read"
+        );
+        assert_eq!(
+            set.readme_sections(),
+            Some(["Install".to_owned(), "Documentation".to_owned()].as_slice()),
+            "the listed sections should be read in order"
+        );
+        let unset = config("[workspace.metadata.policy]\n").unwrap();
+        assert_eq!(
+            unset.docs_files(),
+            None,
+            "a missing key stays unset, so the rule can ask for it"
+        );
+        assert_eq!(
+            unset.readme_sections(),
+            None,
+            "a missing key stays unset, so the rule can ask for it"
+        );
+    }
+
+    #[test]
+    fn a_docs_file_outside_the_root_fails() {
+        for path in [
+            "/etc/passwd",
+            "../README.md",
+            "docs/../x.md",
+            "./README.md",
+            "docs\\a.md",
+        ] {
+            let error = config(&format!(
+                "[workspace.metadata.policy]\ndocs_files = [{path:?}]\n"
+            ))
+            .unwrap_err();
+            assert!(
+                error
+                    .to_string()
+                    .contains("which isn't a file path relative to the root"),
+                "{path} should fail: {error}"
+            );
+        }
+        let error =
+            config("[workspace.metadata.policy]\nreadme_sections = \"Install\"\n").unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("`readme_sections` must be an array of headings"),
+            "a string where a list belongs should fail: {error}"
         );
     }
 
