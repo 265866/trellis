@@ -169,17 +169,20 @@ lints-test:
 templates: (template "binary") (template "service") (template "library") shapes dependencies update
 
 # Copies the working tree into a scratch repository as two tagged trellis versions, generates a
-# library from the first, edits its code and changelog the way an owner would, changes the
-# template's scaffold, a rule file and a docs page, and runs `copier update` to the second. The
-# rule file and docs page must move, and the owner's code and changelog must not. Then it makes the
-# project private and public again with `--vcs-ref=:current:`, which must keep v2 and the owner's
-# code, and publishes the crate under each license, which must deliver only that license's files
-# to the crate's directory.
+# library from the first, and edits it the way an owner would: its code and changelog, and a new
+# crate and docs page with their lines in AGENTS.md, Cargo.toml, release-plz.toml and README.md.
+# Then it changes the template's scaffold, a rule file, a docs page and lines near the owner's,
+# and runs `copier update` to the second. The update must merge each file with no conflict
+# markers, keep the owner's lines, bring v2's, and pass `trellis-policy check`; the owner's code
+# and changelog must not move. Then it makes the project private and public again with
+# `--vcs-ref=:current:`, which must keep v2 and the owner's edits, and publishes the crate under
+# each license, which must deliver only that license's files to the crate's directory.
 #
-# Checks that `copier update` moves the rules and leaves the owner's code alone.
+# Checks that `copier update` moves the rules and keeps the owner's code and edits.
 update:
     #!/usr/bin/env bash
     set -euo pipefail
+    trellis="{{ justfile_directory() }}"
     out=$(mktemp -d)
     trap 'rm -rf "$out"' EXIT
     commit() { git -c user.name=trellis -c user.email=trellis@localhost "$@"; }
@@ -198,6 +201,14 @@ update:
     git init --quiet --initial-branch main
     git add --all
     commit commit --quiet --message "chore: generate from trellis"
+    fail() { echo "error: $1" >&2; exit 1; }
+    has() { grep --quiet --line-regexp --fixed-strings -- "$2" "$1"; }
+    # Replaces the line of the file $1 that is exactly $2 with $3, in which `\n` starts a new line.
+    swap() {
+      awk -v old="$2" -v new="$3" '!done && $0 == old { print new; done = 1; next } { print } END { exit !done }' \
+        "$1" > "$1.new" || fail "$1 has no line $2"
+      mv "$1.new" "$1"
+    }
     lib=crates/demo/src
     printf '//! Mine.\n\nmod parse;\n\npub use parse::parse;\n' > "$lib/lib.rs"
     printf '/// Parses.\n#[must_use]\npub fn parse() -> u8 {\n    1\n}\n' > "$lib/parse.rs"
@@ -205,18 +216,74 @@ update:
     echo "- An owner's line." >> CHANGELOG.md
     git add --all
     commit commit --quiet --message "feat: parse"
+    # The owner adds a crate and a docs page as AGENTS.md's "Layout", "Product boundaries", "Docs"
+    # and "New crates" sections say, in the trellis files that an update merges.
+    mkdir -p crates/demo_text/src
+    sed 's/^name = "demo"$/name = "demo_text"/; s/^description = .*$/description = "Text helpers."/' \
+      crates/demo/Cargo.toml > crates/demo_text/Cargo.toml
+    printf '//! Text helpers.\n' > crates/demo_text/src/lib.rs
+    printf '# Formats\n\nThe text formats demo parses, for anyone who calls it.\n' > docs/formats.md
+    cargo metadata --quiet --offline --format-version 1 > /dev/null
+    library_row='| `crates/demo` | The library. |'
+    row='| `crates/demo_text` | Text helpers for the parser. |'
+    boundaries="doesn't build past them. Don't add one without the user asking."
+    boundary='- It reads text and never writes files.'
+    design='- [Design](docs/design.md): the goals, the architecture, and the decisions behind them.'
+    index='- [Formats](docs/formats.md): the text formats it parses.'
+    swap AGENTS.md "$library_row" "$library_row\n$row"
+    swap AGENTS.md "$boundaries" "$boundaries\n\n$boundary"
+    swap Cargo.toml '    "docs/design.md",' '    "docs/design.md",\n    "docs/formats.md",'
+    swap Cargo.toml 'demo = []' 'demo = []\ndemo_text = []'
+    swap release-plz.toml 'changelog_include = []' 'changelog_include = ["demo_text"]'
+    swap README.md "$design" "$index\n$design"
+    git add --all
+    commit commit --quiet --message "feat: add demo_text and a formats page"
+    owner=(AGENTS.md "$row" AGENTS.md "$boundary" Cargo.toml '    "docs/formats.md",' Cargo.toml 'demo_text = []'
+      release-plz.toml 'changelog_include = ["demo_text"]' README.md "$index")
+    kept() {
+      for ((i = 0; i < ${#owner[@]}; i += 2)); do
+        has "${owner[i]}" "${owner[i + 1]}" || fail "$1 lost the owner's line in ${owner[i]}: ${owner[i + 1]}"
+      done
+    }
     cd "$out/trellis"
     scaffold="template/crates/{% if kind == 'library' %}{{{{ crate_name }}{% endif %}/src"
     sed -i.bak 's/Hello, /Hi, /' "$scaffold/greeting.rs" && rm "$scaffold/greeting.rs.bak"
     printf '/// New.\npub fn added() {}\n' > "$scaffold/added.rs"
     echo "# A rule a later trellis adds." >> template/rustfmt.toml
     printf '# Added\n\nA page a later trellis adds.\n' > template/docs/added.md
+    # Each change sits within Copier's three lines of patch context of an owner's edit, so the
+    # patch doesn't apply and Copier merges the file three ways. None changes the line right next
+    # to an owner's line, which git merges as a conflict.
+    rows='Add a row for each crate you add, in the rule change that allows it.'
+    asking="doesn't build past them. Add one only when the user asks."
+    edges='# crates, is a rule change. A later trellis says more here.'
+    release='# A line a later trellis adds.'
+    added='- [Added](docs/added.md): what a later trellis adds.'
+    swap template/AGENTS.md.jinja \
+      'Add a row for each crate you add, in the same pull request as the rule change that allows it.' "$rows"
+    swap template/AGENTS.md.jinja "$boundaries" "$asking"
+    swap template/Cargo.toml.jinja '    "docs/design.md",' '    "docs/added.md",\n    "docs/design.md",'
+    swap template/Cargo.toml.jinja '# crates, is a rule change.' "$edges"
+    swap template/release-plz.toml.jinja 'changelog_update = true' "$release\nchangelog_update = true"
+    swap template/README.md.jinja "$design" "$design\n$added"
     git add --all
     commit commit --quiet --message v2
     commit tag --annotate --message v2 v2
     cd "$out/demo"
     copier update --quiet --defaults --vcs-ref v2
-    fail() { echo "error: $1" >&2; exit 1; }
+    if grep --recursive --quiet '^<<<<<<<' --exclude-dir=.git .; then
+      grep --recursive --line-number '^<<<<<<<' --exclude-dir=.git . >&2
+      fail "the update left conflict markers"
+    fi
+    kept "the update"
+    trellis_lines=(AGENTS.md "$rows" AGENTS.md "$asking" Cargo.toml '    "docs/added.md",' Cargo.toml "$edges"
+      release-plz.toml "$release" README.md "$added")
+    for ((i = 0; i < ${#trellis_lines[@]}; i += 2)); do
+      has "${trellis_lines[i]}" "${trellis_lines[i + 1]}" \
+        || fail "the update didn't bring v2's line to ${trellis_lines[i]}: ${trellis_lines[i + 1]}"
+    done
+    ! has AGENTS.md "$boundaries" || fail "the update kept v1's Product boundaries sentence"
+    cargo run --locked --quiet --manifest-path "$trellis/Cargo.toml" --package trellis-policy -- check
     grep --quiet '^_commit: v2$' .copier-answers.yml || fail "the answers don't record v2"
     tail -n 1 rustfmt.toml | grep --quiet 'A rule a later trellis adds' || fail "rustfmt.toml didn't move"
     [ -f docs/added.md ] || fail "the new docs page wasn't added"
@@ -224,7 +291,6 @@ update:
     [ ! -e "$lib/greeting.rs" ] || fail "the deleted greeting.rs came back"
     [ ! -e "$lib/added.rs" ] || fail "a new scaffold file was added to the owner's crate"
     tail -n 1 CHANGELOG.md | grep --quiet "An owner's line" || fail "CHANGELOG.md was rewritten"
-    if grep --recursive --quiet '^<<<<<<<' --exclude-dir=.git .; then fail "the update left conflict markers"; fi
     for visibility in private public; do
       git add --all
       commit commit --quiet --allow-empty --message "chore: make the repository $visibility"
@@ -236,6 +302,7 @@ update:
         || fail "SECURITY.md doesn't match a $visibility repository"
       grep --quiet '^//! Mine.$' "$lib/lib.rs" || fail "making it $visibility rewrote the owner's lib.rs"
       if grep --recursive --quiet '^<<<<<<<' --exclude-dir=.git .; then fail "making it $visibility left conflict markers"; fi
+      kept "making it $visibility"
     done
     for license in 'MIT OR Apache-2.0' MIT; do
       git add --all
@@ -256,8 +323,9 @@ update:
       [ ! -e "$lib/greeting.rs" ] || fail "publishing under $license brought back greeting.rs"
       [ ! -e "$lib/added.rs" ] || fail "publishing under $license added a scaffold file to the owner's crate"
       if grep --recursive --quiet '^<<<<<<<' --exclude-dir=.git .; then fail "publishing under $license left conflict markers"; fi
+      kept "publishing under $license"
     done
-    echo "copier update moved the rules and left the owner's code alone."
+    echo "copier update moved the rules and kept the owner's code and edits."
 
 # Generates a project of one kind, `binary`, `service` or `library`, from the working tree, with
 # the lints and checker from this checkout, and runs `recipes` in it, `ci` by default. `true` as
