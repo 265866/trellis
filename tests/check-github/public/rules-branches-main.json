@@ -1,0 +1,9 @@
+[
+  {"type": "deletion"},
+  {"type": "non_fast_forward"},
+  {"type": "pull_request"},
+  {"type": "required_status_checks", "parameters": {"required_status_checks": [
+    {"context": "PR title", "integration_id": 15368},
+    {"context": "CI passed", "integration_id": 15368},
+    {"context": "Rule changes stand alone", "integration_id": 15368}]}}
+]

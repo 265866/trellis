@@ -1,6 +1,23 @@
 _min_copier_version: "9.10.0"
 _subdirectory: template
 _answers_file: .copier-answers.yml
+# Copier prints this after an interactive copy, but not under `--quiet`, so docs/maintaining.md
+# stays the full procedure.
+_message_after_copy: |
+  Next steps for {{ project_name }}, in its directory:
+
+  1. Commit it on main:
+       git init --initial-branch main
+       git add -A
+       git commit -m "chore: generate from trellis"
+  2. Install gh (https://cli.github.com/) and cargo-binstall (https://github.com/cargo-bins/cargo-binstall), then the just version the project pins:
+       cargo binstall just@1.59.0
+  3. Follow "Before the first push" in docs/maintaining.md. It creates {{ github_owner }}/{{ project_name }}
+     as {{ visibility }}, runs `just setup-github`, which on Windows runs in Git Bash, and pushes main.
+  4. Install the tools and toolchains, then run every check:
+       just install-tools
+       just install-toolchains
+       just ci
 _exclude:
   - copier.yml
   - "~*"

@@ -8,81 +8,95 @@ renewing the release token.
 ## Before the first push
 
 The release workflow runs on every push to `main`, so set the repository up before you push.
-Commit the generated project on a branch named `main` (`git init --initial-branch main`), then
-create the repository on GitHub as {{ visibility }}, as you answered, without pushing:
+Commit the generated project on a branch named `main` (`git init --initial-branch main`), then:
 
-```sh
-gh repo create {{ github_owner }}/{{ project_name }} --{{ visibility }} --source .
-```
+1. Create the repository on GitHub as {{ visibility }}, as you answered, without pushing:
+
+   ```sh
+   gh repo create {{ github_owner }}/{{ project_name }} --{{ visibility }} --source .
+   ```
 {%- if visibility == 'private' %}
 
-A private repository's Actions minutes come out of the account's included usage.
+   A private repository's Actions minutes come out of the account's included usage.
 {%- if kind != 'service' %}
-A macOS minute costs about ten times a Linux one, and a Windows minute about twice.
+   A macOS minute costs about ten times a Linux one, and a Windows minute about twice.
 {%- endif %}
-[Change an answer](#change-an-answer) says how to make it public.
+   [Change an answer](#change-an-answer) says how to make it public.
 {%- elif kind != 'library' %}
 
-Without GitHub Enterprise Cloud, GitHub attests release files only in public repositories, and the
-release workflow stops when it can't attest. [Change an answer](#change-an-answer) says how to make
-the repository private.
+   Without GitHub Enterprise Cloud, GitHub attests release files only in public repositories, and
+   the release workflow stops when it can't attest. [Change an answer](#change-an-answer) says how
+   to make the repository private.
 {%- endif %}
 
-Then:
+2. Set the repository up. The recipe needs `gh` signed in as an admin of the repository, and the
+   just version the project pins, since an older just can't read the `justfile`. On Windows, run
+   it in Git Bash:
 
-1. In Settings, General, allow squash merging only, with the pull request title as its default
-   message, so the title becomes the commit on `main`.
-2. Install the [Renovate app](https://github.com/apps/renovate) on the repository. Each week it
+   ```sh
+   cargo binstall just@1.59.0
+   just setup-github
+   ```
+
+   It allows squash merging only, with the pull request's title and description as the commit, so
+   the title becomes the commit on `main`. It creates the `release` label that release-plz puts on
+   its pull request.
+{%- if visibility == 'public' %}
+   It adds the Actions policy that allows `pull_request_target` for `rule-changes.yml`; without
+   it, a public repository doesn't run the rule-change check, and no pull request gets the "Rule
+   changes stand alone" status. It turns on private vulnerability reporting, which
+   [SECURITY.md](../SECURITY.md) points to.
+{%- endif %}
+
+   Then it protects `main` with a ruleset: no deleting or force-pushing `main`, no change without
+   a pull request, and three required checks from GitHub Actions: `PR title`, `CI passed` and the
+   "Rule changes stand alone" status. A ruleset can require checks that haven't run yet, so `main`
+   is protected from the first push. `CI passed` passes only when every other CI job passes, so
+   the required checks stay the same when CI gains or loses a job.
+{%- if kind == 'binary' %}
+   The `Release build` checks come from another workflow and run only when a pull request changes
+   what goes into a release, so they aren't required.
+{%- elif kind == 'service' %}
+   `CI passed` also needs `Container image`, which builds the image, as `just image` does, and runs
+   it with `--version`, so the service must answer `--version` and exit 0.
+{%- endif %}
+{%- if visibility == 'private' %}
+
+   Protecting `main` in a private repository needs GitHub Pro or a paid organization plan. Without
+   one, the recipe says so and sets up the rest, and nothing stops a pull request whose checks
+   fail, or one that changes rules and code together, from merging.
+{%- endif %}
+
+   Running it again sets the same values and creates nothing twice. `just setup-github --dry-run`
+   prints each `gh` call instead of running it.
+
+3. Install the [Renovate app](https://github.com/apps/renovate) on the repository. Each week it
    opens one pull request with the crate updates other than major ones, and one for each major
    update. The toolchain, tool, action and image pins arrive with trellis updates.
-3. Create the label release-plz puts on its pull request: `gh label create release`.
+
 4. Create a fine-grained token with contents and pull request write access to this repository,
    and add it as the `RELEASE_PLZ_TOKEN` secret with `gh secret set RELEASE_PLZ_TOKEN`. A pull
    request that `GITHUB_TOKEN` opens starts no `pull_request_target` workflow, so without the
    token the release pull request never gets the "Rule changes stand alone" status and can't
    merge.
-{%- if visibility == 'public' %}
-5. Allow the rule-change check to run. A public repository needs an Actions policy that allows
-   `pull_request_target` for `rule-changes.yml`. Without it, GitHub doesn't run the check, and no
-   pull request gets the "Rule changes stand alone" status:
+
+5. Check the settings. `just check-github` reports each one as ok or wrong, and fails if any is
+   wrong. It checks that the `RELEASE_PLZ_TOKEN` secret exists, but never reads its value.
+{%- if visibility == 'private' %}
+   With no ruleset, as on a plan that can't protect `main`, it reports `main`'s protection as
+   unavailable rather than wrong.
+{%- endif %}
+   On Windows, run it in Git Bash too:
 
    ```sh
-   gh api --method POST repos/{{ github_owner }}/{{ project_name }}/actions/policies --input - <<'EOF'
-   {"name": "Rule-change check", "enforcement": "active",
-    "conditions": {"workflow_path": {"include": [".github/workflows/rule-changes.yml"], "exclude": []}},
-    "rules": [{"type": "restrict_action_events",
-               "parameters": {"allowed_events": ["pull_request_target"]}}]}
-   EOF
+   just check-github
    ```
 
-6. Turn on private vulnerability reporting, which [SECURITY.md](../SECURITY.md) points to.
-{%- endif %}
+6. Push `main`:
 
-Then push `main`:
-
-```sh
-git push --set-upstream origin main
-```
-
-## After the first pull request's checks run
-
-GitHub offers only the checks it has seen, so wait until the first pull request's checks have run.
-Then protect `main` and require three checks: `PR title`, `CI passed` and the "Rule changes stand
-alone" status with GitHub Actions as its source. `CI passed` passes only when every other CI job
-passes, so the required checks stay the same when CI gains or loses a job.
-{%- if kind == 'binary' %}
-The `Release build` checks come from another workflow and run only when a pull request changes
-what goes into a release, so don't require them.
-{%- elif kind == 'service' %}
-`CI passed` also needs `Container image`, which builds the image, as `just image` does, and runs
-it with `--version`, so the service must answer `--version` and exit 0.
-{%- endif %}
-{%- if visibility == 'private' %}
-
-Protecting `main` in a private repository needs GitHub Pro or a paid organization plan. Without
-one, nothing stops a pull request whose checks fail, or one that changes rules and code together,
-from merging.
-{%- endif %}
+   ```sh
+   git push --set-upstream origin main
+   ```
 {%- if published %}
 
 ## At the first release
@@ -153,7 +167,8 @@ uvx copier update --defaults --vcs-ref=:current: --data 'platforms=[linux, macos
 ```
 {%- endif %}
 
-The change is a rule change, so it can't also change code.
+The change is a rule change, so it can't also change code. Once it merges, run
+`just check-github` on `main`, and `just setup-github` if it reports a wrong setting.
 {%- if kind != 'service' %}
 Changing the platforms needs nothing on GitHub, since `CI passed` covers whatever platforms CI
 runs.
@@ -167,10 +182,10 @@ Some answers also change what GitHub needs:
 {%- elif kind == 'service' %}
   It adds the image attestation and signature, which a private repository can't use.
 {%- endif %}
-  Make the repository public on GitHub, then do the two steps the update adds to "Before the
-  first push" in the branch's copy of this page: the Actions policy, without which a public
-  repository doesn't run the rule-change check, and private vulnerability reporting. Only then
-  open the pull request, so the check runs, and merge it before any release pull request.
+  Make the repository public on GitHub, then run `just setup-github` on the branch. It adds the
+  Actions policy, without which a public repository doesn't run the rule-change check, and turns
+  on private vulnerability reporting. Only then open the pull request, so the check runs, and
+  merge it before any release pull request.
 {%- if kind == 'service' %}
   The image's package stays private until you make it public in its package settings, as the
   updated page's "At the first release" says.
@@ -181,7 +196,7 @@ Some answers also change what GitHub needs:
 {%- else %}
 - **Visibility.** To make the repository private, first merge the change that
   `uvx copier update --defaults --vcs-ref=:current: --data visibility=private` makes, then make
-  the repository private on GitHub.
+  the repository private on GitHub and run `just check-github` on `main`.
 {%- if kind == 'service' %}
   The image's package stays public, because GitHub can't make a public package private again.
   Delete it in its package settings before the next release, which then publishes a new, private
@@ -220,6 +235,8 @@ uvx copier update --defaults
 An update never touches `crates/`, `Cargo.lock`, `CHANGELOG.md` or `docs/design.md`, which are
 yours after the project is generated. It is a rule change, so it can't also change code. Copier
 merges the new template into your edits; resolve any conflict markers it leaves before you commit.
+Once the update merges, run `just check-github` on `main`. A newer trellis can set more than the one
+you set up with, so if it reports a wrong setting, run `just setup-github`.
 
 ## Renew the release token
 

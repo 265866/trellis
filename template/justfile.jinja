@@ -3,7 +3,9 @@
 # checks. The exceptions are the pull request title, which only exists on GitHub, and the release
 # builds for each platform and the container image, which CI runs on their own runners. CI runs
 # `rule-changes` against the pull request's base, with the checker the base branch pins.
-# On Windows, recipes run in Windows PowerShell, which every Windows install has.
+# On Windows, recipes run in Windows PowerShell, which every Windows install has. The owner's
+# recipes, `setup-github` and `check-github`, need admin rights on the repository, so `just ci`
+# leaves them out.
 
 set windows-shell := ["powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-Command"]
 
@@ -203,3 +205,212 @@ package:
 image: notices
     docker build --file Containerfile --tag {{ project_name }}:dev .
 {%- endif %}
+{%- set repo = github_owner ~ '/' ~ project_name %}
+{%- set published = kind == 'library' and publish_crate %}
+
+# The owner's recipes are bash scripts, which run on Windows in Git Bash: what they check doesn't
+# fit on one PowerShell line, and only the owner runs them. They need `gh` signed in as an admin of
+# the repository. Branch protection is a repository ruleset, since a ruleset can protect `main`
+# before it exists and require checks before they have ever run.
+#
+# Sets up the GitHub repository as docs/maintaining.md says. Rerun it after an answer change.
+[group("owner")]
+[arg("dry_run", long="dry-run", value="true", help="Print each gh call instead of running it")]
+setup-github $dry_run="false":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    repo={{ repo }}
+    err=$(mktemp)
+    classic_err=$(mktemp)
+    trap 'rm -f "$err" "$classic_err"' EXIT
+    if [ "${dry_run:?}" = true ]; then
+      echo "Dry run: each gh call is printed instead of run, each lookup finds nothing, and the admin and visibility checks are skipped."
+    fi
+
+    lookup() {
+      if [ "$dry_run" = true ]; then
+        echo "gh api --paginate '$2' --jq '$3'"
+        printf -v "$1" ''
+        return
+      fi
+      local value
+      value=$(gh api --paginate "$2" --jq "$3") || return
+      printf -v "$1" '%s' "$value"
+    }
+    change() {
+      if [ "$dry_run" = true ]; then
+        if [ -n "${3:-}" ]; then
+          printf 'gh api --method %s %s --input - <<EOF\n%s\nEOF\n' "$1" "$2" "$3"
+        else
+          echo "gh api --method $1 $2"
+        fi
+      elif [ -n "${3:-}" ]; then
+        gh api --method "$1" "$2" --input - <<< "$3" > /dev/null
+      else
+        gh api --method "$1" "$2" > /dev/null
+      fi
+    }
+
+    lookup state "repos/$repo" '"\(.visibility) \(.permissions.admin)"'
+    if [ -n "$state" ]; then
+      read -r visibility admin <<< "$state"
+      if [ "$admin" != true ]; then
+        echo "error: setting up $repo needs admin rights on it" >&2
+        exit 1
+      fi
+      if [ "$visibility" != {{ visibility }} ]; then
+        echo "error: $repo is $visibility, but the project's answers say {{ visibility }}; docs/maintaining.md says which to change first" >&2
+        exit 1
+      fi
+    fi
+
+    echo "Squash merging only, with the pull request's title and description as the commit."
+    change PATCH "repos/$repo" '{"allow_squash_merge": true, "allow_merge_commit": false, "allow_rebase_merge": false,
+     "squash_merge_commit_title": "PR_TITLE", "squash_merge_commit_message": "PR_BODY"}'
+
+    echo "The release label that release-plz puts on its pull request."
+    lookup label "repos/$repo/labels?per_page=100" '.[] | select(.name | ascii_downcase == "release") | .name'
+    if [ -z "$label" ]; then
+      change POST "repos/$repo/labels" '{"name": "release", "color": "0e8a16", "description": "The release pull request"}'
+    fi
+    {%- if visibility == 'public' %}
+
+    echo "The Actions policy that lets rule-changes.yml run on pull_request_target."
+    policy='{"name": "Rule-change check", "enforcement": "active",
+     "conditions": {"workflow_path": {"include": [".github/workflows/rule-changes.yml"], "exclude": []}},
+     "rules": [{"type": "restrict_action_events", "parameters": {"allowed_events": ["pull_request_target"]}}]}'
+    lookup policy_id "repos/$repo/actions/policies?has_parents=false&per_page=100" \
+      '[.policies[] | select(.name == "Rule-change check" and .source_type == "Repository") | .id] | first // empty'
+    if [ -n "$policy_id" ]; then
+      change PUT "repos/$repo/actions/policies/$policy_id" "$policy"
+    else
+      change POST "repos/$repo/actions/policies" "$policy"
+    fi
+
+    echo "Private vulnerability reporting, which SECURITY.md points to."
+    change PUT "repos/$repo/private-vulnerability-reporting"
+    {%- endif %}
+
+    echo "A ruleset that protects main and requires PR title, CI passed and Rule changes stand alone."
+    ruleset='{"name": "main", "target": "branch", "enforcement": "active", "bypass_actors": [],
+     "conditions": {"ref_name": {"include": ["refs/heads/main"], "exclude": []}},
+     "rules": [
+      {"type": "deletion"},
+      {"type": "non_fast_forward"},
+      {"type": "pull_request", "parameters": {"required_approving_review_count": 0,
+       "dismiss_stale_reviews_on_push": false, "require_code_owner_review": false,
+       "require_last_push_approval": false, "required_review_thread_resolution": false,
+       "allowed_merge_methods": ["squash"]}},
+      {"type": "required_status_checks", "parameters": {"strict_required_status_checks_policy": false,
+       "do_not_enforce_on_create": true, "required_status_checks": [
+        {"context": "PR title", "integration_id": 15368},
+        {"context": "CI passed", "integration_id": 15368},
+        {"context": "Rule changes stand alone", "integration_id": 15368}]}}]}'
+    protect() {
+      lookup ruleset_id "repos/$repo/rulesets?includes_parents=false&per_page=100" \
+        '[.[] | select(.name == "main" and .source_type == "Repository") | .id] | first // empty' || return
+      if [ -n "$ruleset_id" ]; then
+        change PUT "repos/$repo/rulesets/$ruleset_id" "$ruleset" || return
+      else
+        change POST "repos/$repo/rulesets" "$ruleset" || return
+      fi
+      classic=''
+      lookup classic "repos/$repo/branches/main/protection/required_status_checks" '.contexts | join(", ")' 2> "$classic_err" \
+        || grep --quiet 'HTTP 404' "$classic_err" || { cat "$classic_err" >&2; return 1; }
+      if [ -n "$classic" ]; then
+        echo "Classic branch protection also requires $classic; the ruleset replaces those checks."
+        change DELETE "repos/$repo/branches/main/protection/required_status_checks" || return
+      fi
+    }
+    {%- if visibility == 'private' %}
+    if ! protect 2> "$err"; then
+      if ! grep --quiet 'Upgrade to GitHub' "$err"; then
+        cat "$err" >&2
+        exit 1
+      fi
+      echo "warning: main isn't protected. Protecting main in a private repository needs GitHub Pro or a paid organization plan." >&2
+    fi
+    {%- else %}
+    protect
+    {%- endif %}
+
+    echo
+    echo "Left to do by hand, as docs/maintaining.md says:"
+    echo "- Install the Renovate app on $repo: https://github.com/apps/renovate"
+    echo "- Create a fine-grained token with contents and pull request write access to $repo, then"
+    echo "  add it: gh secret set RELEASE_PLZ_TOKEN --repo $repo"
+    echo "- Run just check-github, then push main if it isn't pushed yet."
+    {%- if published or (kind == 'service' and visibility == 'public') %}
+    echo "- At the first release, do the steps in its section of docs/maintaining.md."
+    {%- endif %}
+
+# Read-only: it reads the settings and never a secret's value.
+#
+# Checks the GitHub repository's settings match what setup-github sets.
+[group("owner")]
+check-github:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    repo={{ repo }}
+    wrong=0
+    err=$(mktemp)
+    trap 'rm -f "$err"' EXIT
+    verdict() {
+      if [ "$2" = "$3" ]; then
+        echo "ok: $1"
+      else
+        echo "wrong: $1: \"${2:-nothing}\", expected \"$3\""
+        wrong=1
+      fi
+    }
+
+    settings=$(gh api "repos/$repo" --jq '.visibility, "squash \(.allow_squash_merge), merge commits \(.allow_merge_commit), rebase \(.allow_rebase_merge), squash commit \(.squash_merge_commit_title) and \(.squash_merge_commit_message)"')
+    { read -r visibility; read -r merging; } <<< "$settings"
+    verdict "visibility" "$visibility" {{ visibility }}
+    verdict "merge settings" "$merging" "squash true, merge commits false, rebase false, squash commit PR_TITLE and PR_BODY"
+    label=$(gh api --paginate "repos/$repo/labels?per_page=100" --jq '.[] | select(.name | ascii_downcase == "release") | "present"')
+    verdict "release label" "${label:-missing}" present
+    {%- if visibility == 'public' %}
+    policy_id=$(gh api --paginate "repos/$repo/actions/policies?has_parents=false&per_page=100" \
+      --jq '[.policies[] | select(.name == "Rule-change check" and .source_type == "Repository") | .id] | first // empty')
+    policy=missing
+    if [ -n "$policy_id" ]; then
+      policy=$(gh api "repos/$repo/actions/policies/$policy_id" --jq '"\(.enforcement), \(.conditions.workflow_path.include // [] | join(" ")) on \([.rules // [] | .[] | select(.type == "restrict_action_events") | .parameters.allowed_events[]] | join(" "))"')
+    fi
+    verdict "Actions policy for rule-changes.yml" "$policy" "active, .github/workflows/rule-changes.yml on pull_request_target"
+    reporting=$(gh api "repos/$repo/private-vulnerability-reporting" --jq 'if .enabled then "on" else "off" end')
+    verdict "private vulnerability reporting" "$reporting" on
+    {%- endif %}
+    rules_jq='([.[] | select(.type == "required_status_checks")
+        | .parameters.required_status_checks[]
+        | "\(.context) from \(if .integration_id == 15368 then "GitHub Actions" else .integration_id // "any source" end)"]
+        | unique | join(", ")) + "; " + ([.[].type | select(. == "deletion" or . == "non_fast_forward" or . == "pull_request")] | unique | join(", "))'
+    {%- if visibility == 'private' %}
+    if ! rulesets=$(gh api --paginate "repos/$repo/rulesets?per_page=100" --jq '.[].id' 2> "$err"); then
+      grep --quiet 'Upgrade to GitHub' "$err" || { cat "$err" >&2; exit 1; }
+      rulesets=''
+    fi
+    if [ -z "$rulesets" ]; then
+      echo "unavailable: main's protection: there's no ruleset, and rulesets in a private repository need GitHub Pro or a paid organization plan; on one, run just setup-github"
+    elif rules=$(gh api "repos/$repo/rules/branches/main" --jq "$rules_jq" 2> "$err"); then
+    {%- else %}
+    if rules=$(gh api "repos/$repo/rules/branches/main" --jq "$rules_jq" 2> "$err"); then
+    {%- endif %}
+      verdict "main's required checks and rules" "$rules" \
+        "CI passed from GitHub Actions, PR title from GitHub Actions, Rule changes stand alone from GitHub Actions; deletion, non_fast_forward, pull_request"
+    else
+      cat "$err" >&2
+      exit 1
+    fi
+    if ! classic=$(gh api "repos/$repo/branches/main/protection/required_status_checks" --jq '.contexts | join(", ")' 2> "$err"); then
+      if ! grep --quiet 'HTTP 404\|Upgrade to GitHub' "$err"; then
+        cat "$err" >&2
+        exit 1
+      fi
+      classic=''
+    fi
+    verdict "classic branch protection's required checks" "${classic:-none}" none
+    token=$(gh api --paginate "repos/$repo/actions/secrets?per_page=100" --jq '.secrets[] | select(.name == "RELEASE_PLZ_TOKEN") | "present"')
+    verdict "RELEASE_PLZ_TOKEN secret" "${token:-missing}" present
+    echo "Not checked: the token's access and expiry, and whether the Renovate app is installed."
+    exit "$wrong"
