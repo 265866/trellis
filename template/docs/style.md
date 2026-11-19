@@ -199,9 +199,8 @@ Some lints have no exceptions, and an `expect` naming one fails: `code_comment`,
 
 ## Checked in review
 
-No check decides these, so review does. Agents give this list, and the
-[docs review checklist](#docs-review-checklist), to the review subagent they spawn before every
-commit (see AGENTS.md).
+No check decides these, so review does: check every change against this list, and the
+[docs review checklist](#docs-review-checklist), before it's committed.
 
 - **Ownership.** Each `Rc` or `Arc` the `shared_ownership` lint makes you justify is really
   needed, and no `.clone()` stands in for a borrow.

@@ -227,7 +227,8 @@ templates: (template "binary") (template "service") (template "library") shapes 
 
 # Copies the working tree into a scratch repository as two tagged trellis versions, generates a
 # library from the first, and edits it the way an owner would: its code and changelog, and a new
-# crate and docs page with their lines in AGENTS.md, Cargo.toml, release-plz.toml and README.md.
+# crate and docs page with their lines in CONTRIBUTING.md, Cargo.toml, release-plz.toml and
+# README.md.
 # Then it changes the template's scaffold, a rule file, a docs page and lines near the owner's,
 # and runs `copier update` to the second. The update must merge each file with no conflict
 # markers, keep the owner's lines, bring v2's, and pass `trellis-policy check`; the owner's code
@@ -273,8 +274,8 @@ update:
     echo "- An owner's line." >> CHANGELOG.md
     git add --all
     commit commit --quiet --message "feat: parse"
-    # The owner adds a crate and a docs page as AGENTS.md's "Layout", "Product boundaries", "Docs"
-    # and "New crates" sections say, in the trellis files that an update merges.
+    # The owner adds a crate and a docs page as CONTRIBUTING.md's "Layout", "Product boundaries",
+    # "Docs" and "New crates" sections say, in the trellis files that an update merges.
     mkdir -p crates/demo_text/src
     sed 's/^name = "demo"$/name = "demo_text"/; s/^description = .*$/description = "Text helpers."/' \
       crates/demo/Cargo.toml > crates/demo_text/Cargo.toml
@@ -283,19 +284,19 @@ update:
     cargo metadata --quiet --offline --format-version 1 > /dev/null
     library_row='| `crates/demo` | The library. |'
     row='| `crates/demo_text` | Text helpers for the parser. |'
-    boundaries="doesn't build past them. Don't add one without the user asking."
+    boundaries='builds past them. Add one only when the owner decides it.'
     boundary='- It reads text and never writes files.'
     design='- [Design](docs/design.md): the goals, the architecture, and the decisions behind them.'
     index='- [Formats](docs/formats.md): the text formats it parses.'
-    swap AGENTS.md "$library_row" "$library_row\n$row"
-    swap AGENTS.md "$boundaries" "$boundaries\n\n$boundary"
+    swap CONTRIBUTING.md "$library_row" "$library_row\n$row"
+    swap CONTRIBUTING.md "$boundaries" "$boundaries\n\n$boundary"
     swap Cargo.toml '    "docs/design.md",' '    "docs/design.md",\n    "docs/formats.md",'
     swap Cargo.toml 'demo = []' 'demo = []\ndemo_text = []'
     swap release-plz.toml 'changelog_include = []' 'changelog_include = ["demo_text"]'
     swap README.md "$design" "$index\n$design"
     git add --all
     commit commit --quiet --message "feat: add demo_text and a formats page"
-    owner=(AGENTS.md "$row" AGENTS.md "$boundary" Cargo.toml '    "docs/formats.md",' Cargo.toml 'demo_text = []'
+    owner=(CONTRIBUTING.md "$row" CONTRIBUTING.md "$boundary" Cargo.toml '    "docs/formats.md",' Cargo.toml 'demo_text = []'
       release-plz.toml 'changelog_include = ["demo_text"]' README.md "$index")
     kept() {
       for ((i = 0; i < ${#owner[@]}; i += 2)); do
@@ -312,13 +313,13 @@ update:
     # patch doesn't apply and Copier merges the file three ways. None changes the line right next
     # to an owner's line, which git merges as a conflict.
     rows='Add a row for each crate you add, in the rule change that allows it.'
-    asking="doesn't build past them. Add one only when the user asks."
+    asking='builds past them. Only the owner adds one.'
     edges='# crates, is a rule change. A later trellis says more here.'
     release='# A line a later trellis adds.'
     added='- [Added](docs/added.md): what a later trellis adds.'
-    swap template/AGENTS.md.jinja \
+    swap template/CONTRIBUTING.md.jinja \
       'Add a row for each crate you add, in the same pull request as the rule change that allows it.' "$rows"
-    swap template/AGENTS.md.jinja "$boundaries" "$asking"
+    swap template/CONTRIBUTING.md.jinja "$boundaries" "$asking"
     swap template/Cargo.toml.jinja '    "docs/design.md",' '    "docs/added.md",\n    "docs/design.md",'
     swap template/Cargo.toml.jinja '# crates, is a rule change.' "$edges"
     swap template/release-plz.toml.jinja 'changelog_update = true' "$release\nchangelog_update = true"
@@ -333,13 +334,13 @@ update:
       fail "the update left conflict markers"
     fi
     kept "the update"
-    trellis_lines=(AGENTS.md "$rows" AGENTS.md "$asking" Cargo.toml '    "docs/added.md",' Cargo.toml "$edges"
+    trellis_lines=(CONTRIBUTING.md "$rows" CONTRIBUTING.md "$asking" Cargo.toml '    "docs/added.md",' Cargo.toml "$edges"
       release-plz.toml "$release" README.md "$added")
     for ((i = 0; i < ${#trellis_lines[@]}; i += 2)); do
       has "${trellis_lines[i]}" "${trellis_lines[i + 1]}" \
         || fail "the update didn't bring v2's line to ${trellis_lines[i]}: ${trellis_lines[i + 1]}"
     done
-    ! has AGENTS.md "$boundaries" || fail "the update kept v1's Product boundaries sentence"
+    ! has CONTRIBUTING.md "$boundaries" || fail "the update kept v1's Product boundaries sentence"
     cargo run --locked --quiet --manifest-path "$trellis/Cargo.toml" --package trellis-policy -- check
     grep --quiet '^_commit: v2$' .copier-answers.yml || fail "the answers don't record v2"
     tail -n 1 rustfmt.toml | grep --quiet 'A rule a later trellis adds' || fail "rustfmt.toml didn't move"

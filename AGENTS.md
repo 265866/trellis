@@ -35,11 +35,11 @@ inside `{% raw %}`.
 
 ## Rules from the generated projects
 
-These sections of a generated project's rules, in
-[template/AGENTS.md.jinja](template/AGENTS.md.jinja), apply here too: Comments, Code, and
-Silencing a lint. The rest describe a generated project: its `crates/`, `just policy`, release-plz
-and its docs pages. Changing rules is trellis's ordinary work, so the last paragraph of Silencing a
-lint doesn't apply; a rule change follows "Change a rule" in CONTRIBUTING.md instead.
+The Code section of a generated project's rules, in
+[template/CONTRIBUTING.md.jinja](template/CONTRIBUTING.md.jinja), applies here too, with its
+Comments and Silencing a lint. The rest describe a generated project: its `crates/`,
+`just policy`, release-plz and its docs pages. A rule change here follows "Change a rule" in
+CONTRIBUTING.md.
 
 ## Before pushing
 
