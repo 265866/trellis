@@ -7,6 +7,9 @@ use std::fs;
 use std::io::ErrorKind;
 use std::path::Path;
 
+use comrak::Arena;
+use comrak::nodes::Node;
+
 use crate::markdown::{self, Markdown};
 use crate::policy_error::PolicyError;
 use crate::repository_files;
@@ -25,14 +28,16 @@ pub(crate) const INDEX: &str = "Documentation";
 /// The byte order mark, which the checks report and then read past.
 pub(crate) const BYTE_ORDER_MARK: char = '\u{feff}';
 
-/// Checks that every page, a `.md` file at any depth under `docs/`, is linked with an inline
-/// Markdown link, `[text](path)`, optionally with a `#anchor`. A page directly under `docs/` is
-/// linked from the `## Documentation` section of the root `README.md`, with a path relative to
-/// the root; links elsewhere in the readme don't count. A page in a subdirectory, such as
-/// `docs/guides/setup.md`, is linked from a page in the directory above it, `docs/`, with a path
-/// relative to that page. A page no one links is a page readers don't find. Links in code blocks
-/// and code spans don't count, and neither do reference links, since the index holds only
-/// inline ones.
+/// Checks that every page, a `.md` file at any depth under `docs/`, is linked, optionally with a
+/// `#anchor`. A page directly under `docs/` is linked from the `## Documentation` section of the
+/// root `README.md`, with a path relative to the root; links elsewhere in the readme don't count.
+/// A page in a subdirectory, such as `docs/guides/setup.md`, is linked from a page in the
+/// directory above it, `docs/`, with a path relative to that page. A page no one links is a page
+/// readers don't find.
+///
+/// The links are the ones GitHub renders, read with the parser its Markdown uses: inline and
+/// reference links and autolinks, but not text in code, in HTML or in an HTML comment.
+/// `docs_layout` holds the index to inline links.
 ///
 /// It reads the files git tracks and the untracked ones `.gitignore` doesn't exclude.
 ///
@@ -55,7 +60,7 @@ pub fn check(workspace: &Workspace) -> Result<Vec<Violation>, PolicyError> {
     let mut page_links: BTreeMap<&str, BTreeSet<String>> = BTreeMap::new();
     for page in &pages {
         let text = read_page(workspace.root(), page)?;
-        let links = linked_targets(&Markdown::new(&text), directory(page));
+        let links = page_targets(&text, directory(page));
         page_links.insert(page, links);
     }
     let mut violations = Vec::new();
@@ -164,44 +169,35 @@ fn page_title(page: &str) -> &str {
 /// The targets the `## Documentation` section of `readme` links, relative to the root, or
 /// `None` if it has no such section.
 fn index_targets(readme: &str) -> Option<BTreeSet<String>> {
-    let readme = readme.trim_start_matches(BYTE_ORDER_MARK);
-    Markdown::new(readme)
-        .section(INDEX)
-        .map(|section| linked_targets(&section, ""))
+    let arena = Arena::new();
+    let markdown = Markdown::parse(&arena, readme.trim_start_matches(BYTE_ORDER_MARK));
+    let section = markdown.section(INDEX)?;
+    let mut targets = BTreeSet::new();
+    for block in section {
+        targets.extend(resolved_links(block, ""));
+    }
+    Some(targets)
 }
 
-/// The files the inline links in `markdown`, a file in `directory`, point to, relative to the
-/// root and without a `#anchor`. Links in code don't count, and neither does a link that leaves
-/// the repository or names a URL.
-fn linked_targets(markdown: &Markdown<'_>, directory: &str) -> BTreeSet<String> {
+/// The files the links in `page`, a file in `directory`, point to, relative to the root.
+fn page_targets(page: &str, directory: &str) -> BTreeSet<String> {
+    let arena = Arena::new();
+    let markdown = Markdown::parse(&arena, page.trim_start_matches(BYTE_ORDER_MARK));
     let mut targets = BTreeSet::new();
-    for line in markdown.prose() {
-        let prose = markdown::without_code_spans(line);
-        let mut rest = prose.as_str();
-        while let Some(start) = rest.find("](") {
-            rest = &rest[start + 2..];
-            if let Some(target) = inline_target(rest).and_then(|target| resolve(directory, target))
-            {
-                targets.insert(target);
-            }
-        }
+    for block in markdown.blocks() {
+        targets.extend(resolved_links(block, directory));
     }
     targets
 }
 
-/// The link target at the start of `rest`, the text after a link's `](`: up to the first space
-/// or `)`, or between `<` and `>`.
-fn inline_target(rest: &str) -> Option<&str> {
-    let rest = rest.trim_start();
-    let target = if let Some(bracketed) = rest.strip_prefix('<') {
-        bracketed.split_once('>')?.0
-    } else {
-        let end = rest
-            .find(|character: char| character == ')' || character.is_whitespace())
-            .unwrap_or(rest.len());
-        &rest[..end]
-    };
-    (!target.is_empty()).then_some(target)
+/// The files the links in `node`, in a file in `directory`, point to, relative to the root and
+/// without a `#anchor`. A link that names a URL or leaves the repository points to no file.
+fn resolved_links(node: Node<'_>, directory: &str) -> Vec<String> {
+    let mut targets = Vec::new();
+    for url in markdown::link_urls(node) {
+        targets.extend(resolve(directory, &url));
+    }
+    targets
 }
 
 /// The file `target`, a link in a file in `directory`, points to, relative to the root and
@@ -233,21 +229,34 @@ mod tests {
     use super::*;
 
     fn links(text: &str, directory: &str) -> Vec<String> {
-        linked_targets(&Markdown::new(text), directory)
-            .into_iter()
-            .collect()
+        page_targets(text, directory).into_iter().collect()
     }
 
     #[test]
-    fn inline_links_are_found_and_reference_links_are_not() {
+    fn inline_and_reference_links_and_autolinks_are_found() {
         let text = "# Project\n\nSee [install](docs/install.md) and \
                     [usage](./docs/usage.md#flags \"Usage\").\n\
                     Read [the design][design] and [<faq>](<docs/faq.md>).\n\n\
                     [design]: docs/design.md\n";
         assert_eq!(
             links(text, ""),
-            ["docs/faq.md", "docs/install.md", "docs/usage.md"],
-            "every inline link names its target, without `./` or the anchor"
+            [
+                "docs/design.md",
+                "docs/faq.md",
+                "docs/install.md",
+                "docs/usage.md"
+            ],
+            "every link GitHub renders names its target, without `./` or the anchor"
+        );
+    }
+
+    #[test]
+    fn links_in_html_and_escaped_or_broken_links_dont_count() {
+        let text = "<!-- [a](docs/a.md) -->\n\n<!--\n\n[b](docs/b.md)\n\n-->\n\n\
+                    Text <!-- [c](docs/c.md) --> and [d\\](docs/d.md) and [e](docs/e.md.\n";
+        assert!(
+            links(text, "").is_empty(),
+            "links in comments, an escaped bracket and an unclosed link don't count"
         );
     }
 

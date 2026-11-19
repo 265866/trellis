@@ -558,9 +558,10 @@ fn a_setext_heading_in_the_readme_fails() {
     run.assert_reports(
         1,
         "[docs_layout] README.md: Line 6 underlines the line above it, which makes that line a \
-         heading the section check doesn't read.",
+         heading. Write every heading as a `#` line",
     );
-    run.assert_reports(1, "1 structure rule violation(s)");
+    run.assert_reports(1, "The readme's `##` sections are `Usage`, `Install`");
+    run.assert_reports(1, "2 structure rule violation(s)");
 }
 
 #[test]
@@ -589,7 +590,7 @@ fn an_index_entry_that_isnt_a_link_and_a_description_fails() {
     run.assert_reports(
         1,
         "[docs_layout] README.md: The `## Documentation` section holds `More pages are coming.`, \
-         but it holds only its index",
+         but it may hold only its index",
     );
     run.assert_reports(1, "3 structure rule violation(s)");
 }
@@ -871,49 +872,206 @@ fn assert_readme_fails(project: &Project, readme: &str, text: &str) {
     );
 }
 
+/// README snippets that GitHub renders as a heading, or that hide a section, each placed at the
+/// end of the `Install` section. Each must fail `docs_layout`.
+const README_REGRESSIONS: [(&str, &str); 29] = [
+    ("setext in a list item", "- Extra\n  ---"),
+    ("level-1 setext in a list item", "- Extra\n  ==="),
+    ("setext in a quote", "> Extra\n> ---"),
+    ("list in a list", "- - ## Extra"),
+    ("list in a quote", "> - ## Extra"),
+    ("quote in a list", "- > ## Extra"),
+    ("nested item on the next line", "- item\n  - ## Extra"),
+    ("second ordered item", "1. first\n2. ## Extra"),
+    ("quote, a space and a tab", "> \t## Extra"),
+    ("tab after a list marker", "-\ta\n\n    ## Extra"),
+    (
+        "tab after a list marker, HTML",
+        "-\ta\n\n    <h2>Extra</h2>",
+    ),
+    ("URL autolink", "<https://example.com/demo>\n## Extra"),
+    ("email autolink", "<me@example.com>\n## Extra"),
+    ("text that isn't a tag", "<x =>\n## Extra"),
+    ("empty processing instruction", "<?>\n## Extra"),
+    (
+        "definition-like setext",
+        "[Extra section]: more text here\n---",
+    ),
+    ("table-like setext", "Extra | section\n-|-|-\n---"),
+    ("level-1 table-like setext", "Extra | section\n-|-|-\n==="),
+    (
+        "definition-like line, then HTML",
+        "[x]: y z\n    <h2>Extra</h2>",
+    ),
+    ("escaped code span", "\\`<h2>Extra</h2>\\`"),
+    (
+        "code span from the line before",
+        "Run `a\nx` <h2>Extra</h2> `y`",
+    ),
+    ("backticks in a div", "<div>`<h2>Extra</h2>`</div>"),
+    ("a lone carriage return", "Some text.\r## Extra"),
+    ("declaration", "<!a\n## Extra"),
+    ("search tag", "<search>x\n## Extra"),
+    ("search tag in a quote", "> <search>x\n> ## Extra"),
+    (
+        "referenced footnote body",
+        "See this.[^1]\n\n[^1]: note\n\n    ## Extra",
+    ),
+    ("no-break space", "\u{a0}\n---"),
+    ("empty item, then a heading", "-\n\n  ## Extra"),
+];
+
+/// README snippets that GitHub renders without an extra heading, each placed at the end of the
+/// `Install` section. Each must pass.
+const README_FALSE_POSITIVES: [(&str, &str); 12] = [
+    ("comment over paragraphs", "<!--\n\n## Old section\n\n-->"),
+    ("pre block", "<pre>\n\n# a comment\n</pre>"),
+    ("source tag", "<source>x\n## Hidden"),
+    ("unreferenced footnote", "[^1]: note\n\n    ## Unrendered"),
+    ("fenced comments", "```sh\n# install it\njust install\n```"),
+    (
+        "ordered steps with code",
+        "1. Install it:\n\n   ```sh\n   just install\n   ```\n\n2. Run it.",
+    ),
+    ("alert", "> [!NOTE]\n> Read this first."),
+    (
+        "table",
+        "| Tool | Use |\n| --- | --- |\n| just | Runs the checks. |",
+    ),
+    (
+        "details",
+        "<details>\n<summary>More</summary>\n\nText.\n\n</details>",
+    ),
+    ("nested bullets", "- a\n  - b\n- c"),
+    ("level-3 heading", "### Linux\n\nRun it."),
+    (
+        "badges in a section",
+        "[![CI](https://example.com/ci.svg)](https://example.com/ci)",
+    ),
+];
+
 #[test]
-fn a_section_hidden_by_a_line_that_isnt_a_fence_fails() {
+fn readme_shapes_github_renders_as_headings_fail() {
     let project = Project::new();
-    let mismatch = "The readme's `##` sections are `Install`, `Extra section`, `Documentation`";
-    for hidden in [
-        "```just ci``` runs the checks.\n\n## Extra section\n",
-        "Run it:\n\n    ```\n\n## Extra section\n",
-        "````md\n```\n````\n\n## Extra section\n",
-        "~~~\n~~\n~~~\n\n## Extra section\n",
-    ] {
-        assert_readme_fails(&project, &readme_with_install(hidden), mismatch);
+    for (name, snippet) in README_REGRESSIONS {
+        project.write("README.md", &readme_with_install(snippet));
+        let run = project.check();
+        assert!(
+            run.code == Some(1) && run.stdout.contains("[docs_layout] README.md: "),
+            "{name}: {snippet:?} should fail docs_layout: {run:#?}"
+        );
     }
+    project.write("README.md", &readme_with_install("-\n\n  ## Extra"));
+    project.check().assert_reports(
+        1,
+        "The readme's `##` sections are `Install`, `Extra`, `Documentation`",
+    );
     project.write(
         "README.md",
-        &readme_with_install("````md\n```\n## Not a section\n```\n````\n\n    ## Code\n"),
+        &README.replace("## Install\n", "<!--\n\n## Install\n\n-->\n"),
     );
-    project
-        .check()
-        .assert_reports(0, "All 12 structure rules hold");
+    project.check().assert_reports(
+        1,
+        "The readme's `##` sections are `Documentation`, but `readme_sections`",
+    );
 }
 
 #[test]
-fn a_setext_heading_after_another_block_fails() {
+fn readme_shapes_github_renders_without_a_heading_pass() {
     let project = Project::new();
-    for hidden in [
-        "***\nExtra section\n-----\n",
-        "Run it:\n\n    just run\nExtra section\n-----\n",
-        "Extra\n2. section\n---\n",
-        "Extra\nsection\n=====\n",
-    ] {
-        assert_readme_fails(
-            &project,
-            &readme_with_install(hidden),
-            "underlines the line above it",
+    for (name, snippet) in README_FALSE_POSITIVES {
+        project.write("README.md", &readme_with_install(snippet));
+        let run = project.check();
+        assert!(
+            run.code == Some(0),
+            "{name}: {snippet:?} should pass: {run:#?}"
         );
     }
+    for (name, readme) in [
+        (
+            "reference badges before the title",
+            format!(
+                "[![CI][ci-badge]][ci]\n\n{README}\n[ci]: https://example.com/ci\n\
+                     [ci-badge]: https://example.com/ci.svg\n"
+            ),
+        ),
+        (
+            "badges after the title",
+            README.replacen(
+                "# Demo\n",
+                "# Demo\n\n[![CI](https://example.com/ci.svg)](https://example.com/ci)\n",
+                1,
+            ),
+        ),
+        ("CRLF line breaks", README.replace('\n', "\r\n")),
+        (
+            "a tight ordered index",
+            README.replace(
+                "- [Install](docs/install.md#linux): install the demo.\n",
+                "1. [Install](docs/install.md#linux): install the demo.\n\
+                 2. [Agents](AGENTS.md): what agents follow.\n",
+            ),
+        ),
+    ] {
+        project.write("README.md", &readme);
+        let run = project.check();
+        assert!(run.code == Some(0), "{name} should pass: {run:#?}");
+    }
+}
+
+#[test]
+fn a_link_that_github_doesnt_render_doesnt_index_a_page() {
+    let project = Project::new();
+    for entry in [
+        "- [Install\\](docs/install.md): install the demo.\n",
+        "- [Install](docs/install.md: install the demo.\n",
+        "- <!-- [Install](docs/install.md) --> install the demo.\n",
+    ] {
+        project.write(
+            "README.md",
+            &README.replace(
+                "- [Install](docs/install.md#linux): install the demo.\n",
+                entry,
+            ),
+        );
+        project.check().assert_reports(
+            1,
+            "[docs_index] README.md: the `## Documentation` section of `README.md` doesn't \
+             link the page `docs/install.md`",
+        );
+    }
+}
+
+#[test]
+fn pages_github_renders_as_described_pass() {
+    let project = Project::new();
     project.write(
-        "README.md",
-        &readme_with_install("Steps:\n- run it\n---\n\nText.\n\n---\n"),
+        "docs/install.md",
+        "# Install\n\n<https://example.com/demo> has the releases. [Set it up][setup] first.\n\n\
+         ## Steps\n\n1. Download it.\n\n   ```sh\n   # the archive\n\
+         \x20  tar -xf demo.tar.gz\n   ```\n\n\
+         2. Run it.\n\n| Flag | Does |\n| --- | --- |\n| `-v` | Prints more. |\n\n\
+         > [!TIP]\n> Read the guide.\n\n[setup]: guides/setup.md\n",
+    );
+    project.write(
+        "docs/guides/setup.md",
+        "# Setup\r\n\r\nFor people who set up the demo. Go [deeper](deep/more.md).\r\n",
+    );
+    project.write(
+        "docs/guides/deep/more.md",
+        "# More\n\nFor people who want more.\n",
     );
     project
         .check()
         .assert_reports(0, "All 12 structure rules hold");
+    project.write(
+        "docs/guides/setup.md",
+        "# Setup\n\nFor people who set up the demo.\n<!-- [deeper](deep/more.md) -->\n",
+    );
+    project.check().assert_reports(
+        1,
+        "[docs_index] docs/guides/deep/more.md: No page in `docs/guides/` links this page",
+    );
 }
 
 #[test]
@@ -926,7 +1084,7 @@ fn the_readme_has_one_title_first() {
         ),
         (
             README.replacen("# Demo\n", "Demo\n", 1),
-            "has 0 `#` headings",
+            "has no `#` heading. It needs exactly one",
         ),
         (format!("Intro.\n\n{README}"), "Its `#` title comes after"),
     ] {
@@ -935,30 +1093,6 @@ fn the_readme_has_one_title_first() {
     project.write(
         "README.md",
         &format!("[![CI](https://example.com/ci.svg)](https://example.com/ci)\n\n{README}"),
-    );
-    project
-        .check()
-        .assert_reports(0, "All 12 structure rules hold");
-}
-
-#[test]
-fn a_heading_in_a_quote_a_list_or_html_fails() {
-    let project = Project::new();
-    for (hidden, text) in [
-        ("> ## Extra\n", "inside a block quote or list item"),
-        ("- ## Extra\n", "inside a block quote or list item"),
-        (
-            "- Item\n\n  ## Extra\n",
-            "inside a block quote or list item",
-        ),
-        ("<h2>Extra</h2>\n", "an HTML heading tag"),
-        ("Text <H1 class=\"x\">Extra</H1>.\n", "an HTML heading tag"),
-    ] {
-        assert_readme_fails(&project, &readme_with_install(hidden), text);
-    }
-    project.write(
-        "README.md",
-        &readme_with_install("Write `<h2>` as `## Title`.\n\n```html\n<h2>x</h2>\n```\n"),
     );
     project
         .check()
@@ -1097,7 +1231,8 @@ fn a_link_in_an_html_comment_doesnt_count() {
     );
     project.write(
         "docs/install.md",
-        "# Install\n\nFor people who run the demo.\n\n<!--\n[Set it up](guides/setup.md).\n-->\n",
+        "# Install\n\nFor people who run the demo.\n\n<!--\n\n[Set it up](guides/setup.md).\n\n\
+         -->\n",
     );
     project.check().assert_reports(
         1,

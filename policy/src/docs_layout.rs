@@ -4,8 +4,11 @@
 
 use std::path::Path;
 
+use comrak::Arena;
+use comrak::nodes::{Node, NodeValue};
+
 use crate::docs_index::{self, BYTE_ORDER_MARK, INDEX, README};
-use crate::markdown::{self, Block, Heading, Line, Markdown};
+use crate::markdown::{self, Heading, Markdown};
 use crate::policy_error::PolicyError;
 use crate::repository_files;
 use crate::violation::Violation;
@@ -20,29 +23,34 @@ const ENTRY_FORM: &str = "`- [Title](path): what the reader does with it.`";
 /// The extensions, besides `.md`, that GitHub renders as Markdown, which a page may not use.
 const OTHER_MARKDOWN_EXTENSIONS: [&str; 6] = ["markdown", "mdown", "mdwn", "mkd", "mkdn", "mkdown"];
 
-/// What a file that starts with a byte order mark is told.
-const BYTE_ORDER_MARK_MESSAGE: &str = "It starts with a byte order mark. Save it as UTF-8 without \
-                                       one; the other checks read it as if the mark weren't there.";
+/// Where the readme's title goes, which the title messages end with.
+const TITLE_PLACE: &str = "its title, on its first line or after only badges and blank lines";
+
+/// What a page that doesn't open with a paragraph is told.
+const NO_PARAGRAPH: &str = "Its title isn't followed by a paragraph: the blank line after it is \
+                            followed by nothing, another blank line, or a block other than a \
+                            paragraph with words in it, such as a heading, list, table, quote, \
+                            code block, HTML, image or link reference definition";
 
 /// Checks the layout of the docs, as `docs_files` and `readme_sections` in
-/// `[workspace.metadata.policy]` set it:
+/// `[workspace.metadata.policy]` set it. It reads Markdown with the parser GitHub's dialect
+/// uses, so a heading is what GitHub renders as one, wherever it is:
 ///
 /// - every file `docs_files` lists exists;
-/// - the root `README.md` has exactly one `#` heading, its title, on its first line or after
-///   only badges and blank lines;
-/// - its level-2 headings, outside code, list items and block quotes, are exactly the ones
-///   `readme_sections` lists, in order, and it has no heading the comparison would miss: no
-///   setext heading, a paragraph underlined with `=` or `-`, no `#` heading in a list item or
-///   block quote, and no HTML heading tag such as `<h2>`;
-/// - its `## Documentation` section holds only list items of one line each, and each is a
-///   relative Markdown link, `: ` and a description with a word in it that ends in `.`;
-/// - every page, a `.md` file at any depth under `docs/`, starts with a level-1 heading, a blank
-///   line and a paragraph with a word in it, not a heading, list, table, quote, code block,
-///   HTML, image or link reference definition;
+/// - the root `README.md` has exactly one level-1 heading, its title, written as a `#` line at
+///   the top level, with only badges and blank lines before it;
+/// - its level-2 headings, at any depth, are exactly the ones `readme_sections` lists, in order,
+///   it has no setext heading, a line underlined with `=` or `-`, and no HTML heading tag such
+///   as `<h2>`;
+/// - its `## Documentation` section holds only list items of one line each, and each is an
+///   inline link with a relative path, then `: ` and a description with a letter in it that
+///   ends in `.`;
+/// - every page, a `.md` file at any depth under `docs/`, starts with a `#` line, then a blank
+///   line and a paragraph with words in it outside images;
 /// - no file under `docs/` has another Markdown extension, such as `.markdown`, which the checks
 ///   would skip;
 /// - neither the readme nor a page starts with a byte order mark. The other checks read past
-///   it, so one file gets one message for it.
+///   it, so a file gets one message for it.
 ///
 /// A missing setting is a violation rather than a default, since no default could say which
 /// files and sections a project keeps.
@@ -54,10 +62,11 @@ const BYTE_ORDER_MARK_MESSAGE: &str = "It starts with a byte order mark. Save it
 /// Fails if the repository's files can't be listed, or the readme or a page can't be read.
 pub fn check(workspace: &Workspace) -> Result<Vec<Violation>, PolicyError> {
     let config = workspace.config();
+    let docs_files = config.docs_files();
+    let sections = config.readme_sections();
     let files = repository_files::list(workspace.root())?;
-    let readme = docs_index::read_readme(workspace.root())?;
     let mut violations = Vec::new();
-    match config.docs_files() {
+    match docs_files {
         Some(required) => {
             for file in required {
                 if !files.contains(file) {
@@ -77,7 +86,6 @@ pub fn check(workspace: &Workspace) -> Result<Vec<Violation>, PolicyError> {
              `docs_files = [\"README.md\", \"CONTRIBUTING.md\", \"docs/design.md\"]`.",
         )),
     }
-    let sections = config.readme_sections();
     if sections.is_none() {
         violations.push(unset(
             "readme_sections",
@@ -85,23 +93,16 @@ pub fn check(workspace: &Workspace) -> Result<Vec<Violation>, PolicyError> {
              order, such as `readme_sections = [\"Install\", \"Documentation\", \"License\"]`.",
         ));
     }
-    match &readme {
+    match docs_index::read_readme(workspace.root())? {
         Some(text) => {
-            let violation = |message: String| Violation::new(README.to_owned(), message);
-            if text.starts_with(BYTE_ORDER_MARK) {
-                violations.push(violation(BYTE_ORDER_MARK_MESSAGE.to_owned()));
+            violations.extend(byte_order_mark(README, &text));
+            let arena = Arena::new();
+            let readme = Markdown::parse(&arena, text.trim_start_matches(BYTE_ORDER_MARK));
+            for problem in readme_problems(&readme, sections) {
+                violations.push(Violation::new(README.to_owned(), problem));
             }
-            let readme = Markdown::new(text.trim_start_matches(BYTE_ORDER_MARK));
-            violations.extend(
-                readme_problems(&readme, sections)
-                    .into_iter()
-                    .map(violation),
-            );
         }
-        None if !config
-            .docs_files()
-            .is_some_and(|required| required.iter().any(|file| file == README)) =>
-        {
+        None if !docs_files.is_some_and(|required| required.iter().any(|file| file == README)) => {
             violations.push(Violation::new(
                 README.to_owned(),
                 format!(
@@ -116,13 +117,9 @@ pub fn check(workspace: &Workspace) -> Result<Vec<Violation>, PolicyError> {
     for file in docs {
         if docs_index::is_page(file) {
             let text = docs_index::read_page(workspace.root(), file)?;
-            if text.starts_with(BYTE_ORDER_MARK) {
-                violations.push(Violation::new(
-                    file.clone(),
-                    BYTE_ORDER_MARK_MESSAGE.to_owned(),
-                ));
-            }
-            let page = Markdown::new(text.trim_start_matches(BYTE_ORDER_MARK));
+            violations.extend(byte_order_mark(file, &text));
+            let arena = Arena::new();
+            let page = Markdown::parse(&arena, text.trim_start_matches(BYTE_ORDER_MARK));
             if let Some(problem) = page_problem(&page) {
                 violations.push(Violation::new(
                     file.clone(),
@@ -155,6 +152,18 @@ fn unset(key: &str, fix: &str) -> Violation {
     )
 }
 
+/// The violation of `file` if its text, `text`, starts with a byte order mark.
+fn byte_order_mark(file: &str, text: &str) -> Option<Violation> {
+    text.starts_with(BYTE_ORDER_MARK).then(|| {
+        Violation::new(
+            file.to_owned(),
+            "It starts with a byte order mark. Save it as UTF-8 without one; the other checks \
+             read it as if the mark weren't there."
+                .to_owned(),
+        )
+    })
+}
+
 /// `file` with the `.md` extension, if it has another Markdown extension.
 fn renamed_page(file: &str) -> Option<String> {
     let extension = Path::new(file).extension()?.to_str()?;
@@ -165,15 +174,17 @@ fn renamed_page(file: &str) -> Option<String> {
 }
 
 /// What is wrong with the root readme `readme`: its title, sections other than `sections` if
-/// that is set, headings the section check can't see, and an index that isn't one.
+/// that is set, headings the section check can't read as `#` lines, and an index that isn't
+/// one.
 fn readme_problems(readme: &Markdown<'_>, sections: Option<&[String]>) -> Vec<String> {
+    let headings = readme.headings();
     let mut problems = Vec::new();
-    problems.extend(title_problem(readme));
+    problems.extend(title_problem(readme, &headings));
     if let Some(required) = sections {
-        let found: Vec<&str> = readme
-            .headings()
-            .filter(|heading| heading.level() == 2)
-            .map(Heading::text)
+        let found: Vec<&str> = headings
+            .iter()
+            .filter(|heading| heading.level == 2)
+            .map(|heading| heading.text.as_str())
             .collect();
         if !found.iter().eq(required.iter()) {
             problems.push(format!(
@@ -187,84 +198,66 @@ fn readme_problems(readme: &Markdown<'_>, sections: Option<&[String]>) -> Vec<St
             ));
         }
     }
-    for index in readme.setext_underlines() {
-        problems.push(format!(
-            "Line {} underlines the line above it, which makes that line a heading the section \
-             check doesn't read. Write the heading as a `#` line, such as `## Install`, or \
-             leave a blank line above the underline to keep it a thematic break.",
-            index + 1
-        ));
-    }
-    for index in readme.contained_headings() {
-        problems.push(format!(
-            "Line {} puts a heading inside a block quote or list item, where the section check \
-             doesn't read it. Make it a `#` line of its own, outside the quote or list, or plain \
-             text.",
-            index + 1
-        ));
-    }
-    for (index, line) in readme.lines().iter().enumerate() {
-        if line.block() != Block::Code
-            && has_html_heading(&markdown::without_code_spans(line.text()))
-        {
+    for heading in &headings {
+        if heading.setext {
             problems.push(format!(
-                "Line {} has an HTML heading tag such as `<h2>`, which the section check doesn't \
-                 read. Write the heading as a `#` line.",
-                index + 1
+                "Line {} underlines the line above it, which makes that line a heading. Write \
+                 every heading as a `#` line, such as `## Install`, or leave a blank line above \
+                 the underline to keep it a thematic break.",
+                heading.last_line
             ));
         }
     }
+    for line in readme.html_heading_lines() {
+        problems.push(format!(
+            "Line {line} has an HTML heading tag such as `<h2>`, which the section check doesn't \
+             read. Write the heading as a `#` line."
+        ));
+    }
     if let Some(section) = readme.section(INDEX) {
-        problems.extend(index_problems(&section));
+        problems.extend(index_problems(readme, &section));
     }
     problems
 }
 
-/// What is wrong with the readme's title, or `None` if it has exactly one `#` heading, on its
-/// first line or after only badges and blank lines.
-fn title_problem(readme: &Markdown<'_>) -> Option<String> {
-    let lines = readme.lines();
-    let mut titles = Vec::new();
-    for (index, line) in lines.iter().enumerate() {
-        if let Block::Heading(heading) = line.block()
-            && heading.level() == 1
-        {
-            titles.push(index);
+/// What is wrong with the title of `readme`, whose headings are `headings`, or `None` if it has
+/// exactly one level-1 heading, at the top level, with only badges and blank lines before it.
+fn title_problem(readme: &Markdown<'_>, headings: &[Heading]) -> Option<String> {
+    let titles: Vec<&Heading> = headings
+        .iter()
+        .filter(|heading| heading.level == 1)
+        .collect();
+    match titles[..] {
+        [] => Some(format!(
+            "The readme has no `#` heading. It needs exactly one, {TITLE_PLACE}."
+        )),
+        [title] if !title.top_level => Some(format!(
+            "Its `#` title is inside a list, quote or footnote. It needs exactly one title, \
+             {TITLE_PLACE}, outside them."
+        )),
+        [_] => {
+            let blocks = readme.blocks();
+            let only_badges = blocks
+                .iter()
+                .take_while(|block| {
+                    markdown::heading(block).is_none_or(|heading| heading.level != 1)
+                })
+                .all(|block| {
+                    matches!(block.data.borrow().value, NodeValue::Paragraph)
+                        && markdown::is_badges(block)
+                });
+            (!only_badges).then(|| {
+                "Its `#` title comes after text other than badges and blank lines. Put the title \
+                 first, with only badges and blank lines before it."
+                    .to_owned()
+            })
         }
-    }
-    let [title] = titles[..] else {
-        return Some(format!(
-            "The readme has {} `#` headings. It has exactly one, its title, on its first line \
-             or after only badges and blank lines. Make the others `##` sections or move them \
-             to a page in `docs/`.",
+        _ => Some(format!(
+            "The readme has {} `#` headings. It needs exactly one, {TITLE_PLACE}. Make the others \
+             `##` sections or move them to a page in `docs/`.",
             titles.len()
-        ));
-    };
-    let preamble = &lines[..title];
-    let only_badges = preamble.iter().all(|line| match line.block() {
-        Block::Blank => true,
-        Block::Paragraph => markdown::without_images(line.text()).trim().is_empty(),
-        _ => false,
-    });
-    (!only_badges).then(|| {
-        "Its `#` title comes after text other than badges and blank lines. Put the title first, \
-         with only badges and blank lines before it."
-            .to_owned()
-    })
-}
-
-/// Whether `text` holds an HTML heading tag, `<h1>` to `<h6>` or its closing tag, in any case.
-fn has_html_heading(text: &str) -> bool {
-    let lower = text.to_ascii_lowercase();
-    ["<h", "</h"].into_iter().any(|opener| {
-        lower.match_indices(opener).any(|(start, _)| {
-            let after = &lower.as_bytes()[start + opener.len()..];
-            matches!(after.first(), Some(b'1'..=b'6'))
-                && after
-                    .get(1)
-                    .is_none_or(|next| matches!(next, b'>' | b' ' | b'\t' | b'/'))
-        })
-    })
+        )),
+    }
 }
 
 /// `headings` as a list of code spans, or `none`.
@@ -279,39 +272,37 @@ fn heading_list(headings: &[impl AsRef<str>]) -> String {
     quoted.join(", ")
 }
 
-/// What is wrong with the `Documentation` section `section`: one message for each list item
-/// that isn't an index entry, and one for the first thing in it that isn't a one-line list item.
-fn index_problems(section: &Markdown<'_>) -> Vec<String> {
+/// What is wrong with `section`, the blocks of the `Documentation` section of `readme`: one
+/// message for each list item that isn't an index entry, and one for the first thing in it that
+/// isn't a one-line list item.
+fn index_problems(readme: &Markdown<'_>, section: &[Node<'_>]) -> Vec<String> {
     let mut problems = Vec::new();
     let mut stray: Option<String> = None;
-    for line in section.lines() {
-        match line.block() {
-            Block::Blank => {}
-            Block::ListItem(entry) => {
-                if let Some(problem) = entry_problem(entry) {
+    for block in section {
+        let is_list = matches!(block.data.borrow().value, NodeValue::List(_));
+        if !is_list {
+            stray.get_or_insert_with(|| stray_name(readme, block));
+            continue;
+        }
+        for item in block.children() {
+            if let Some(name) = stray_in_item(readme, item) {
+                stray.get_or_insert(name);
+            } else if let Some(paragraph) = item.first_child() {
+                let line = readme.line(markdown::first_line(paragraph));
+                if let Some(problem) = link_problem(line, paragraph) {
+                    let start = markdown::columns(paragraph).start().saturating_sub(1);
+                    let entry = line.get(start..).unwrap_or(line).trim_end();
                     problems.push(format!(
-                        "The `## {INDEX}` entry `{entry}` isn't an index entry: {problem}. Write \
-                         each entry as {ENTRY_FORM}, with a relative path."
+                        "The `## {INDEX}` entry `{entry}` isn't an index entry: {problem}. \
+                         Write each entry as {ENTRY_FORM}, with a relative path."
                     ));
                 }
-            }
-            Block::Code => {
-                stray.get_or_insert_with(|| "a code block".to_owned());
-            }
-            Block::Heading(_)
-            | Block::Paragraph
-            | Block::SetextUnderline
-            | Block::ThematicBreak
-            | Block::Contained(_)
-            | Block::Html
-            | Block::Other => {
-                stray.get_or_insert_with(|| format!("`{}`", line.text().trim()));
             }
         }
     }
     if let Some(stray) = stray {
         problems.push(format!(
-            "The `## {INDEX}` section holds {stray}, but it holds only its index, one \
+            "The `## {INDEX}` section holds {stray}, but it may hold only its index, one \
              single-line list item per page or file, written as {ENTRY_FORM}. Move the text to \
              a page in `docs/` and link the page from an entry."
         ));
@@ -319,30 +310,67 @@ fn index_problems(section: &Markdown<'_>) -> Vec<String> {
     problems
 }
 
-/// What keeps `entry`, the text of a list item, from being an index entry: a relative Markdown
-/// link, `: ` and a description with a word in it that ends in `.`. `None` if it is one.
-fn entry_problem(entry: &str) -> Option<&'static str> {
-    let Some((title, rest)) = entry
-        .strip_prefix('[')
-        .and_then(|rest| rest.split_once("]("))
+/// How a message names `block`, a block that isn't an index entry: its first line.
+fn stray_name(readme: &Markdown<'_>, block: Node<'_>) -> String {
+    if matches!(block.data.borrow().value, NodeValue::CodeBlock(_)) {
+        return "a code block".to_owned();
+    }
+    format!("`{}`", readme.line(markdown::first_line(block)).trim())
+}
+
+/// How a message names what `item`, a list item of the index, holds besides one line with one
+/// paragraph, or `None` if it holds only that.
+fn stray_in_item(readme: &Markdown<'_>, item: Node<'_>) -> Option<String> {
+    let children: Vec<Node<'_>> = item.children().collect();
+    match children[..] {
+        [paragraph]
+            if matches!(paragraph.data.borrow().value, NodeValue::Paragraph)
+                && markdown::first_line(item) == markdown::last_line(item) =>
+        {
+            None
+        }
+        [_, second, ..] => Some(stray_name(readme, second)),
+        [_] if markdown::last_line(item) > markdown::first_line(item) => Some(format!(
+            "`{}`",
+            readme.line(markdown::first_line(item) + 1).trim()
+        )),
+        _ => Some(stray_name(readme, item)),
+    }
+}
+
+/// What keeps `paragraph`, a one-line list item's paragraph on `source_line`, from being an index
+/// entry: an inline link with a relative path, `: ` and a description with a letter in it that
+/// ends in `.`. `None` if it is one.
+fn link_problem(source_line: &str, paragraph: Node<'_>) -> Option<&'static str> {
+    let Some(link) = paragraph
+        .first_child()
+        .filter(|child| matches!(child.data.borrow().value, NodeValue::Link(_)))
     else {
         return Some("it doesn't start with a link such as `[Install](docs/install.md)`");
     };
-    if title.trim().is_empty() {
+    let NodeValue::Link(destination) = link.data.borrow().value.clone() else {
+        return Some("it doesn't start with a link such as `[Install](docs/install.md)`");
+    };
+    if markdown::text(link).trim().is_empty() {
         return Some("its link has no text");
     }
-    let Some((target, rest)) = rest.split_once(')') else {
-        return Some("its link has no closing `)`");
-    };
-    if target.starts_with('<') || target.contains(char::is_whitespace) {
+    let columns = markdown::columns(link);
+    let source = source_line
+        .get(columns.start().saturating_sub(1)..*columns.end())
+        .unwrap_or("");
+    if !destination.title.is_empty() || source.contains("](<") {
         return Some(
             "its link has a title or angle brackets, which the index doesn't allow; write it as \
              `[Title](path)`",
         );
     }
-    if !is_relative(target) {
+    if !(source.starts_with('[') && source.ends_with(')') && source.contains("](")) {
+        return Some("its link isn't written inline as `[Title](path)`");
+    }
+    if !is_relative(&destination.url) {
         return Some("its link isn't a relative path to a file in the repository");
     }
+    let rest = source_line.get(*columns.end()..).unwrap_or("").trim_end();
     let Some(description) = rest.strip_prefix(": ") else {
         return Some("the link isn't followed by `: ` and what the reader does with the page");
     };
@@ -368,44 +396,30 @@ fn is_relative(target: &str) -> bool {
 /// What keeps `page` from opening with a `# Title` line, a blank line and a paragraph, or `None`
 /// if it does.
 fn page_problem(page: &Markdown<'_>) -> Option<&'static str> {
-    let lines = page.lines();
-    let title = lines.first().and_then(|line| match line.block() {
-        Block::Heading(heading) => Some(heading),
-        _ => None,
+    let blocks = page.blocks();
+    let title = blocks.first().filter(|title| {
+        markdown::first_line(title) == 1
+            && markdown::heading(title).is_some_and(|heading| heading.level == 1 && !heading.setext)
+            && !markdown::text(title).trim().is_empty()
     });
-    if !title.is_some_and(|title| title.level() == 1 && !title.text().is_empty()) {
+    let Some(title) = title else {
         return Some("It doesn't start with a `# Title` line");
+    };
+    let title_end = markdown::last_line(title);
+    let Some(next) = blocks.get(1) else {
+        return Some(if page.has_text_after(title_end) {
+            NO_PARAGRAPH
+        } else {
+            "Nothing follows its title"
+        });
+    };
+    if markdown::first_line(next) == title_end + 1 {
+        return Some("The line after its title isn't blank");
     }
-    match lines.get(1).copied().map(Line::block) {
-        Some(Block::Blank) => {}
-        Some(_) => return Some("The line after its title isn't blank"),
-        None => return Some("Nothing follows its title"),
-    }
-    let rest = &lines[2..];
-    let length = rest
-        .iter()
-        .position(|line| line.block() != Block::Paragraph)
-        .unwrap_or(rest.len());
-    let paragraph = &rest[..length];
-    let underlined = rest
-        .get(length)
-        .is_some_and(|line| line.block() == Block::SetextUnderline);
-    let has_words = paragraph.iter().any(|line| has_words(*line));
-    if paragraph.is_empty() || underlined || !has_words {
-        return Some(
-            "Its title isn't followed by a paragraph: the blank line after it is followed by \
-             nothing, another blank line, a heading, list, table, quote, code block, HTML, image \
-             or link reference definition",
-        );
-    }
-    None
-}
-
-/// Whether `line` has a word in it once its images are gone.
-fn has_words(line: Line<'_>) -> bool {
-    markdown::without_images(line.text())
-        .chars()
-        .any(char::is_alphabetic)
+    let opens = markdown::first_line(next) == title_end + 2
+        && matches!(next.data.borrow().value, NodeValue::Paragraph)
+        && markdown::has_words(next);
+    (!opens).then_some(NO_PARAGRAPH)
 }
 
 #[cfg(test)]
@@ -414,15 +428,19 @@ mod tests {
 
     fn index(text: &str) -> Vec<String> {
         let readme = format!("# Demo\n\n## Documentation\n\n{text}\n## License\n");
-        index_problems(&Markdown::new(&readme).section(INDEX).unwrap())
+        let arena = Arena::new();
+        let markdown = Markdown::parse(&arena, &readme);
+        index_problems(&markdown, &markdown.section(INDEX).unwrap())
     }
 
     fn page(text: &str) -> Option<&'static str> {
-        page_problem(&Markdown::new(text))
+        let arena = Arena::new();
+        page_problem(&Markdown::parse(&arena, text))
     }
 
     fn readme(text: &str) -> Vec<String> {
-        readme_problems(&Markdown::new(text), None)
+        let arena = Arena::new();
+        readme_problems(&Markdown::parse(&arena, text), None)
     }
 
     #[test]
@@ -430,11 +448,12 @@ mod tests {
         assert_eq!(
             index(
                 "- [Install](docs/install.md): every way to install it.\n\
-                 * [Design](./docs/design.md#goals): the decisions behind it.\n\
-                 1. [Contributing](CONTRIBUTING.md): the checks, and how a change lands.\n"
+                 * [Design](./docs/design.md#goals): the decisions behind it.\n\n\
+                 1. [Contributing](CONTRIBUTING.md): the checks, and how a change lands.\n\
+                 2. [Security](SECURITY.md): how to report a `vulnerability`.\n"
             ),
             Vec::<String>::new(),
-            "relative links with a description or an anchor pass"
+            "bullet and ordered entries with a description or an anchor pass"
         );
     }
 
@@ -442,13 +461,16 @@ mod tests {
     fn each_malformed_entry_is_reported() {
         let cases = [
             ("- Install", "doesn't start with a link"),
+            ("- [Install\\](docs/a.md): a.", "doesn't start with a link"),
+            ("- [A](docs/a.md: a.", "doesn't start with a link"),
             ("- [](docs/a.md): a.", "its link has no text"),
-            ("- [A](docs/a.md: a.", "has no closing `)`"),
             ("- [A](https://example.com/a): a.", "isn't a relative path"),
             ("- [A](/docs/a.md): a.", "isn't a relative path"),
             ("- [A](#usage): a.", "isn't a relative path"),
             ("- [A](mailto:a@example.com): a.", "isn't a relative path"),
             ("- [A](../a.md): a.", "isn't a relative path"),
+            ("- <https://example.com>: a.", "isn't written inline"),
+            ("- [A][a]: a.\n\n[a]: docs/a.md", "isn't written inline"),
             (
                 "- [A](docs/a.md \"A\"): a.",
                 "has a title or angle brackets",
@@ -474,17 +496,17 @@ mod tests {
     #[test]
     fn anything_but_one_line_entries_in_the_index_is_reported_once() {
         let problems = index(
-            "Some prose.\n\n- [A](docs/a.md): a.\n\n  More about a.\n\n```sh\nrun\n```\n\
+            "Some prose.\n\n- [A](docs/a.md): a.\n\n  More about a.\n\n```sh\nrun\n```\n\n\
              - [B](docs/b.md): b.\n  - [C](docs/c.md): nested.\n",
         );
         assert_eq!(
             problems,
             [format!(
-                "The `## Documentation` section holds `Some prose.`, but it holds only its \
+                "The `## Documentation` section holds `Some prose.`, but it may hold only its \
                  index, one single-line list item per page or file, written as {ENTRY_FORM}. \
                  Move the text to a page in `docs/` and link the page from an entry."
             )],
-            "the first stray line is named, and the entries themselves pass"
+            "the first stray block is named, and the entries themselves pass"
         );
         for stray in [
             "### Pages\n",
@@ -494,8 +516,17 @@ mod tests {
             "- [A](a.md): the end.\nMore.\n",
             "| a |\n| - |\n",
             "    - [A](a.md): a.\n",
+            "- - [A](a.md): a.\n",
+            "-\n",
+            "- <!-- [A](docs/a.md) --> a.\n",
         ] {
-            assert_eq!(index(stray).len(), 1, "{stray:?} isn't a one-line entry");
+            let problems = index(stray);
+            assert!(
+                problems
+                    .iter()
+                    .any(|problem| problem.contains("may hold only its index")),
+                "{stray:?} isn't a one-line entry: {problems:?}"
+            );
         }
     }
 
@@ -505,7 +536,9 @@ mod tests {
             "# Install\n\nFor people who run it: how to install it.\n\n## Steps\n",
             "# Install\n\n[Releases](x.md) have the archives.\n",
             "# Install\n\n![Logo](logo.png) For people who run it.\n",
+            "# Install\n\n<https://example.com> has the releases.\n",
             "# Install\n\nFor people\nwho run it.\n\n---\n",
+            "# Install\r\n\r\nFor people who run it.\r\n",
         ] {
             assert_eq!(page(text), None, "{text:?} opens with a paragraph");
         }
@@ -514,7 +547,6 @@ mod tests {
     #[test]
     fn each_page_problem_is_reported() {
         let title = "doesn't start with a `# Title` line";
-        let paragraph = "isn't followed by a paragraph";
         let cases = [
             ("", title),
             ("Install\n=======\n\nText.\n", title),
@@ -523,25 +555,28 @@ mod tests {
             ("\n# Install\n\nText.\n", title),
             ("- # Install\n\nText.\n", title),
             ("# Install\n", "Nothing follows its title"),
+            ("# Install\n\n\n", "Nothing follows its title"),
             ("# Install\n```sh\nx\n```\n", "isn't blank"),
             ("# Install\nText.\n", "isn't blank"),
-            ("# Install\n\n", paragraph),
-            ("# Install\n\n\nText.\n", paragraph),
-            ("# Install\n\n## Steps\n", paragraph),
-            ("# Install\n\n- a\n", paragraph),
-            ("# Install\n\n| a |\n| - |\n", paragraph),
-            ("# Install\n\na | b\n--- | ---\n", paragraph),
-            ("# Install\n\n> Note.\n", paragraph),
-            ("# Install\n\n```sh\nx\n```\n", paragraph),
-            ("# Install\n\n    code\n", paragraph),
-            ("# Install\n\n\tcode\n", paragraph),
-            ("# Install\n\n<!-- For people. -->\n", paragraph),
-            ("# Install\n\n<div>For people.</div>\n", paragraph),
-            ("# Install\n\n![The demo](demo.png)\n", paragraph),
-            ("# Install\n\n[install]: install.md\n", paragraph),
-            ("# Install\n\nSteps\n-----\n", paragraph),
-            ("# Install\n\nFor people\nwho run it\n=====\n", paragraph),
-            ("# Install\n\n***\n", paragraph),
+            ("# Install\n\n\nText.\n", NO_PARAGRAPH),
+            ("# Install\n\n## Steps\n", NO_PARAGRAPH),
+            ("# Install\n\n- a\n", NO_PARAGRAPH),
+            ("# Install\n\n| a |\n| - |\n", NO_PARAGRAPH),
+            ("# Install\n\n> Note.\n", NO_PARAGRAPH),
+            ("# Install\n\n```sh\nx\n```\n", NO_PARAGRAPH),
+            ("# Install\n\n    code\n", NO_PARAGRAPH),
+            ("# Install\n\n\tcode\n", NO_PARAGRAPH),
+            ("# Install\n\n<!-- For people. -->\n", NO_PARAGRAPH),
+            ("# Install\n\n<div>For people.</div>\n", NO_PARAGRAPH),
+            ("# Install\n\n![The demo](demo.png)\n", NO_PARAGRAPH),
+            ("# Install\n\n[install]: install.md\n", NO_PARAGRAPH),
+            (
+                "# Install\n\n[install]: install.md\nFor people.\n",
+                NO_PARAGRAPH,
+            ),
+            ("# Install\n\nSteps\n-----\n", NO_PARAGRAPH),
+            ("# Install\n\nFor people\nwho run it\n=====\n", NO_PARAGRAPH),
+            ("# Install\n\n***\n", NO_PARAGRAPH),
         ];
         for (text, problem) in cases {
             let found = page(text);
@@ -557,6 +592,7 @@ mod tests {
         for text in [
             "# Demo\n\nText.\n",
             "[![CI](ci.svg)](ci)\n\n# Demo\n",
+            "[![CI][ci-badge]][ci]\n\n# Demo\n\n[ci]: ci\n[ci-badge]: ci.svg\n",
             "# Demo\n\n[![CI](ci.svg)](ci)\n[![Release](r.svg)](r)\n",
         ] {
             assert!(
@@ -566,10 +602,19 @@ mod tests {
             );
         }
         for (text, problem) in [
-            ("Demo\n\n## A\n", "has 0 `#` headings"),
-            ("# Demo\n\n# Again\n", "has 2 `#` headings"),
+            (
+                "Demo\n\n## A\n",
+                "The readme has no `#` heading. It needs exactly one",
+            ),
+            (
+                "# Demo\n\n# Again\n",
+                "has 2 `#` headings. It needs exactly one",
+            ),
             ("Intro.\n\n# Demo\n", "title comes after text"),
             ("## A\n\n# Demo\n", "title comes after text"),
+            ("[CI](ci)\n\n# Demo\n", "title comes after text"),
+            ("- # Demo\n", "title is inside a list, quote or footnote"),
+            ("Demo\n====\n", "Line 2 underlines the line above it"),
         ] {
             let problems = readme(text);
             assert!(
@@ -577,29 +622,31 @@ mod tests {
                 "{text:?} should be reported as {problem:?}: {problems:?}"
             );
         }
+        assert!(
+            !readme("Demo\n\n## A\n")
+                .iter()
+                .any(|found| found.contains("Make the others")),
+            "with no title, there are no others"
+        );
     }
 
     #[test]
-    fn hidden_headings_in_the_readme_are_reported() {
+    fn html_headings_in_the_readme_are_reported() {
         for (text, problem) in [
-            (
-                "# Demo\n\n> ## A\n",
-                "Line 3 puts a heading inside a block quote",
-            ),
-            (
-                "# Demo\n\n- ## A\n",
-                "Line 3 puts a heading inside a block quote",
-            ),
-            (
-                "# Demo\n\nText\n----\n",
-                "Line 4 underlines the line above it",
-            ),
             ("# Demo\n\n<h2>A</h2>\n", "Line 3 has an HTML heading tag"),
             (
                 "# Demo\n\nSee <H3 id=a>A</H3>.\n",
                 "Line 3 has an HTML heading tag",
             ),
             ("# Demo\n\nText </h4>\n", "Line 3 has an HTML heading tag"),
+            (
+                "# Demo\n\n\\`<h2>A</h2>\\`\n",
+                "Line 3 has an HTML heading tag",
+            ),
+            (
+                "# Demo\n\n<div>`<h2>A</h2>`</div>\n",
+                "Line 3 has an HTML heading tag",
+            ),
         ] {
             let problems = readme(text);
             assert!(
@@ -611,6 +658,7 @@ mod tests {
             "# Demo\n\nWrite `<h2>` as `##`.\n",
             "# Demo\n\n```html\n<h2>A</h2>\n```\n",
             "# Demo\n\n<header>, <hr> and <html>.\n",
+            "# Demo\n\n<!--\n\n<h2>Old</h2>\n\n-->\n",
         ] {
             assert!(
                 readme(text).is_empty(),

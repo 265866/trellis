@@ -16,6 +16,12 @@ ignore = []
 allow = ["Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "ISC", "MIT", "Unicode-3.0", "Zlib"]
 confidence-threshold = 0.9
 
+# finl_unicode, which comrak reads Unicode categories with, also carries the Unicode data-file
+# license of 2016, the earlier form of the Unicode-3.0 license allowed above. Only it may use it.
+[[licenses.exceptions]]
+crate = "finl_unicode"
+allow = ["Unicode-DFS-2016"]
+
 [licenses.private]
 ignore = true
 
