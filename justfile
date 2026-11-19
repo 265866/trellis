@@ -17,7 +17,7 @@ default:
     @just --list
 
 # Runs every check CI runs, except the pull request title and the macOS and Windows entries.
-ci: fmt-check typos actionlint zizmor shear deny links pins lint dylint test docs lints-lint lints-comments lints-test templates
+ci: fmt-check typos actionlint zizmor shear deny changelog release-test links pins lint dylint test docs lints-lint lints-comments lints-test templates
 
 # Installs the pinned nightly rustfmt that `just fmt` uses.
 install-nightly-rustfmt:
@@ -58,6 +58,99 @@ shear:
 deny:
     cargo deny --locked check
     cargo deny --locked --manifest-path lints/Cargo.toml check advisories
+
+# The newest heading must be `Unreleased`, the newest tag, or the version after it by the bump rule
+# "Release trellis" in CONTRIBUTING.md gives for before 1.0; after it, any next version passes. A
+# major bump always passes. CI's `Release` job tags the version this prints.
+#
+# Checks CHANGELOG.md's newest heading against the tags and prints its version.
+changelog:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    fail() { echo "error: CHANGELOG.md: $1" >&2; exit 1; }
+    heading=$(sed -n 's/^## //p' CHANGELOG.md | head -n 1)
+    [ "$heading" != Unreleased ] || exit 0
+    version='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
+    [[ $heading =~ $version ]] \
+      || fail "the newest heading, \"## $heading\", must be \"## Unreleased\" or a version, such as \"## v1.2.3\""
+    latest=$(git tag --list 'v*' --sort=-version:refname | grep --extended-regexp "$version" | head -n 1) || true
+    [ -n "$latest" ] || fail "found no vX.Y.Z tag to compare $heading with; fetch the tags with \`git fetch --tags\`"
+    if [ "$heading" = "$latest" ]; then
+      echo "$heading"
+      exit 0
+    fi
+    if git rev-parse --quiet --verify "refs/tags/$heading" > /dev/null; then
+      fail "the newest heading names $heading, which is older than the newest tag, $latest"
+    fi
+    [[ $latest =~ $version ]]
+    major=${BASH_REMATCH[1]} minor=${BASH_REMATCH[2]} patch=${BASH_REMATCH[3]}
+    patch_bump="v$major.$minor.$((patch + 1))"
+    minor_bump="v$major.$((minor + 1)).0"
+    major_bump="v$((major + 1)).0.0"
+    asks=$(awk '/^## / { if (seen) exit; seen = 1; next }
+      /^### / { inside = ($0 == "### Action required in projects"); next }
+      inside && /^([-*+]|[0-9]+\.) /' CHANGELOG.md)
+    case "$heading" in
+      "$major_bump") ;;
+      "$minor_bump")
+        [ -n "$asks" ] || [ "$major" != 0 ] \
+          || fail "$heading bumps the minor version, but its \"Action required in projects\" lists nothing, so it must be $patch_bump" ;;
+      "$patch_bump")
+        [ -z "$asks" ] || [ "$major" != 0 ] \
+          || fail "$heading bumps the patch version, but its \"Action required in projects\" asks something of projects, so it must be $minor_bump" ;;
+      *) fail "$heading must follow $latest as $patch_bump, $minor_bump or $major_bump" ;;
+    esac
+    echo "$heading"
+
+# CI's `Release` job runs this on `main` once every other job passed, with a GH_TOKEN that can
+# write the repository's contents. It tags HEAD only if HEAD changed the version's CHANGELOG.md
+# section and no commit has the tag. CI runs each commit on `main` separately, and a later commit's
+# run can pass first; tagging it would release changes the notes don't list. GitHub refuses a tag
+# that exists, so of two runs that race, the second skips. The tag is annotated, as the ones made
+# by hand were, and the release's notes are the section. A rerun on the commit it tagged publishes
+# the release a failed run missed; on any other commit it does nothing.
+#
+# Tags and releases the version `just changelog` prints.
+release:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    version=$(just changelog)
+    if [ -z "$version" ]; then
+      echo "CHANGELOG.md's newest heading is Unreleased, so there's nothing to release."
+      exit 0
+    fi
+    section() { awk '/^## / { if (seen) exit; seen = 1 } seen'; }
+    head=$(git rev-parse HEAD)
+    tagged=$(git rev-parse --quiet --verify "refs/tags/$version^{commit}") || true
+    if [ -z "$tagged" ]; then
+      if [ "$(section < CHANGELOG.md)" = "$(git show HEAD^:CHANGELOG.md 2> /dev/null | section)" ]; then
+        echo "This commit didn't change the $version section in CHANGELOG.md, so it doesn't get the tag. To release $version, rerun CI on the commit that last changed the section, or change the section again."
+        exit 0
+      fi
+      tag=$(gh api 'repos/{owner}/{repo}/git/tags' -f "tag=$version" -f "message=$version" \
+        -f "object=$head" -f type=commit --jq .sha)
+      if ! gh api 'repos/{owner}/{repo}/git/refs' -f "ref=refs/tags/$version" -f "sha=$tag" > /dev/null; then
+        if gh api "repos/{owner}/{repo}/git/ref/tags/$version" > /dev/null 2>&1; then
+          echo "Another run tagged $version first."
+          exit 0
+        fi
+        exit 1
+      fi
+      echo "Tagged $head as $version."
+    elif [ "$tagged" != "$head" ]; then
+      echo "$version is already released at $tagged."
+      exit 0
+    fi
+    if gh release view "$version" > /dev/null 2>&1; then
+      echo "$version already has a GitHub release."
+      exit 0
+    fi
+    notes=$(section < CHANGELOG.md | tail -n +2 | sed '/./,$!d')
+    gh release create "$version" --verify-tag --title "$version" --notes "$notes"
+
+# Checks `changelog` and `release` against a scratch repository and a fake gh.
+release-test:
+    tests/release/test.sh "{{ justfile() }}"
 
 # The template's files link to files that exist only once a project is generated, so the
 # template tests check those.

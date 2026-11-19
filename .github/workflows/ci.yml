@@ -25,6 +25,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          # `just changelog` compares the newest heading with the tags.
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Install the pinned toolchain
@@ -49,6 +51,8 @@ jobs:
       - run: just zizmor
       - run: just shear
       - run: just deny
+      - run: just changelog
+      - run: just release-test
       - run: just links
       - run: just pins
 
@@ -218,9 +222,9 @@ jobs:
       - run: just update
 
   # Branch protection requires this job instead of each job by name, so `needs` lists every other
-  # job, and a new job goes there rather than into branch protection. It runs with
-  # `always()` because a job whose needs fail is skipped, and GitHub counts a skipped required
-  # check as passing.
+  # job but `release`, which runs after it, and a new job goes there rather than into branch
+  # protection. It runs with `always()` because a job whose needs fail is skipped, and GitHub
+  # counts a skipped required check as passing.
   passed:
     name: CI passed
     needs: [quick, policy, template, dependencies, shapes]
@@ -238,3 +242,31 @@ jobs:
             echo "$failed"
             exit 1
           fi
+
+  # Tags the commit when it changed the section of a version in CHANGELOG.md that no commit has, as
+  # "Release trellis" in CONTRIBUTING.md describes. It has no concurrency group, since a group keeps
+  # only its newest waiting job and could drop the commit that should get the tag. When two runs
+  # race, GitHub refuses the second tag and that run skips.
+  release:
+    name: Release
+    needs: [passed]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write # Creates the tag and publishes the release.
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2.90.5
+        with:
+          tool: just@1.59.0
+
+      - name: Tag and release the newest version in CHANGELOG.md
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: just release
