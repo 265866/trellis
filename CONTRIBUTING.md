@@ -56,8 +56,8 @@ and in `template/` together. These move by hand:
 ## Set up the repository
 
 Install the [Renovate app](https://github.com/apps/renovate), allow squash merging only, and
-protect `main`, requiring `PR title`, `Quick checks`, `Policy and custom lints`, every `Template`
-job, `Template shapes` and `Template with common dependencies`.
+protect `main`, requiring `PR title` and `CI passed`. `CI passed` passes only when every other job
+in CI passes, so the required checks stay the same when CI gains or loses a job.
 
 ## Release trellis
 

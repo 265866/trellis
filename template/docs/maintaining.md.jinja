@@ -1,7 +1,5 @@
 # Maintain {{ project_name }}
 {%- set published = kind == 'library' and publish_crate %}
-{%- set os_list = ['linux'] if kind == 'service' else platforms %}
-{%- set job_names = {'linux': 'Ubuntu', 'macos': 'macOS', 'windows': 'Windows'} %}
 
 This page is for the repository's owner. It lists the work that needs the owner's rights, in the
 order it comes up: setting up the repository, releasing, changing an answer, updating trellis and
@@ -69,14 +67,15 @@ git push --set-upstream origin main
 ## After the first pull request's checks run
 
 GitHub offers only the checks it has seen, so wait until the first pull request's checks have run.
-Then protect `main` and require these checks: `PR title`, `Quick checks`,
-{% for os in os_list %}`{{ job_names[os] }}`, {% endfor %}
-{%- if kind == 'service' %}`Container image`, {% endif %}and the "Rule changes stand alone"
-status with GitHub Actions as its source.
-{%- if kind == 'binary' %} The `Release build` checks run only when a pull request
-changes what goes into a release, so don't require them.
-{%- elif kind == 'service' %} `Container image` builds the image, as `just image`
-does, and runs it with `--version`, so the service must answer `--version` and exit 0.
+Then protect `main` and require three checks: `PR title`, `CI passed` and the "Rule changes stand
+alone" status with GitHub Actions as its source. `CI passed` passes only when every other CI job
+passes, so the required checks stay the same when CI gains or loses a job.
+{%- if kind == 'binary' %}
+The `Release build` checks come from another workflow and run only when a pull request changes
+what goes into a release, so don't require them.
+{%- elif kind == 'service' %}
+`CI passed` also needs `Container image`, which builds the image, as `just image` does, and runs
+it with `--version`, so the service must answer `--version` and exit 0.
 {%- endif %}
 {%- if visibility == 'private' %}
 
@@ -154,14 +153,13 @@ uvx copier update --defaults --vcs-ref=:current: --data 'platforms=[linux, macos
 ```
 {%- endif %}
 
-The change is a rule change, so it can't also change code. Some answers also change what GitHub
-needs:
-{% if kind != 'service' %}
-- **Platforms.** CI runs one job per platform. Once the change merges, update the checks `main`
-  requires: add the job for a new platform, such as `macOS`, and remove the job for a platform you
-  dropped, or every pull request waits for a check that never reports.
+The change is a rule change, so it can't also change code.
+{%- if kind != 'service' %}
+Changing the platforms needs nothing on GitHub, since `CI passed` covers whatever platforms CI
+runs.
 {%- endif %}
-{%- if visibility == 'private' %}
+Some answers also change what GitHub needs:
+{% if visibility == 'private' %}
 - **Visibility.** To make the repository public, run
   `uvx copier update --defaults --vcs-ref=:current: --data visibility=public` on a branch.
 {%- if kind == 'binary' %}
