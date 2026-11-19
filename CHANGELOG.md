@@ -1,9 +1,10 @@
 # Changelog
 
 What each trellis release changes in the projects it generates, newest first. Each section is
-headed with its tag. Its "Action required in projects" part lists what a project's owner must do
-around the update: a rule that can flag existing code, a setting to change, or a step to do by
-hand. [CONTRIBUTING.md](CONTRIBUTING.md#release-trellis) has the versioning rule.
+headed with its tag, or with `Unreleased` until it's released. Its "Action required in projects"
+part lists what a project's owner must do around the update: a rule that can flag existing code,
+a setting to change, or a step to do by hand. [CONTRIBUTING.md](CONTRIBUTING.md#release-trellis)
+has the versioning rule.
 
 ## v0.4.0
 

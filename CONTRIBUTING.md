@@ -113,10 +113,18 @@ hand. Any other release bumps the patch version.
 To release:
 
 1. Add the release's section to [CHANGELOG.md](CHANGELOG.md), headed with its tag, in a pull
-   request. List what changed, and under "Action required in projects", what an owner must do
-   before or after the update merges.
-2. Once it merges and CI passes on `main`, tag that commit with an annotated tag and push the tag.
-   Renovate opens the update in every project.
+   request. List what changed, and as list items under "Action required in projects", what an
+   owner must do before or after the update merges. `just changelog` checks that the heading is
+   the version after the newest tag by the rule above, counting those list items as asks. To
+   gather notes before you release, head the section `## Unreleased`, which releases nothing, and
+   rename it when you release.
+2. Merge it. Once every other CI job passes on that commit, CI's `Release` job tags it with an
+   annotated tag and publishes a GitHub release with the section as its notes. Renovate opens the
+   update in every project. Only a commit that changes the section gets the tag, so a later
+   commit whose CI passes first can't release changes the notes don't list. If CI fails on the
+   commit, rerun it once the cause is fixed, or change the section again in the pull request that
+   fixes it. A rerun on a commit the job already tagged publishes a release it missed and tags
+   nothing.
 
 ## Send a change
 
