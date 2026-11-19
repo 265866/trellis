@@ -19,9 +19,8 @@ name: Release
 # On every push to main, release-plz either tags a release (when the push is a merged release PR)
 # or opens and updates the release PR. A tagged release is built from its tag and only then
 # published on GitHub with its archives and checksums, so a published release has them. If building
-# or publishing fails, re-running the failed jobs picks up from the same tag. Without GitHub
-# Enterprise Cloud, GitHub attests release files only in public repositories, so this one isn't
-# attested.
+# or publishing fails, re-running the failed jobs picks up from the same tag. A private
+# repository's releases aren't attested; docs/maintaining.md says why.
 {%- elif visibility == 'public' -%}
 # On every push to main, release-plz either tags a release (when the push is a merged release PR)
 # or opens and updates the release PR. A tagged release builds the container image from its tag,
@@ -31,9 +30,8 @@ name: Release
 # On every push to main, release-plz either tags a release (when the push is a merged release PR)
 # or opens and updates the release PR. A tagged release builds the container image from its tag,
 # pushes it by version, and only then moves the minor and `latest` tags to it and publishes the
-# GitHub release. Without GitHub Enterprise Cloud, GitHub attests images only in public
-# repositories, and a keyless signature would name this private repository in Sigstore's public
-# log, so the image is neither attested nor signed.
+# GitHub release. A private repository's image is neither attested nor signed;
+# docs/maintaining.md says why.
 {%- endif %}
 #
 # A PR that GITHUB_TOKEN opens starts no pull_request_target workflow, so the release PR needs the

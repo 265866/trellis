@@ -7,13 +7,10 @@ from its tag and attests where it came from. Check that before you run it.
 The [release workflow](../.github/workflows/release.yml) builds every release on GitHub Actions
 from its tag and lists each archive's checksum. Check a download against it before you run it. The
 checksums sit in the same release as the archives, so they catch a broken download, not a swapped
-one. Without GitHub Enterprise Cloud, GitHub attests release files only in public repositories,
-so this private repository's releases carry no attestation.
+one. The releases carry no attestation.
 {%- else -%}
 The [release workflow](../.github/workflows/release.yml) builds every release on GitHub Actions
 from its tag and names the image it pushed by its digest. The image is neither attested nor signed.
-Without GitHub Enterprise Cloud, GitHub attests images only in public repositories, and a keyless
-signature would name this private repository in Sigstore's public log.
 {%- endif %}
 {% if kind == 'binary' %}
 ## Check the checksum

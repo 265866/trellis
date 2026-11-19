@@ -1,4 +1,4 @@
-exclude = ["target/**", "lints/target/**"]
+exclude = ["target/**"]
 
 [formatting]
 column_width = 100

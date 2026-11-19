@@ -17,16 +17,11 @@ Commit the generated project on a branch named `main` (`git init --initial-branc
    ```
 {%- if visibility == 'private' %}
 
-   A private repository's Actions minutes come out of the account's included usage.
-{%- if kind != 'service' %}
-   A macOS minute costs about ten times a Linux one, and a Windows minute about twice.
-{%- endif %}
-   [Change an answer](#change-an-answer) says how to make it public.
-{%- elif kind != 'library' %}
+   [Change an answer](#change-an-answer) says what a private repository costs and how to make it
+   public.
+{%- elif not published %}
 
-   Without GitHub Enterprise Cloud, GitHub attests release files only in public repositories, and
-   the release workflow stops when it can't attest. [Change an answer](#change-an-answer) says how
-   to make the repository private.
+   [Change an answer](#change-an-answer) says what making it private changes.
 {%- endif %}
 
 2. Set the repository up. The recipe needs `gh` signed in as an admin of the repository, and the
@@ -62,9 +57,9 @@ Commit the generated project on a branch named `main` (`git init --initial-branc
 {%- endif %}
 {%- if visibility == 'private' %}
 
-   Protecting `main` in a private repository needs GitHub Pro or a paid organization plan. Without
-   one, the recipe says so and sets up the rest, and nothing stops a pull request whose checks
-   fail, or one that changes rules and code together, from merging.
+   If the account's plan can't protect `main` in a private repository, the recipe says so and sets
+   up the rest, and nothing stops a pull request whose checks fail, or one that changes rules and
+   code together, from merging. [Change an answer](#change-an-answer) names the plans that can.
 {%- endif %}
 
    Running it again sets the same values and creates nothing twice. `just setup-github --dry-run`
@@ -172,13 +167,35 @@ Changing the platforms needs nothing on GitHub, since `CI passed` covers whateve
 runs.
 {%- endif %}
 Some answers also change what GitHub needs:
-{% if visibility == 'private' %}
-- **Visibility.** To make the repository public, run
+{% if published %}
+- **Visibility.** The repository stays public while it publishes to crates.io, and the template
+  refuses `visibility=private` until `publish_crate` is off.
+{%- else %}
+- **Visibility.** A private repository costs more to run and lacks some of what a public one
+  has. Protecting its `main` needs GitHub Pro or a paid organization plan, and its CI draws on the
+  account's included Actions usage
+{%- if kind != 'service' %}, where
+  macOS and Windows runners cost more than Linux ones{% endif %}; GitHub's
+  [Actions billing](https://docs.github.com/en/billing/concepts/product-billing/github-actions)
+  page has the rates.
+{%- if kind == 'binary' %}
+  Its releases aren't attested, because without GitHub Enterprise Cloud, GitHub attests release
+  files only in public repositories.
+{%- elif kind == 'service' %}
+  Its image is neither attested nor signed, because without GitHub Enterprise Cloud, GitHub
+  attests images only in public repositories, and a keyless signature would name the repository
+  in Sigstore's public log.
+{%- endif %}
+  GitHub takes private vulnerability reports only in public repositories, so a private
+  repository's `SECURITY.md` sends reports to issues.
+{%- if visibility == 'private' %}
+
+  To make the repository public, run
   `uvx copier update --defaults --vcs-ref=:current: --data visibility=public` on a branch.
 {%- if kind == 'binary' %}
-  It adds the release attestations, which fail in a private repository.
+  It adds the release attestations.
 {%- elif kind == 'service' %}
-  It adds the image attestation and signature, which a private repository can't use.
+  It adds the image attestation and signature.
 {%- endif %}
   Make the repository public on GitHub, then run `just setup-github` on the branch. It adds the
   Actions policy, without which a public repository doesn't run the rule-change check, and turns
@@ -188,24 +205,17 @@ Some answers also change what GitHub needs:
   The image's package stays private until you make it public in its package settings, as the
   updated page's "At the first release" says.
 {%- endif %}
-{%- elif published %}
-- **Visibility.** The repository stays public while it publishes to crates.io, and the template
-  refuses `visibility=private` until `publish_crate` is off.
 {%- else %}
-- **Visibility.** To make the repository private, first merge the change that
+
+  To make the repository private, first merge the change that
   `uvx copier update --defaults --vcs-ref=:current: --data visibility=private` makes, then make
-  the repository private on GitHub and run `just check-github` on `main`.
+  the repository private on GitHub and run `just check-github` on `main`. The Actions policy for
+  the rule-change check then no longer matters.
 {%- if kind == 'service' %}
   The image's package stays public, because GitHub can't make a public package private again.
   Delete it in its package settings before the next release, which then publishes a new, private
   package.
 {%- endif %}
-  GitHub takes private vulnerability reports only in public repositories, so `SECURITY.md` then
-  sends reports to issues, and the Actions policy for the rule-change check no longer matters.
-  Protecting `main` in a private repository needs GitHub Pro or a paid organization plan, and its
-  Actions minutes come out of the account's included usage.
-{%- if kind != 'service' %}
-  A macOS minute costs about ten times a Linux one, and a Windows minute about twice.
 {%- endif %}
 {%- endif %}
 {%- if kind == 'library' and visibility == 'public' and not publish_crate %}
@@ -218,7 +228,10 @@ Some answers also change what GitHub needs:
 
 ## Update trellis
 
-Renovate opens a pull request when trellis tags a new version. To update by hand:
+Renovate opens a pull request when trellis tags a new version. Before you merge it, read that
+version's section in trellis's [CHANGELOG.md](https://github.com/265866/trellis/blob/main/CHANGELOG.md):
+its "Action required in projects" part says what to do before or after the update merges. To update
+by hand:
 
 ```sh
 uvx copier update --defaults

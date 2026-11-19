@@ -21,7 +21,8 @@ generates starts with:
 - **The same docs layout.** A short README with a docs index, task pages under `docs/`,
   `CONTRIBUTING.md`, `SECURITY.md`, and one `AGENTS.md` for coding agents.
 
-[docs/style.md](docs/style.md) lists every rule and what checks it.
+[docs/style.md](docs/style.md) is the generated projects' style guide. It lists every rule and
+what checks it.
 
 ## Generate a project
 
@@ -54,10 +55,8 @@ just ci
 ```
 
 `just ci` compares the working tree with `origin/main`, so it needs the pushed `main`. Create the
-repository with the visibility you answered. Without GitHub Enterprise Cloud, GitHub attests
-release artifacts only in public repositories, and it takes private vulnerability reports only in
-public ones, so a private project's releases aren't attested or signed, and its security reports go
-in issues.
+repository with the visibility you answered. A private project's releases aren't attested or
+signed, and the generated `docs/maintaining.md` says what else a private repository changes.
 
 ## Update a project
 
@@ -67,6 +66,7 @@ uvx copier update --defaults
 
 Copier merges the newer template into the project and keeps your changes. Conflicts show as merge
 markers. Renovate opens the same update as a pull request when trellis tags a release.
+[CHANGELOG.md](CHANGELOG.md) says what each release changes and what it asks of a project's owner.
 
 ## What's here
 
@@ -75,7 +75,7 @@ markers. Renovate opens the same update as a pull request when trellis tags a re
 | [`template/`](template) | The files a generated project gets. [`copier.yml`](copier.yml) has the questions. |
 | [`lints/`](lints) | The custom lints, a [dylint](https://github.com/trailofbits/dylint) library. |
 | [`policy/`](policy) | `trellis-policy`, the structure and rule-change checker. |
-| [`docs/style.md`](docs/style.md) | The style guide the lints and the checker enforce. |
+| [`docs/style.md`](docs/style.md) | The generated projects' style guide, which the lints and the checker enforce. It describes a project's checks, not trellis's, and `just pins` keeps it equal to `template/docs/style.md`. |
 
 [CONTRIBUTING.md](CONTRIBUTING.md) covers working on trellis itself.
 
