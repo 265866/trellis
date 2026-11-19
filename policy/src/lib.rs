@@ -24,6 +24,7 @@ pub mod docs_index;
 pub mod docs_layout;
 mod git;
 mod head;
+mod html;
 pub mod internal_dependencies;
 mod lint_expectations;
 pub mod lints_tables;

@@ -892,7 +892,7 @@ const MARKUP: &str = "Write the heading as plain text";
 
 /// README snippets that GitHub renders as a heading, or that hide what follows, each placed at
 /// the end of the `Install` section, with the message each must fail with.
-const README_REGRESSIONS: [(&str, &str, &str); 56] = [
+const README_REGRESSIONS: [(&str, &str, &str); 60] = [
     ("setext in a list item", "- Extra\n  ---", NESTED),
     (
         "level-1 setext in a list item",
@@ -1081,6 +1081,28 @@ const README_REGRESSIONS: [(&str, &str, &str); 56] = [
     ),
     ("empty section heading", "##", "has an empty `##` heading"),
     ("inline element left open", "<span>a", "opens `<span>`"),
+    (
+        "slash in an unquoted value",
+        "<details open=x/>\n<summary>More</summary>\n\nText.",
+        "opens `<details>`, which doesn't close before the next section",
+    ),
+    (
+        "element name in prose",
+        "Run `demo` in a <dir> of your own.",
+        "opens `<dir>`, which doesn't close before the next section, so GitHub renders what \
+         follows inside it. Close it in the same section, or write a literal `<` as `&lt;`.",
+    ),
+    (
+        "list item without its end tag",
+        "<ul>\n<li>One\n</ul>",
+        "opens `<li>`, which doesn't close before the next section. Close it; trellis requires \
+         every element closed in its section. Or write a literal `<` as `&lt;`.",
+    ),
+    (
+        "generic type in a pre",
+        "<pre>\nHashMap<String, Vec<u8>>\n</pre>",
+        "or write a literal `<` as `&lt;`",
+    ),
 ];
 
 /// Changes to the README's own lines, each from one text to another, with the message each must
@@ -1126,7 +1148,7 @@ const README_EDIT_REGRESSIONS: [(&str, &str, &str, &str); 10] = [
         "section as an image",
         "## Install\n",
         "## ![Install](x.png)\n",
-        "has an empty `##` heading",
+        MARKUP,
     ),
     (
         "empty title",
@@ -1259,7 +1281,7 @@ const INDEX_REGRESSIONS: [(&str, &str, &str); 21] = [
 
 /// README snippets that GitHub renders without an extra heading, each placed at the end of the
 /// `Install` section. Each must pass.
-const README_FALSE_POSITIVES: [(&str, &str); 19] = [
+const README_FALSE_POSITIVES: [(&str, &str); 22] = [
     ("comment over paragraphs", "<!--\n\n## Old section\n\n-->"),
     ("pre block", "<pre>\n\n# a comment\n</pre>"),
     ("source tag", "<source>x\n## Hidden"),
@@ -1309,6 +1331,20 @@ const README_FALSE_POSITIVES: [(&str, &str); 19] = [
         "<div align=\"center\">\n\n[![CI](https://example.com/ci.svg)](https://example.com/ci)\n\n</div>",
     ),
     ("inline element", "Press <kbd>Ctrl</kbd> and <kbd>C</kbd>."),
+    (
+        "picture whose source names a header image",
+        "<picture>\n  <source media=\"(prefers-color-scheme: dark)\" \
+         srcset=\"docs/header-dark.png\">\n  <img src=\"docs/header.png\" alt=\"Demo\" \
+         width=\"400\">\n</picture>",
+    ),
+    (
+        "link to a URL ending in a slash",
+        "<a href=https://example.com/>the site</a>",
+    ),
+    (
+        "search and form on one line",
+        "<search><form>x</form></search>",
+    ),
 ];
 
 /// The line of the fixture's index entry for `docs/install.md`.
@@ -1673,4 +1709,40 @@ fn a_link_with_an_empty_path_part_doesnt_link_a_page() {
             "[docs_index] docs/guides/setup.md: No page in `docs/` links this page",
         );
     }
+}
+
+#[test]
+fn a_closing_tag_after_unclosed_html_isnt_reported_again() {
+    let project = Project::new();
+    project.write(
+        "README.md",
+        &readme_with_install("<div title=\"\n\n</details>"),
+    );
+    let run = project.check();
+    run.assert_reports(1, UNCLOSED);
+    assert!(
+        !run.stdout.contains("closes `</details>`"),
+        "the closing tag after unclosed HTML isn't reported: {run:#?}"
+    );
+    run.assert_reports(1, "1 structure rule violation(s)");
+}
+
+#[test]
+fn a_page_may_start_with_comments_before_its_title() {
+    let project = Project::new();
+    project.write(
+        "docs/install.md",
+        "<!-- SPDX-License-Identifier: MIT -->\n\n# Install\n\nFor people who run the demo.\n",
+    );
+    project
+        .check()
+        .assert_reports(0, "All 12 structure rules hold");
+    project.write(
+        "docs/install.md",
+        "<!-- SPDX-License-Identifier: MIT -->\n\nText.\n\n# Install\n\nFor people.\n",
+    );
+    project.check().assert_reports(
+        1,
+        "[docs_layout] docs/install.md: It doesn't start with a `# Title` line.",
+    );
 }

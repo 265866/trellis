@@ -202,8 +202,9 @@ fn resolved_links(node: Node<'_>, directory: &str) -> Vec<String> {
 }
 
 /// The file `target`, a link in a file in `directory`, points to, relative to the root and
-/// without a `#anchor`, or `None` if it names a URL, starts with `/` or leaves the repository.
-fn resolve(directory: &str, target: &str) -> Option<String> {
+/// without a `#anchor`. `None` if it names a URL, starts with `/`, has an empty or `.` part
+/// other than a leading `./`, or leaves the repository. Both docs rules read paths with it.
+pub(crate) fn resolve(directory: &str, target: &str) -> Option<String> {
     let path = target.split_once('#').map_or(target, |(path, _)| path);
     let path = path.strip_prefix("./").unwrap_or(path);
     let before_path = path.split('/').next().unwrap_or(path);

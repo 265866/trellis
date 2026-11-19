@@ -35,7 +35,7 @@ const NO_PARAGRAPH: &str = "Its title isn't followed by a paragraph: the blank l
 /// What a file with HTML that doesn't close is told, after the line it opens on.
 const UNCLOSED_HTML: &str = "opens HTML that doesn't close: a comment, a tag or a quoted \
                              attribute value. It can hide what follows from readers; close it \
-                             in the same HTML block.";
+                             in the same HTML block, or write a literal `<` as `&lt;`.";
 
 /// Checks the layout of the docs, as `docs_files` and `readme_sections` in
 /// `[workspace.metadata.policy]` set it. It reads Markdown with comrak, set up to parse as
@@ -52,7 +52,7 @@ const UNCLOSED_HTML: &str = "opens HTML that doesn't close: a comment, a tag or 
 ///   or escapes, then `: ` and a description whose rendered text has a letter in it, on a line
 ///   that ends in `.`;
 /// - every page, a `.md` file at any depth under `docs/`, starts with a `#` line with text in
-///   it, then a blank line and a paragraph with words in it outside images;
+///   it, after any comments, then a blank line and a paragraph with words in it outside images;
 /// - neither the readme nor a page has an HTML block with a comment, a tag or a quoted
 ///   attribute value that doesn't close in it, or an HTML element whose tags don't balance
 ///   between one top-level heading of level 1 or 2 and the next, which can hide what follows or
@@ -218,7 +218,10 @@ fn readme_problems(readme: &Markdown<'_>, sections: Option<&[String]>) -> Vec<St
                  heading must be a top-level `##` line.",
                 heading.last_line
             ));
-        } else if heading.level == 2 && !heading.setext && heading.text.trim().is_empty() {
+        } else if heading.level == 2
+            && !heading.setext
+            && heading_source(readme, heading).is_empty()
+        {
             problems.push(format!(
                 "Line {} has an empty `##` heading. Give the section its name, such as \
                  `## Install`.",
@@ -266,16 +269,24 @@ fn html_problems(markdown: &Markdown<'_>) -> Vec<String> {
             line,
             name,
             closing,
+            optional_end,
         } = element;
         problems.push(if closing {
             format!(
                 "Line {line} closes `</{name}>`, which no `<{name}>` open in its section \
                  matches. Remove it, or open the element in the same section."
             )
+        } else if optional_end {
+            format!(
+                "Line {line} opens `<{name}>`, which doesn't close before the next section. \
+                 Close it; trellis requires every element closed in its section. Or write a \
+                 literal `<` as `&lt;`."
+            )
         } else {
             format!(
                 "Line {line} opens `<{name}>`, which doesn't close before the next section, so \
-                 GitHub renders what follows inside it. Close it in the same section."
+                 GitHub renders what follows inside it. Close it in the same section, or write \
+                 a literal `<` as `&lt;`."
             )
         });
     }
@@ -285,20 +296,26 @@ fn html_problems(markdown: &Markdown<'_>) -> Vec<String> {
 /// Whether `heading`, an ATX heading of `readme`, is written as plain text: its line is its
 /// text, with only the `#` characters and spaces around it.
 fn is_plain(readme: &Markdown<'_>, heading: &Heading) -> bool {
+    let source = heading_source(readme, heading);
+    !source.is_empty() && source == heading.text
+}
+
+/// The source of `heading`, an ATX heading of `readme`: its line without the `#` characters
+/// and the spaces around it.
+fn heading_source<'text>(readme: &Markdown<'text>, heading: &Heading) -> &'text str {
     let source = readme
         .line(heading.last_line)
         .trim()
         .trim_start_matches('#')
         .trim();
     let open = source.trim_end_matches('#');
-    let name = if open.is_empty() {
+    if open.is_empty() {
         open
     } else if open.ends_with([' ', '\t']) {
         open.trim_end()
     } else {
         source
-    };
-    !name.is_empty() && name == heading.text
+    }
 }
 
 /// What is wrong with the title of `readme`, whose headings are `headings`, or `None` if it has
@@ -486,24 +503,23 @@ fn link_problem(source_line: &str, paragraph: Node<'_>) -> Option<&'static str> 
     None
 }
 
-/// Whether the link target `target` is a relative path to a file: no scheme such as `https:`,
-/// no leading `/` or `#`, no empty part such as `//` or a trailing `/`, no `.` part but a
-/// leading `./`, and no `..` part that leaves the repository.
+/// Whether the link target `target` is a relative path to a file, as [`docs_index::resolve`]
+/// reads one from the root, with no `..` part at all.
 fn is_relative(target: &str) -> bool {
-    let path = target.split('#').next().unwrap_or(target);
-    let path = path.strip_prefix("./").unwrap_or(path);
-    let before_path = path.split('/').next().unwrap_or(path);
-    !path.is_empty()
-        && !path.split('/').any(|part| matches!(part, "" | "." | ".."))
-        && !before_path.contains(':')
+    !target.split('/').any(|part| part == "..") && docs_index::resolve("", target).is_some()
 }
 
 /// What keeps `page` from opening with a `# Title` line, a blank line and a paragraph, or `None`
-/// if it does.
+/// if it does. Comments may come before the title.
 fn page_problem(page: &Markdown<'_>) -> Option<&'static str> {
-    let blocks = page.blocks();
+    let mut blocks = page.blocks();
+    let comments = blocks
+        .iter()
+        .take_while(|block| markdown::is_comment(block))
+        .count();
+    blocks.drain(..comments);
     let title = blocks.first().filter(|title| {
-        markdown::first_line(title) == 1
+        (comments > 0 || markdown::first_line(title) == 1)
             && markdown::heading(title).is_some_and(|heading| heading.level == 1 && !heading.setext)
             && !markdown::text(title).trim().is_empty()
     });
