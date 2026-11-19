@@ -35,7 +35,7 @@ default:
 
 # Runs every check CI runs.
 {%- endraw %}
-ci: fmt-check typos actionlint zizmor shear deny links policy lint dylint test docs build-release{{ ' notices' if kind != 'library' else '' }}{{ ' package' if kind == 'library' and publish_crate else '' }} rule-changes
+ci: fmt-check typos actionlint zizmor shear deny links policy lint dylint test docs build-release{{ ' notices' if kind != 'library' else '' }}{{ ' web-check web-build' if web_ui else '' }}{{ ' package' if kind == 'library' and publish_crate else '' }} rule-changes
 {%- raw %}
 
 # Installs the pinned toolchains: stable, the nightly rustfmt, and the lints' nightly.
@@ -99,12 +99,16 @@ shear:
     cargo shear
 
 # Checks dependencies for advisories, licenses, bans and sources.
-deny:
+{%- endraw %}
+deny:{{ ' web-audit' if web_ui else '' }}
+{%- raw %}
     cargo deny --locked check
 
 # Checks that every relative link and anchor in the Markdown files resolves.
 links:
-    lychee --offline --include-fragments --no-progress --exclude-path target './**/*.md'
+{%- endraw %}
+    lychee --offline --include-fragments --no-progress --exclude-path target{{ ' --exclude-path crates/' ~ crate_name ~ '/web/node_modules' if web_ui else '' }} './**/*.md'
+{%- raw %}
 
 # The structure rules: workspace lints, manifests, build scripts, config files, crate
 # dependencies, the release changelog, the docs index, and the docs layout that `docs_files` and
@@ -148,7 +152,7 @@ build-release:
 #
 # Writes the license notices every release ships to target/THIRD-PARTY-LICENSES.html.
 [unix]
-notices:
+notices:{% endraw %}{{ ' web-notices' if web_ui else '' }}{% raw %}
     #!/usr/bin/env bash
     set -uo pipefail
     mkdir -p target
@@ -159,7 +163,7 @@ notices:
 
 # Writes the license notices every release ships to target/THIRD-PARTY-LICENSES.html.
 [windows]
-notices:
+notices:{% endraw %}{{ ' web-notices' if web_ui else '' }}{% raw %}
     New-Item -ItemType Directory -Force target > $null; $log = cargo about generate --locked --fail about.hbs -o target/THIRD-PARTY-LICENSES.html 2>&1; $status = $LASTEXITCODE; $log | ForEach-Object { [Console]::Error.WriteLine("$_") }; if ($status -ne 0 -or $log) { exit 1 }
 {%- endraw %}
 {%- endif %}
@@ -176,8 +180,41 @@ rule-changes base="origin/main": install-policy
 {%- if kind != 'library' %}
 
 # Runs it; put its own arguments after `--`.
-run *args:
+run *args:{{ ' web-build' if web_ui else '' }}
     cargo run --locked --package {{ crate_name }} -- {% raw %}{{ args }}{% endraw %}
+{%- endif %}
+{%- if web_ui %}
+
+# Where the service finds the web UI's build, which `just run` builds first. The image sets it to
+# where it puts the build.
+export {{ crate_name | upper }}_WEB_DIR := justfile_directory() / "crates" / "{{ crate_name }}" / "web" / "dist"
+
+# Installs the web UI's packages, exactly as bun.lock lists them.
+[working-directory("crates/{{ crate_name }}/web")]
+web-install:
+    bun install --frozen-lockfile
+
+# Checks the web UI with its `check` script, which type-checks it.
+[working-directory("crates/{{ crate_name }}/web")]
+web-check: web-install
+    bun run check
+
+# Builds the web UI into crates/{{ crate_name }}/web/dist.
+[working-directory("crates/{{ crate_name }}/web")]
+web-build: web-install
+    bun run build
+
+# Checks the web UI's packages for advisories.
+[working-directory("crates/{{ crate_name }}/web")]
+web-audit:
+    bun audit
+
+# Every installed package is listed, dev ones included, since the bundle can hold any of them. It
+# fails on a license about.toml doesn't accept.
+#
+# Writes the web UI's license notices to target/THIRD-PARTY-LICENSES-WEB.txt.
+web-notices: web-install install-policy
+    {% raw %}{{ trellis_policy }}{% endraw %} web-notices about.toml crates/{{ crate_name }}/web/node_modules target/THIRD-PARTY-LICENSES-WEB.txt
 {%- endif %}
 {%- if kind == 'library' and publish_crate %}
 

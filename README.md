@@ -37,11 +37,12 @@ uvx copier copy https://github.com/265866/trellis.git my-project
 ```
 
 It asks for a name, a description, what the project ships (a binary, a container service or a
-library), whether the repository is public or private, the platforms and a license, then prints
-the next steps. Commit the project, then follow the "Before the first push" section of the
-generated `docs/maintaining.md`. It creates the repository on GitHub, runs `just setup-github` to
-set it up, and pushes. On Windows, run `just setup-github` and `just check-github` in Git Bash.
-Then install the tools that the generated `CONTRIBUTING.md` lists, and run every check:
+library), whether the repository is public or private, the platforms, whether a service has a web
+UI built with Bun, and a license, then prints the next steps. Commit the project, then follow the
+"Before the first push" section of the generated `docs/maintaining.md`. It creates the repository
+on GitHub, runs `just setup-github` to set it up, and pushes. On Windows, run `just setup-github`
+and `just check-github` in Git Bash. Then install the tools that the generated `CONTRIBUTING.md`
+lists, and run every check:
 
 ```sh
 cd my-project

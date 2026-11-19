@@ -1,0 +1,14 @@
+/target
+
+# Local agent and editor state. A tracked agent file still fails `just policy`.
+/.claude/
+.DS_Store
+/.idea/
+/.vscode/
+*.swp
+{%- if web_ui %}
+
+# The web UI's packages and build.
+/crates/{{ crate_name }}/web/node_modules/
+/crates/{{ crate_name }}/web/dist/
+{%- endif %}

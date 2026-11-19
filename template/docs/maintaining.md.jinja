@@ -67,7 +67,9 @@ Commit the generated project on a branch named `main` (`git init --initial-branc
 
 3. Install the [Renovate app](https://github.com/apps/renovate) on the repository. Each week it
    opens one pull request with the crate updates other than major ones, and one for each major
-   update. The toolchain, tool, action and image pins arrive with trellis updates.
+   update.
+{%- if web_ui %} It does the same for the web UI's packages.{% endif %} The toolchain, tool, action
+   and image pins{% if web_ui %}, Bun's included,{% endif %} arrive with trellis updates.
 
 4. Create a [fine-grained token](https://github.com/settings/personal-access-tokens/new) for
    this repository only, with read and write access to contents and to pull requests. A pull

@@ -23,6 +23,9 @@ need admin rights on the repository or the release token, so `just ci` leaves th
 {%- endif %} |
 | `crates/{{ crate_name }}_core` | The logic, apart from the binary so tests can use it. |
 {%- endif %}
+{%- if web_ui %}
+| `crates/{{ crate_name }}/web` | The web UI, a Bun app. trellis needs only its `check` and `build` scripts, and `build` to write the UI to `dist/`. The image puts that build in `/usr/share/{{ project_name }}/web`, and `just run` builds it into `dist/`; both name the directory in `{{ crate_name | upper }}_WEB_DIR`, for the service to read when it serves the UI. |
+{%- endif %}
 
 Add a row for each crate you add, in the same pull request as the rule change that allows it.
 
@@ -31,6 +34,9 @@ Add a row for each crate you add, in the same pull request as the rule change th
 Install [rustup](https://rustup.rs/), [cargo-binstall](https://github.com/cargo-bins/cargo-binstall),
 [uv](https://docs.astral.sh/uv/), [Go](https://go.dev/dl/) for actionlint, and
 [shellcheck](https://www.shellcheck.net/) 0.11.0, which actionlint runs on the workflows' scripts.
+{%- if web_ui %}
+Install [Bun](https://bun.com/) 1.4.4, the version CI and the image build the web UI with.
+{%- endif %}
 {%- if kind != 'service' and 'windows' in platforms %} On
 Windows, also install the [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
 with the "Desktop development with C++" workload, which Rust's MSVC toolchain links with.
@@ -63,7 +69,7 @@ The options in `rustfmt.toml` exist only in nightly rustfmt. For rust-analyzer, 
 | `just typos` | Spelling. |
 | `just actionlint`, `just zizmor` | The GitHub workflows, and their security. |
 | `just shear` | Every declared dependency is used. |
-| `just deny` | Advisories, licenses, banned crates and sources (`deny.toml`). |
+| `just deny` | Advisories, licenses, banned crates and sources (`deny.toml`){{ ', and advisories for the web UI\'s packages (`just web-audit`)' if web_ui else '' }}. |
 | `just links` | Every relative link and anchor in the Markdown files. |
 | `just policy` | The structure and docs rules that [docs/style.md](docs/style.md#checked-by-tools) lists. |
 | `just lint` | clippy on every target, warnings as errors. |
@@ -72,7 +78,10 @@ The options in `rustfmt.toml` exist only in nightly rustfmt. For rust-analyzer, 
 | `just docs` | The docs, private items included, warnings as errors. |
 | `just build-release` | The release build. |
 {%- if kind != 'library' %}
-| `just notices` | The license notices a release ships, in `target/THIRD-PARTY-LICENSES.html`. It fails on a license `about.toml` doesn't accept. |
+| `just notices` | The license notices a release ships, in `target/THIRD-PARTY-LICENSES.html`{{ ', and the web UI\'s in `target/THIRD-PARTY-LICENSES-WEB.txt` (`just web-notices`)' if web_ui else '' }}. It fails on a license `about.toml` doesn't accept. |
+{%- endif %}
+{%- if web_ui %}
+| `just web-check`, `just web-build` | The web UI's `check` script, and its build. |
 {%- endif %}
 {%- if kind == 'library' and publish_crate %}
 | `just package` | The crate's package holds the README and its license files. |
@@ -87,7 +96,8 @@ Then review the diff against the [review checklist](docs/style.md#checked-in-rev
 ### Advisories
 
 The Advisories workflow also runs `just deny` every week. A new advisory can fail a pull request
-that changed nothing; fix it with `cargo update -p <crate>` in its own pull request.
+that changed nothing; fix it with `cargo update -p <crate>`{% if web_ui %}, or for the web UI
+`bun update <package>` in its directory,{% endif %} in its own pull request.
 
 ## Code
 
