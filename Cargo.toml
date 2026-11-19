@@ -19,10 +19,15 @@ publish = false
 # `trellis-policy` reads `cargo metadata`, parses manifests, and lexes Rust sources with
 # proc-macro2's own lexer, which gives line numbers. It never writes TOML. It reads Markdown with
 # comrak, which implements cmark-gfm, the parser GitHub renders Markdown with, without its command
-# line or syntax highlighting. Its tests build git repositories in temporary directories.
+# line or syntax highlighting. It reads the `package.json` of each npm package a web UI installs
+# with serde_json, which cargo_metadata already depends on, and judges each one's license with
+# spdx, the crate cargo-about and cargo-deny judge licenses with, at the version cargo-deny uses.
+# Its tests build git repositories in temporary directories.
 cargo_metadata = "0.23.1"
 comrak = { version = "1.0.0", default-features = false }
 proc-macro2 = { version = "1.0.107", default-features = false, features = ["span-locations"] }
+serde_json = "1.0.154"
+spdx = "0.13.6"
 tempfile = "3.27.0"
 toml = { version = "0.9.8", default-features = false, features = ["parse", "serde", "std"] }
 
