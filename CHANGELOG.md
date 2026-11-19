@@ -6,6 +6,48 @@ part lists what a project's owner must do around the update: a rule that can fla
 a setting to change, or a step to do by hand. [CONTRIBUTING.md](CONTRIBUTING.md#release-trellis)
 has the versioning rule.
 
+## v0.5.0
+
+### Action required in projects
+
+- **Move your edits out of `AGENTS.md`.** `AGENTS.md` is now a title and a link to
+  `CONTRIBUTING.md`, which holds the rules `AGENTS.md` had: the layout table, product boundaries,
+  where docs go, the settings a new crate needs, platforms, the code rules, comments, silencing a
+  lint and where a rule belongs. If you edited `AGENTS.md`, such as adding a crate's row to its
+  layout table, Copier can leave conflict markers there. Take trellis's `AGENTS.md`, and add your
+  lines to the matching section of `CONTRIBUTING.md` in the update pull request.
+- **Replace a release token that lacks access.** The release workflow's "Update the release PR"
+  job now runs `just check-release-token` before release-plz. It fails and says why when the
+  `RELEASE_PLZ_TOKEN` secret has expired, been revoked or been mistyped, has no access to the
+  repository, belongs to an account that can't push, or can't write contents or pull requests. It
+  warns in the token's last 14 days. If the job fails after the update, store a new token with
+  `just set-release-token`. `docs/maintaining.md` says which access the token needs, under
+  "Before the first push".
+- **Stop agents from merging in the agent tool, if you relied on `AGENTS.md` for it.**
+  `AGENTS.md` no longer tells agents not to merge pull requests, push to `main` or run
+  `just setup-github`. The `main` ruleset still blocks pushes and requires checks, and the owner's
+  recipes still need admin rights, but whether an agent may merge is now only the agent tool's
+  setting.
+
+### Changed
+
+- `just set-release-token` reads a token without echoing it, runs the same check, and stores the
+  secret only if the token passes. `docs/maintaining.md` and the hints `just setup-github` prints
+  use it instead of `gh secret set`.
+- A service can build a web UI with Bun. A new question, `web_ui`, asked only for services and off
+  by default, adds a TypeScript starter in `crates/<crate>/web`; the `web-install`, `web-check`,
+  `web-build`, `web-audit` and `web-notices` recipes, with `web-check` and `web-build` in
+  `just ci` and `web-audit` in `just deny`; a Bun stage in the `Containerfile` that puts the build
+  in `/usr/share/<project>/web` and names it in `<CRATE>_WEB_DIR`; Bun in CI's `Quick checks` and
+  `Container image` jobs, the release workflow's image job and the Advisories workflow; and
+  Renovate's `bun` manager. The image's license notices also list every installed npm package, and
+  fail on a license `about.toml` doesn't accept.
+- A project without a web UI renders as before. An update never writes into `crates/`, so an
+  existing service that turns `web_ui` on, as "Change an answer" in `docs/maintaining.md` says,
+  gets the recipes and CI but brings its own app.
+- The before-commit review no longer asks for a fresh-context review subagent. It says to review
+  the diff against the checklist in `docs/style.md` and the Code section of `CONTRIBUTING.md`.
+
 ## v0.4.0
 
 ### Action required in projects
@@ -69,6 +111,61 @@ has the versioning rule.
 - What a private repository costs and lacks is in one place, "Change an answer" in
   `docs/maintaining.md`.
 
-## v0.3.0 and earlier
+## v0.3.0
 
-These releases have no notes. `git log` between their tags lists what changed.
+### Action required in projects
+
+- **In a private repository, change the visibility answer to private.** Copier now asks whether
+  the repository is public or private. The default, public, keeps an existing project as it was.
+  A binary's or service's release in a private repository stopped at the attestation step,
+  because GitHub attests only in public repositories unless the account has Enterprise Cloud.
+  Before the next release, merge the change that
+  `uvx copier update --defaults --vcs-ref=:current: --data visibility=private` makes. A published
+  library can't be private, because a private library can't publish to crates.io. Copier refuses
+  the answer until you also pass `--data publish_crate=false`.
+
+### Changed
+
+- The archives a binary's release workflow passes from its build jobs to its publish job expire
+  after 7 days.
+- A private project's releases skip attestation, and a service's image isn't signed, because a
+  keyless cosign signature would name the private repository in Sigstore's public log. Binaries
+  still ship `SHA256SUMS`, and the image still gets its version, minor and `latest` tags.
+- A private project's `CONTRIBUTING.md` drops the setup steps only a public repository needs. It
+  says that protecting `main` needs GitHub Pro, and that macOS and Windows minutes cost more.
+- In a private project, security reports go in issues, and the issue templates no longer link to
+  private advisories.
+- A private project's install docs explain how to sign in to `ghcr.io` with a classic
+  `read:packages` token and how to fetch the repository with Git credentials.
+- A private library can't publish to crates.io, and Copier says so.
+- Except in a published library, `CONTRIBUTING.md` says how to switch between public and private.
+  That includes deleting a service's public `ghcr.io` package before it goes private, because
+  GitHub can't make a public package private again.
+
+## v0.2.0
+
+### Action required in projects
+
+- **Fix what the new `docs_layout` rule and the stricter `docs_index` rule report.**
+  `just policy` checks a 12th rule, `docs_layout`. The files in `docs_files` must exist.
+  `README.md` must have one `#` title and exactly the `##` sections in `readme_sections`, in
+  order. Its Documentation section must hold only `- [Title](path): description.` entries, each
+  description ending in `.`. Every page in `docs/` must open with a title, a blank line and a
+  paragraph, and no HTML may be left open. `docs_index` now counts only links in the README's
+  Documentation section, so a page linked only from elsewhere in the README fails, and a page in a
+  subdirectory of `docs/` must be linked from a page in the directory above it. The update adds
+  both settings to `[workspace.metadata.policy]` in `Cargo.toml`. A README or docs page you edited
+  may fail until it has that shape.
+
+### Changed
+
+- `AGENTS.md` has a Docs section and `docs/style.md` a Documentation section. They cover a short
+  README with fixed sections, one page per reader task linked from the index, the page shape and
+  voice, where design decisions and compatibility promises go, and updating a page in the same
+  pull request as the change.
+
+## v0.1.0
+
+The first release. It generates a binary, service or library workspace with trellis's custom
+lints, `trellis-policy` and its 11 structure rules, CI and release workflows, and the docs and
+agent rules a project starts with.
