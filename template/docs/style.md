@@ -337,6 +337,6 @@ No check decides these, so review does.
   marketing.
 - **Where things go.** Design decisions go in `docs/design.md`, and compatibility promises in
   `docs/stability.md`. release-plz writes `CHANGELOG.md`, which isn't edited by hand except as the
-  release steps in `CONTRIBUTING.md` say.
+  release steps in `docs/maintaining.md` say.
 - **Same pull request.** A change to user-facing behavior updates its page in the same pull
   request, and a change to the design updates `docs/design.md`.

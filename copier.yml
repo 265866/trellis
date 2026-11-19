@@ -51,7 +51,7 @@ kind:
   type: str
   help: What it ships
   choices:
-    A binary that people download: binary
+    A program that people download, such as a command-line tool or a desktop app: binary
     A long-running service shipped as a container image: service
     A library: library
 

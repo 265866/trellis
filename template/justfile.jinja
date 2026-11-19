@@ -42,6 +42,18 @@ install-toolchains:
     rustup toolchain install {{ nightly }} --profile minimal --component rustfmt
     rustup toolchain install {{ lints_nightly }} --profile minimal --component rustc-dev,llvm-tools-preview
 
+# Installs the check tools at the versions CI pins in `.github/workflows/`.
+install-tools:
+    cargo binstall --no-confirm cargo-deny@0.20.2 cargo-shear@1.14.0 cargo-nextest@0.9.150 lychee@0.24.2
+    cargo binstall --no-confirm cargo-dylint@6.3.0 dylint-link@6.3.0 typos-cli@1.51.1 taplo-cli@0.10.0
+{%- endraw %}
+{%- if kind != 'library' %}
+    cargo binstall --no-confirm cargo-about@0.9.3
+{%- endif %}
+{%- raw %}
+    go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+    uv tool install zizmor@1.31.1
+
 # The `trellis-policy` this project runs, installed under `target/` so each project keeps the one
 # its trellis commit pins. Recipes run from this directory, so the relative path works whatever
 # the project's path holds, spaces included, in sh and PowerShell alike.

@@ -32,14 +32,16 @@ uvx copier copy https://github.com/265866/trellis.git my-project
 ```
 
 It asks for a name, a description, what the project ships (a binary, a container service or a
-library), whether the repository is public or private, the platforms and a license. Then put it on
-GitHub, install the tools that the generated `CONTRIBUTING.md` lists, follow its "Set up once per
-repository" list, and run every check:
+library), whether the repository is public or private, the platforms and a license. Then commit
+it, follow the "Before the first push" section of the generated `docs/maintaining.md`, which
+creates the repository on GitHub, sets it up and pushes, install the tools that the generated
+`CONTRIBUTING.md` lists, and run every check:
 
 ```sh
 cd my-project
-git init && git add -A && git commit -m "chore: generate from trellis"
-gh repo create 265866/my-project --public --source . --push  # or --private
+git init --initial-branch main && git add -A && git commit -m "chore: generate from trellis"
+# Follow "Before the first push" in docs/maintaining.md, then:
+just install-tools
 just install-toolchains
 just ci
 ```
