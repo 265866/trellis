@@ -21,8 +21,8 @@ name: Rule changes
 # never count as a pass.
 #
 # A public repository needs an Actions policy that allows `pull_request_target` for this file, or
-# GitHub doesn't run it; a public project's docs/maintaining.md has the one command that adds the
-# policy. Private repositories don't need it.
+# GitHub doesn't run it; in a public project, `just setup-github` adds the policy. Private
+# repositories don't need it.
 
 on:
   # zizmor: ignore[dangerous-triggers] No job checks out, builds or runs the pull request's code; the job that runs the base branch's code can only read, and the jobs that write statuses run no repository code.

@@ -114,7 +114,8 @@ pins:
     versions=$(grep --only-matching --no-filename --extended-regexp \
       '\b[a-z][a-z0-9-]*@v?[0-9]+\.[0-9]+\.[0-9]+\b' \
       .github/workflows/*.yml template/.github/workflows/* justfile template/justfile.jinja \
-      CONTRIBUTING.md template/CONTRIBUTING.md.jinja tests/dependencies/*.sh | sed 's/@v/@/; s/^typos-cli@/typos@/; s/^taplo-cli@/taplo@/'
+      CONTRIBUTING.md template/CONTRIBUTING.md.jinja README.md copier.yml template/docs/maintaining.md.jinja \
+      tests/dependencies/*.sh | sed 's/@v/@/; s/^typos-cli@/typos@/; s/^taplo-cli@/taplo@/'
       sed -n 's/^ *version: \([0-9.]*\)$/release-plz@\1/p' template/.github/workflows/release.yml.jinja
       sed -n 's/.*\[shellcheck\]([^)]*) \([0-9.]*\),.*/shellcheck@\1/p' template/CONTRIBUTING.md.jinja)
     versions=$(sort --unique <<< "$versions")
@@ -308,7 +309,11 @@ shapes: (shape "binary") (shape "binary-windows-macos-dual") (shape "library-pub
 # Generates the project a user gets for `answers`, with the lints and the checker from GitHub rather
 # than this checkout, and runs the checks that don't fetch them: formatting, spelling, the
 # workflows, dependencies, links, the license notices, and this checkout's `trellis-policy check`. A
-# published library must also package the README and its licenses.
+# published library must also package the README and its licenses. The copy runs without
+# `--quiet`, so Copier prints the next steps, which must name the repository and install just.
+# `just setup-github --dry-run` must print the required checks and the label, and the Actions policy
+# and vulnerability reporting only for a public repository, without calling `gh`. `just
+# check-github` runs against the fixtures in tests/check-github/.
 #
 # Checks the project a user gets for one set of answers.
 shape answers:
@@ -329,15 +334,38 @@ shape answers:
     out=$(mktemp -d)
     trap 'rm -rf "$out"' EXIT
     project="$out/demo-shape"
-    uv tool run copier@9.19.1 copy --quiet --defaults --vcs-ref HEAD \
+    fail() { echo "error: {{ answers }}: $1" >&2; exit 1; }
+    has() { grep --quiet --fixed-strings -- "$2" <<< "$1"; }
+    copied=$(uv tool run copier@9.19.1 copy --defaults --vcs-ref HEAD \
       --data project_name=demo-shape \
       --data "description=A demo that trellis generates for its tests." \
-      "${data[@]}" "$trellis" "$project"
+      "${data[@]}" "$trellis" "$project" 2>&1) || { echo "$copied" >&2; exit 1; }
+    has "$copied" 'Follow "Before the first push" in docs/maintaining.md. It creates 265866/demo-shape' \
+      || fail "Copier didn't print the next steps"
+    has "$copied" 'cargo binstall just@' || fail "Copier's next steps don't install just"
     cd "$project"
     git init --quiet --initial-branch main
     for recipe in fmt-check typos actionlint zizmor shear deny links; do
       just "$recipe"
     done
+    mkdir "$out/bin"
+    printf '#!/bin/sh\necho "error: the dry run called gh" >&2\nexit 1\n' > "$out/bin/gh"
+    chmod +x "$out/bin/gh"
+    dry_run=$(PATH="$out/bin:$PATH" just setup-github --dry-run)
+    for expected in '"context": "PR title", "integration_id": 15368' '"context": "CI passed", "integration_id": 15368' \
+      '"context": "Rule changes stand alone", "integration_id": 15368' '"allow_merge_commit": false' \
+      'POST repos/265866/demo-shape/labels' '"name": "release"' 'POST repos/265866/demo-shape/rulesets'; do
+      has "$dry_run" "$expected" || fail "the setup-github dry run lacks $expected"
+    done
+    public=$(grep --quiet '^visibility: public$' .copier-answers.yml && echo yes || echo no)
+    for public_only in 'repos/265866/demo-shape/actions/policies' 'PUT repos/265866/demo-shape/private-vulnerability-reporting'; do
+      if has "$dry_run" "$public_only"; then
+        [ "$public" = yes ] || fail "the setup-github dry run of a private repository has $public_only"
+      else
+        [ "$public" = no ] || fail "the setup-github dry run of a public repository lacks $public_only"
+      fi
+    done
+    "$trellis/tests/check-github/test.sh" "$project"
     if [ -f about.toml ]; then
       just notices
     fi

@@ -25,21 +25,28 @@ generates starts with:
 
 ## Generate a project
 
-You need [uv](https://docs.astral.sh/uv/) and [rustup](https://rustup.rs/).
+You need [uv](https://docs.astral.sh/uv/), [rustup](https://rustup.rs/) and
+[cargo-binstall](https://github.com/cargo-bins/cargo-binstall), and [gh](https://cli.github.com/) to
+set up the repository. Install the [just](https://just.systems/) version that generated projects
+pin; an older one can't read their `justfile`:
 
 ```sh
+cargo binstall just@1.59.0
 uvx copier copy https://github.com/265866/trellis.git my-project
 ```
 
 It asks for a name, a description, what the project ships (a binary, a container service or a
-library), whether the repository is public or private, the platforms and a license. Then commit
-it, follow the "Before the first push" section of the generated `docs/maintaining.md`, which
-creates the repository on GitHub, sets it up and pushes, install the tools that the generated
-`CONTRIBUTING.md` lists, and run every check:
+library), whether the repository is public or private, the platforms and a license, then prints
+the next steps. Commit the project, then follow the "Before the first push" section of the
+generated `docs/maintaining.md`. It creates the repository on GitHub, runs `just setup-github` to
+set it up, and pushes. On Windows, run `just setup-github` and `just check-github` in Git Bash.
+Then install the tools that the generated `CONTRIBUTING.md` lists, and run every check:
 
 ```sh
 cd my-project
-git init --initial-branch main && git add -A && git commit -m "chore: generate from trellis"
+git init --initial-branch main
+git add -A
+git commit -m "chore: generate from trellis"
 # Follow "Before the first push" in docs/maintaining.md, then:
 just install-tools
 just install-toolchains
