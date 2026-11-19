@@ -67,10 +67,10 @@ links:
     lychee --offline --include-fragments --no-progress --exclude-path target --exclude-path lints/target --exclude-path template './**/*.md'
 
 # Checks that the template pins the same toolchains as this repository and its lints, that the
-# config files and workflows both keep are the same, that both `[workspace.lints]` tables agree
-# apart from the library-only lints, that the versions template/dylint.toml.jinja says trellis read
-# each trusted macro crate at are the ones tests/dependencies/setup.sh pins, and that every tool has
-# one version wherever it's pinned.
+# config files and workflows both keep are the same apart from the Advisories workflow's web UI
+# step, that both `[workspace.lints]` tables agree apart from the library-only lints, that the
+# versions template/dylint.toml.jinja says trellis read each trusted macro crate at are the ones
+# tests/dependencies/setup.sh pins, and that every tool has one version wherever it's pinned.
 #
 # Checks that pinned versions and the shared config files agree.
 pins:
@@ -114,12 +114,18 @@ pins:
       status=1
     fi
     for file in rustfmt.toml clippy.toml .taplo.toml .editorconfig .gitattributes .config/nextest.toml docs/style.md \
-      .github/workflows/pr-title.yml .github/workflows/deny.yml; do
+      .github/workflows/pr-title.yml; do
       if ! cmp --quiet "$file" "template/$file"; then
         echo "error: $file differs from template/$file" >&2
         status=1
       fi
     done
+    # The template's Advisories workflow adds a step only a project with a web UI gets.
+    if ! diff .github/workflows/deny.yml \
+      <(sed "/^{%- if web_ui %}$/,/^{%- endif %}$/d" template/.github/workflows/deny.yml.jinja) >&2; then
+      echo "error: .github/workflows/deny.yml differs from template/.github/workflows/deny.yml.jinja" >&2
+      status=1
+    fi
     # The template's lints tables add a block only a library gets.
     lints_tables() {
       awk '/^\[/ { inside = ($0 ~ /^\[workspace\.lints\./) } inside' "$1" \
@@ -174,7 +180,10 @@ pins:
       CONTRIBUTING.md template/CONTRIBUTING.md.jinja README.md copier.yml template/docs/maintaining.md.jinja \
       tests/dependencies/*.sh | sed 's/@v/@/; s/^typos-cli@/typos@/; s/^taplo-cli@/taplo@/'
       sed -n 's/^ *version: \([0-9.]*\)$/release-plz@\1/p' template/.github/workflows/release.yml.jinja
-      sed -n 's/.*\[shellcheck\]([^)]*) \([0-9.]*\),.*/shellcheck@\1/p' template/CONTRIBUTING.md.jinja)
+      sed -n 's/.*\[shellcheck\]([^)]*) \([0-9.]*\),.*/shellcheck@\1/p' template/CONTRIBUTING.md.jinja
+      sed -n 's/.*\[Bun\]([^)]*) \([0-9.]*\),.*/bun@\1/p' template/CONTRIBUTING.md.jinja
+      sed -n 's/^ *bun-version: \([0-9.]*\)$/bun@\1/p' .github/workflows/*.yml template/.github/workflows/*
+      sed -n 's#.*docker\.io/oven/bun:\([0-9.]*\)-slim@.*#bun@\1#p' template/Containerfile.jinja)
     versions=$(sort --unique <<< "$versions")
     for tool in $(cut -d@ -f1 <<< "$versions" | uniq --repeated); do
       echo "error: $tool is pinned to more than one version:" $(grep "^$tool@" <<< "$versions") >&2
@@ -223,7 +232,7 @@ lints-test:
     cargo test --locked
 
 # Runs `template` for every kind, then `shapes`, `dependencies` and `update`.
-templates: (template "binary") (template "service") (template "library") shapes dependencies update
+templates: (template "binary") (template "service") (template "service" "ci" "false" "true") (template "library") shapes dependencies update
 
 # Copies the working tree into a scratch repository as two tagged trellis versions, generates a
 # library from the first, and edits it the way an owner would: its code and changelog, and a new
@@ -387,11 +396,12 @@ update:
 
 # Generates a project of one kind, `binary`, `service` or `library`, from the working tree, with
 # the lints and checker from this checkout, and runs `recipes` in it, `ci` by default. `true` as
-# `publish` makes a library a published one. After `ci`, a service also builds and runs its image
-# when Docker is installed.
+# `publish` makes a library a published one, and `true` as `web` gives a service a web UI. After
+# `ci`, a service also builds and runs its image when Docker is installed, and a web UI's build and
+# license notices must be in it.
 #
 # Generates a project of one kind and runs its checks.
-template kind recipes="ci" publish="false":
+template kind recipes="ci" publish="false" web="false":
     #!/usr/bin/env bash
     set -euo pipefail
     trellis="{{ replace(justfile_directory(), '\', '/') }}"
@@ -408,6 +418,7 @@ template kind recipes="ci" publish="false":
       --data kind={{ kind }} \
       --data trellis_path="$trellis" \
       $( [ "{{ publish }}" = true ] && echo "--data publish_crate=true --data license=MIT" ) \
+      $( [ "{{ web }}" = true ] && echo "--data web_ui=true" ) \
       "$trellis" "$project"
     cd "$project"
     git init --quiet --initial-branch main
@@ -420,6 +431,17 @@ template kind recipes="ci" publish="false":
     if [ "{{ recipes }}" = ci ] && [ "{{ kind }}" = service ] && command -v docker > /dev/null; then
       just image
       docker run --rm demo-service:dev --version
+      if [ "{{ web }}" = true ]; then
+        container=$(docker create demo-service:dev)
+        trap 'docker rm "$container" > /dev/null; rm -rf "$out"' EXIT
+        docker cp "$container:/usr/share/demo-service/web/index.html" "$out/index.html"
+        grep --quiet 'src="./index-[a-z0-9]*\.js"' "$out/index.html" || { echo "error: the image's web UI isn't the build" >&2; exit 1; }
+        docker cp "$container:/usr/share/doc/demo-service/THIRD-PARTY-LICENSES-WEB.txt" "$out/notices.txt"
+        grep --quiet typescript "$out/notices.txt" || { echo "error: the image's web notices don't list typescript" >&2; exit 1; }
+        docker image inspect --format '{{{{ json .Config.Env }}' demo-service:dev \
+          | grep --quiet '"DEMO_SERVICE_WEB_DIR=/usr/share/demo-service/web"' \
+          || { echo "error: the image doesn't name its web UI's directory in DEMO_SERVICE_WEB_DIR" >&2; exit 1; }
+      fi
     fi
 
 # tests/dependencies/setup.sh adds the dependencies most projects use (serde, serde_json,
@@ -515,6 +537,7 @@ shape answers:
       fi
     done
     "$trellis/tests/check-github/test.sh" "$project"
+    "$trellis/tests/check-release-token/test.sh" "$project"
     if [ -f about.toml ]; then
       just notices
     fi
@@ -522,4 +545,3 @@ shape answers:
       just package
     fi
     cargo run --locked --quiet --manifest-path "$trellis/Cargo.toml" --package trellis-policy -- check
-    "$trellis/tests/check-release-token/test.sh" "$project"

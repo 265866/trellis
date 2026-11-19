@@ -104,6 +104,12 @@ jobs:
             kind: service
             recipes: ci
             tools: just@1.59.0,cargo-deny@0.20.2,cargo-shear@1.14.0,typos@1.51.1,taplo@0.10.0,shellcheck@0.11.0,zizmor@1.31.1,lychee@0.24.2,cargo-nextest@0.9.150,cargo-dylint@6.3.0,dylint-link@6.3.0,uv@0.13.8,cargo-about@0.9.3
+          - name: service with a web UI
+            os: ubuntu-24.04
+            kind: service
+            web: "true"
+            recipes: ci
+            tools: just@1.59.0,cargo-deny@0.20.2,cargo-shear@1.14.0,typos@1.51.1,taplo@0.10.0,shellcheck@0.11.0,zizmor@1.31.1,lychee@0.24.2,cargo-nextest@0.9.150,cargo-dylint@6.3.0,dylint-link@6.3.0,uv@0.13.8,cargo-about@0.9.3
           - name: library
             os: ubuntu-24.04
             kind: library
@@ -144,6 +150,11 @@ jobs:
           just install-nightly-rustfmt
           cd lints && rustup toolchain install
 
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        if: matrix.web == 'true'
+        with:
+          bun-version: 1.4.4
+
       - name: Install actionlint
         if: runner.os == 'Linux'
         run: |
@@ -156,7 +167,8 @@ jobs:
           KIND: ${{ matrix.kind }}
           RECIPES: ${{ matrix.recipes }}
           PUBLISH: ${{ matrix.publish || 'false' }}
-        run: just template "$KIND" "$RECIPES" "$PUBLISH"
+          WEB: ${{ matrix.web || 'false' }}
+        run: just template "$KIND" "$RECIPES" "$PUBLISH" "$WEB"
 
   dependencies:
     name: Template with common dependencies

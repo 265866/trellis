@@ -58,6 +58,14 @@ jobs:
 
       - name: Install the pinned toolchains
         run: just install-toolchains
+{%- endraw %}
+{%- if web_ui %}
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.4
+{%- endif %}
+{%- raw %}
 
       # install-action has no actionlint package; the runner image has Go.
       - name: Install actionlint
@@ -85,6 +93,10 @@ jobs:
 {%- endraw %}
 {%- if kind != 'library' %}
       - run: just notices
+{%- endif %}
+{%- if web_ui %}
+      - run: just web-check
+      - run: just web-build
 {%- endif %}
 {%- raw %}
 
@@ -162,6 +174,12 @@ jobs:
 
       - name: Install the pinned toolchain
         run: rustup toolchain install
+{%- if web_ui %}
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.4
+{%- endif %}
 
       - name: Write the license notices the image carries
         run: just notices

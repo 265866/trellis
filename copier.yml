@@ -10,7 +10,7 @@ _message_after_copy: |
        git init --initial-branch main
        git add -A
        git commit -m "chore: generate from trellis"
-  2. Install gh (https://cli.github.com/) and cargo-binstall (https://github.com/cargo-bins/cargo-binstall), then the just version the project pins:
+  2. Install gh (https://cli.github.com/){% if web_ui %}, the Bun version CONTRIBUTING.md names{% endif %} and cargo-binstall (https://github.com/cargo-bins/cargo-binstall), then the just version the project pins:
        cargo binstall just@1.59.0
   3. Follow "Before the first push" in docs/maintaining.md. It creates {{ github_owner }}/{{ project_name }}
      as {{ visibility }}, runs `just setup-github`, which on Windows runs in Git Bash, and pushes main.
@@ -98,6 +98,14 @@ platforms:
   default: [linux, macos, windows]
   when: "{{ kind != 'service' }}"
   validator: "{% if not platforms %}Pick at least one platform.{% endif %}"
+
+web_ui:
+  type: bool
+  help: >-
+    Serve a web UI: a Bun app in `crates/<name>/web` that `just ci` checks and builds, and whose
+    build the container image ships. Most services don't need one.
+  default: false
+  when: "{{ kind == 'service' }}"
 
 publish_crate:
   type: bool

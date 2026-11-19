@@ -28,6 +28,21 @@ pub enum PolicyError {
         /// Why it didn't parse.
         source: de::Error,
     },
+    /// A JSON file, such as an npm package's `package.json`, didn't parse.
+    Json {
+        /// The file.
+        path: PathBuf,
+        /// Why it didn't parse.
+        source: serde_json::Error,
+    },
+    /// A file parsed but lacks what a command reads from it, such as the `accepted` array of an
+    /// `about.toml`.
+    Malformed {
+        /// The file.
+        path: PathBuf,
+        /// What is wrong with it.
+        message: String,
+    },
     /// The `[workspace.metadata.policy]` table of the root `Cargo.toml` is malformed.
     Config(String),
     /// A `git` command failed.
@@ -49,6 +64,10 @@ impl Display for PolicyError {
             Self::Parse { path, source } => {
                 write!(formatter, "{} isn't valid TOML: {source}", path.display())
             }
+            Self::Json { path, source } => {
+                write!(formatter, "{} isn't valid JSON: {source}", path.display())
+            }
+            Self::Malformed { path, message } => write!(formatter, "{}: {message}", path.display()),
             Self::Config(message) => write!(
                 formatter,
                 "the [workspace.metadata.policy] table of Cargo.toml is malformed: {message}"
@@ -64,7 +83,8 @@ impl Error for PolicyError {
             Self::Metadata(error) => Some(error),
             Self::Read { source, .. } => Some(source),
             Self::Parse { source, .. } => Some(source),
-            Self::Config(_) | Self::Git { .. } => None,
+            Self::Json { source, .. } => Some(source),
+            Self::Malformed { .. } | Self::Config(_) | Self::Git { .. } => None,
         }
     }
 }

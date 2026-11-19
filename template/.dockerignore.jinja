@@ -1,0 +1,8 @@
+.git
+target
+!target/THIRD-PARTY-LICENSES.html
+{%- if web_ui %}
+!target/THIRD-PARTY-LICENSES-WEB.txt
+crates/{{ crate_name }}/web/node_modules
+crates/{{ crate_name }}/web/dist
+{%- endif %}

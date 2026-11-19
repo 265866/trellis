@@ -1,10 +1,20 @@
 # The build stage reads rust-toolchain.toml, so the image builds with the same Rust as CI. trellis's
 # Renovate moves the pinned digests, and they arrive with trellis updates. `just notices` writes
-# target/THIRD-PARTY-LICENSES.html first; `just image` and the workflows run it.
+# the license notices under target/ first; `just image` and the workflows run it.
 FROM docker.io/library/rust:slim-trixie@sha256:6f14b2b4b278ec0d50aa1d69541c304ce0f95e0f6268487aa9924af1c2e9aebe AS build
 WORKDIR /src
 COPY . .
 RUN cargo build --locked --release --package {{ crate_name }}
+{%- if web_ui %}
+
+# The web UI builds with the Bun version the workflows and CONTRIBUTING.md pin, from its lockfile.
+FROM docker.io/oven/bun:1.4.4-slim@sha256:1846adf22496bd711036aae8be147e57bdebbaea2e5264e3e0b5af1db187d9a4 AS web
+WORKDIR /web
+COPY crates/{{ crate_name }}/web/package.json crates/{{ crate_name }}/web/bun.lock ./
+RUN bun install --frozen-lockfile
+COPY crates/{{ crate_name }}/web/ ./
+RUN bun run build
+{%- endif %}
 
 FROM gcr.io/distroless/cc-debian13:nonroot@sha256:cb87acc574abe719b6e5c547384defa2f7b1f24af9605d3f618cf852495d8be2
 LABEL org.opencontainers.image.source="https://github.com/{{ github_owner }}/{{ project_name }}" \
@@ -12,6 +22,11 @@ LABEL org.opencontainers.image.source="https://github.com/{{ github_owner }}/{{ 
 {%- if license != 'none' %} \
       org.opencontainers.image.licenses="{{ license }}"
 {%- endif %}
-COPY --from=build /src/target/THIRD-PARTY-LICENSES.html {{ {'MIT': '/src/LICENSE ', 'MIT OR Apache-2.0': '/src/LICENSE-MIT /src/LICENSE-APACHE '}.get(license, '') }}/usr/share/doc/{{ project_name }}/
+COPY --from=build /src/target/THIRD-PARTY-LICENSES.html {% if web_ui %}/src/target/THIRD-PARTY-LICENSES-WEB.txt {% endif %}{{ {'MIT': '/src/LICENSE ', 'MIT OR Apache-2.0': '/src/LICENSE-MIT /src/LICENSE-APACHE '}.get(license, '') }}/usr/share/doc/{{ project_name }}/
 COPY --from=build /src/target/release/{{ project_name }} /usr/local/bin/{{ project_name }}
+{%- if web_ui %}
+# The service reads {{ crate_name | upper }}_WEB_DIR to find the web UI it serves.
+COPY --from=web /web/dist /usr/share/{{ project_name }}/web
+ENV {{ crate_name | upper }}_WEB_DIR=/usr/share/{{ project_name }}/web
+{%- endif %}
 ENTRYPOINT ["/usr/local/bin/{{ project_name }}"]
