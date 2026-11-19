@@ -579,8 +579,8 @@ fn an_index_entry_that_isnt_a_link_and_a_description_fails() {
         1,
         "[docs_layout] README.md: The `## Documentation` entry \
          `[Contributing](https://example.com/CONTRIBUTING.md): how to help.` isn't an index \
-         entry: its link isn't a relative path to a file in the repository. Write each entry as \
-         `- [Title](path): what the reader does with it.`, with a relative path.",
+         entry: its link isn't a relative path to a file in the repository, written without \
+         entities or escapes.",
     );
     run.assert_reports(
         1,
@@ -892,7 +892,7 @@ const MARKUP: &str = "Write the heading as plain text";
 
 /// README snippets that GitHub renders as a heading, or that hide what follows, each placed at
 /// the end of the `Install` section, with the message each must fail with.
-const README_REGRESSIONS: [(&str, &str, &str); 45] = [
+const README_REGRESSIONS: [(&str, &str, &str); 56] = [
     ("setext in a list item", "- Extra\n  ---", NESTED),
     (
         "level-1 setext in a list item",
@@ -1034,11 +1034,58 @@ const README_REGRESSIONS: [(&str, &str, &str); 45] = [
         MARKUP,
     ),
     ("inline heading tags", "Text <h2>x</h2>.", HTML_HEADING),
+    (
+        "details left open with a code fence",
+        "<details>\n<summary>More</summary>\n\n```sh\nrun\n```",
+        "opens `<details>`, which doesn't close before the next section",
+    ),
+    (
+        "misspelled closing tag",
+        "<details>\n<summary>More</summary>\n\nText.\n\n</detail>",
+        "opens `<details>`, which doesn't close before the next section",
+    ),
+    (
+        "centered div left open",
+        "<div align=\"center\">\n\n[![CI](https://example.com/ci.svg)](https://example.com/ci)",
+        "opens `<div>`, which doesn't close before the next section",
+    ),
+    (
+        "select",
+        "<select>",
+        "opens `<select>`, which doesn't close",
+    ),
+    (
+        "here-document in a pre",
+        "<pre>\ncat <<EOF\nhi\nEOF\n</pre>",
+        UNCLOSED,
+    ),
+    (
+        "usage line in a pre",
+        "<pre>\nUsage: demo <file\n</pre>",
+        UNCLOSED,
+    ),
+    (
+        "quote in an attribute name",
+        "<div it's title=\"it's>\nx\n</div>",
+        UNCLOSED,
+    ),
+    (
+        "lowercase CDATA in a div",
+        "<div><![cdata[ x\n</div>",
+        UNCLOSED,
+    ),
+    (
+        "stray closing tag",
+        "Text.\n\n</div>",
+        "closes `</div>`, which no `<div>` open in its section",
+    ),
+    ("empty section heading", "##", "has an empty `##` heading"),
+    ("inline element left open", "<span>a", "opens `<span>`"),
 ];
 
 /// Changes to the README's own lines, each from one text to another, with the message each must
 /// fail with.
-const README_EDIT_REGRESSIONS: [(&str, &str, &str, &str); 9] = [
+const README_EDIT_REGRESSIONS: [(&str, &str, &str, &str); 10] = [
     (
         "comment hiding a section",
         "## Install\n",
@@ -1079,7 +1126,7 @@ const README_EDIT_REGRESSIONS: [(&str, &str, &str, &str); 9] = [
         "section as an image",
         "## Install\n",
         "## ![Install](x.png)\n",
-        MARKUP,
+        "has an empty `##` heading",
     ),
     (
         "empty title",
@@ -1093,10 +1140,16 @@ const README_EDIT_REGRESSIONS: [(&str, &str, &str, &str); 9] = [
         "# ![Demo](demo.png)\n",
         "Its `#` title has no text",
     ),
+    (
+        "section inside details",
+        "## Install\n",
+        "<details>\n\n## Install\n\n</details>\n",
+        "opens `<details>`, which doesn't close before the next section",
+    ),
 ];
 
 /// Index entries for `docs/install.md`, with the message each must fail with.
-const INDEX_REGRESSIONS: [(&str, &str, &str); 9] = [
+const INDEX_REGRESSIONS: [(&str, &str, &str); 21] = [
     (
         "space and angle brackets",
         "- [Install]( <docs/install.md>): install the demo.",
@@ -1142,11 +1195,71 @@ const INDEX_REGRESSIONS: [(&str, &str, &str); 9] = [
         "- [Install](docs/install.md: install the demo.",
         "doesn't start with a link",
     ),
+    (
+        "badge after the period",
+        "- [Install](docs/install.md): install the demo. ![badge](b.svg)",
+        "with nothing after it",
+    ),
+    (
+        "footnote after the period",
+        "- [Install](docs/install.md): install the demo.[^n]\n\n[^n]: A note.",
+        "with nothing after it",
+    ),
+    (
+        "HTML image after the period",
+        "- [Install](docs/install.md): install the demo. <img src=\"b.svg\">",
+        "with nothing after it",
+    ),
+    (
+        "linked image after the period",
+        "- [Install](docs/install.md): install the demo. [![b](b.svg)](x)",
+        "with nothing after it",
+    ),
+    (
+        "badges after the period",
+        "- [Install](docs/install.md): install the demo. ![a](a.svg) ![b](b.svg)",
+        "with nothing after it",
+    ),
+    (
+        "encoded mail scheme",
+        "- [Install](mailto&colon;a@b.co): install the demo.",
+        "without entities or escapes",
+    ),
+    (
+        "encoded web scheme",
+        "- [Install](https&colon;&sol;&sol;example.com): install the demo.",
+        "without entities or escapes",
+    ),
+    (
+        "encoded parent",
+        "- [Install](&period;&period;/x.md): install the demo.",
+        "without entities or escapes",
+    ),
+    (
+        "escaped parent",
+        "- [Install](\\.\\./x.md): install the demo.",
+        "without entities or escapes",
+    ),
+    (
+        "escaped anchor",
+        "- [Install](\\#install): install the demo.",
+        "without entities or escapes",
+    ),
+    (
+        "escaped root",
+        "- [Install](\\/docs/install.md): install the demo.",
+        "without entities or escapes",
+    ),
+    (
+        "dot part",
+        "- [Install](docs/install.md/.): install the demo.",
+        "isn't a relative path",
+    ),
 ];
 
 /// README snippets that GitHub renders without an extra heading, each placed at the end of the
 /// `Install` section. Each must pass.
-const README_FALSE_POSITIVES: [(&str, &str); 13] = [
+const README_FALSE_POSITIVES: [(&str, &str); 19] = [
     ("comment over paragraphs", "<!--\n\n## Old section\n\n-->"),
     ("pre block", "<pre>\n\n# a comment\n</pre>"),
     ("source tag", "<source>x\n## Hidden"),
@@ -1175,6 +1288,27 @@ const README_FALSE_POSITIVES: [(&str, &str); 13] = [
         "badges in a section",
         "[![CI](https://example.com/ci.svg)](https://example.com/ci)",
     ),
+    (
+        "spawn signature in a pre",
+        "<pre>\nfn spawn<F: 'static>(f: F)\n</pre>",
+    ),
+    (
+        "apostrophe in an unquoted value",
+        "<div title=it's>\nx\n</div>",
+    ),
+    (
+        "details with a code fence",
+        "<details>\n<summary>More</summary>\n\n```sh\nrun\n```\n\n</details>",
+    ),
+    (
+        "picture, image and break",
+        "<picture>\n<source srcset=\"a.png\">\n<img src=\"b.png\" alt=\"Logo\">\n</picture>\n\nLine one<br>line two.",
+    ),
+    (
+        "centered badges",
+        "<div align=\"center\">\n\n[![CI](https://example.com/ci.svg)](https://example.com/ci)\n\n</div>",
+    ),
+    ("inline element", "Press <kbd>Ctrl</kbd> and <kbd>C</kbd>."),
 ];
 
 /// The line of the fixture's index entry for `docs/install.md`.
@@ -1240,6 +1374,21 @@ fn readme_shapes_github_renders_without_a_heading_pass() {
         (
             "closing `#` sequence",
             README.replacen("## Install\n", "##  Install  ##\n", 1),
+        ),
+        (
+            "an SPDX comment before the title",
+            format!("<!-- SPDX-License-Identifier: MIT -->\n\n{README}"),
+        ),
+        (
+            "a comment in the index",
+            README.replace(
+                INSTALL_ENTRY,
+                &format!("<!-- markdownlint-disable MD013 -->\n\n{INSTALL_ENTRY}"),
+            ),
+        ),
+        (
+            "an index entry with a leading ./",
+            README.replace("](docs/install.md#linux)", "](./docs/install.md#linux)"),
         ),
         ("CRLF line breaks", README.replace('\n', "\r\n")),
         (
@@ -1513,7 +1662,7 @@ fn a_link_with_an_empty_path_part_doesnt_link_a_page() {
         "docs/guides/setup.md",
         "# Setup\n\nFor people who set up the demo.\n",
     );
-    for link in ["guides//setup.md", "guides/setup.md/"] {
+    for link in ["guides//setup.md", "guides/setup.md/", "guides/setup.md/."] {
         project.write(
             "docs/install.md",
             &format!("# Install\n\nFor people who run the demo. [Set it up]({link}).\n"),

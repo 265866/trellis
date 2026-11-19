@@ -36,8 +36,9 @@ pub(crate) const BYTE_ORDER_MARK: char = '\u{feff}';
 /// readers don't find.
 ///
 /// The links are the `Link` nodes comrak parses: inline and reference links and autolinks, but
-/// not text in code, in HTML or in an HTML comment. A path with an empty part, such as `a//b.md`
-/// or `a.md/`, links no page. `docs_layout` holds the index to inline links.
+/// not text in code, in HTML or in an HTML comment. A path with an empty or `.` part, such as
+/// `a//b.md`, `a.md/` or `a.md/.`, links no page; a leading `./` is fine. `docs_layout` holds
+/// the index to inline links.
 ///
 /// It reads the files git tracks and the untracked ones `.gitignore` doesn't exclude.
 ///
@@ -204,6 +205,7 @@ fn resolved_links(node: Node<'_>, directory: &str) -> Vec<String> {
 /// without a `#anchor`, or `None` if it names a URL, starts with `/` or leaves the repository.
 fn resolve(directory: &str, target: &str) -> Option<String> {
     let path = target.split_once('#').map_or(target, |(path, _)| path);
+    let path = path.strip_prefix("./").unwrap_or(path);
     let before_path = path.split('/').next().unwrap_or(path);
     if path.is_empty() || path.starts_with('/') || before_path.contains(':') {
         return None;
@@ -214,8 +216,7 @@ fn resolve(directory: &str, target: &str) -> Option<String> {
         .collect();
     for part in path.split('/') {
         match part {
-            "" => return None,
-            "." => {}
+            "" | "." => return None,
             ".." => {
                 parts.pop()?;
             }

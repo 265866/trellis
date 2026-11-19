@@ -19,6 +19,145 @@ pub(crate) struct Markdown<'tree> {
     lines: Vec<&'tree str>,
 }
 
+/// An HTML element whose tags don't balance within a section.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct Unbalanced {
+    /// The 1-based line of the tag.
+    pub(crate) line: usize,
+    /// The element's name, in lowercase.
+    pub(crate) name: String,
+    /// Whether the tag is a closing tag that no open element matches, rather than an opening
+    /// tag that doesn't close.
+    pub(crate) closing: bool,
+}
+
+/// A tag in HTML.
+#[derive(Clone, Debug)]
+struct Tag {
+    /// The element's name, in lowercase.
+    name: String,
+    /// Whether it is a closing tag, `</name>`.
+    closing: bool,
+    /// Whether it closes itself, `<name/>`.
+    self_closing: bool,
+    /// Its byte offset in the HTML.
+    offset: usize,
+}
+
+/// The HTML elements whose tags must balance within a section: the standard elements that have
+/// content. Void elements such as `<br>`, `<img>` and `<source>` have no closing tag, and a name
+/// HTML doesn't define, such as the `F:` of `spawn<F: 'static>`, is no element GitHub keeps.
+const ELEMENTS: [&str; 108] = [
+    "a",
+    "abbr",
+    "address",
+    "article",
+    "aside",
+    "audio",
+    "b",
+    "bdi",
+    "bdo",
+    "blockquote",
+    "body",
+    "button",
+    "canvas",
+    "caption",
+    "center",
+    "cite",
+    "code",
+    "colgroup",
+    "data",
+    "datalist",
+    "dd",
+    "del",
+    "details",
+    "dfn",
+    "dialog",
+    "dir",
+    "div",
+    "dl",
+    "dt",
+    "em",
+    "fieldset",
+    "figcaption",
+    "figure",
+    "font",
+    "footer",
+    "form",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "head",
+    "header",
+    "hgroup",
+    "html",
+    "i",
+    "iframe",
+    "ins",
+    "kbd",
+    "label",
+    "legend",
+    "li",
+    "main",
+    "map",
+    "mark",
+    "menu",
+    "meter",
+    "nav",
+    "noscript",
+    "object",
+    "ol",
+    "optgroup",
+    "option",
+    "output",
+    "p",
+    "picture",
+    "pre",
+    "progress",
+    "q",
+    "rp",
+    "rt",
+    "ruby",
+    "s",
+    "samp",
+    "script",
+    "search",
+    "section",
+    "select",
+    "slot",
+    "small",
+    "span",
+    "strike",
+    "strong",
+    "style",
+    "sub",
+    "summary",
+    "sup",
+    "table",
+    "tbody",
+    "td",
+    "template",
+    "textarea",
+    "tfoot",
+    "th",
+    "thead",
+    "time",
+    "title",
+    "tr",
+    "tt",
+    "u",
+    "ul",
+    "var",
+    "video",
+    "big",
+    "nobr",
+    "marquee",
+    "frameset",
+];
+
 /// A heading, written with `#` characters or underlined with `=` or `-`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Heading {
@@ -127,12 +266,63 @@ impl<'tree> Markdown<'tree> {
         let mut lines = Vec::new();
         for node in self.document.descendants() {
             if let NodeValue::HtmlBlock(block) = &node.data.borrow().value
-                && let Some(offset) = unclosed_html(&block.literal)
+                && let Err(offset) = html_tags(&block.literal)
             {
                 lines.push(first_line(node) + line_breaks(&block.literal[..offset]));
             }
         }
         lines
+    }
+
+    /// The HTML elements, of those [`ELEMENTS`] lists, whose tags don't balance within a
+    /// section: between the start of the file, each top-level heading of level 1 or 2, and the
+    /// end. An element left open makes GitHub render what follows inside it. Tags in code, in
+    /// comments and in HTML that doesn't close don't count; [`Self::unclosed_html_lines`] reports
+    /// the last. Neither does a `header` tag that [`github_block_tags`] wrote for a `<source>`
+    /// tag, an element with no content.
+    pub(crate) fn unbalanced_elements(&self) -> Vec<Unbalanced> {
+        let mut problems = Vec::new();
+        let mut open: Vec<Unbalanced> = Vec::new();
+        for block in self.document.children() {
+            if heading(block).is_some_and(|heading| heading.level <= 2) {
+                problems.append(&mut open);
+                continue;
+            }
+            for node in block.descendants() {
+                let Some(html) = html(node) else {
+                    continue;
+                };
+                let Ok(tags) = html_tags(&html) else {
+                    continue;
+                };
+                for tag in tags {
+                    let line = first_line(node) + line_breaks(&html[..tag.offset]);
+                    let shimmed = tag.name == "header"
+                        && !self.line(line).to_ascii_lowercase().contains("header");
+                    if tag.self_closing || shimmed || !ELEMENTS.contains(&tag.name.as_str()) {
+                        continue;
+                    }
+                    let element = Unbalanced {
+                        line,
+                        name: tag.name,
+                        closing: tag.closing,
+                    };
+                    if !element.closing {
+                        open.push(element);
+                    } else if let Some(index) =
+                        open.iter().rposition(|opened| opened.name == element.name)
+                    {
+                        problems.extend(open.drain(index + 1..));
+                        open.pop();
+                    } else {
+                        problems.push(element);
+                    }
+                }
+            }
+        }
+        problems.append(&mut open);
+        problems.sort_by_key(|problem| problem.line);
+        problems
     }
 }
 
@@ -186,6 +376,21 @@ pub(crate) fn text_after(node: Node<'_>) -> String {
         next = sibling.next_sibling();
     }
     text
+}
+
+/// Whether `node` is an HTML block that holds only comments, each closed.
+pub(crate) fn is_comment(node: Node<'_>) -> bool {
+    let NodeValue::HtmlBlock(block) = &node.data.borrow().value else {
+        return false;
+    };
+    let mut rest = block.literal.trim();
+    while rest.starts_with("<!--") {
+        let Some(end) = comment_end(rest) else {
+            return false;
+        };
+        rest = rest[end..].trim_start();
+    }
+    rest.is_empty()
 }
 
 /// Whether `node` is a task list item, `- [ ] ...`.
@@ -260,7 +465,7 @@ fn html(node: Node<'_>) -> Option<String> {
 
 /// How many line breaks `text` holds: `\n`, `\r\n` or a lone `\r`.
 fn line_breaks(text: &str) -> usize {
-    split_lines(text).len().saturating_sub(1) + usize::from(text.ends_with(['\n', '\r']))
+    text.replace("\r\n", "\n").matches(['\n', '\r']).count()
 }
 
 /// The destinations of the links in `node` and the nodes inside it, in order, as GitHub
@@ -312,9 +517,12 @@ fn github_block_start(rest: &str) -> Cow<'_, str> {
         let is_tag = name
             .get(..tag.len())
             .is_some_and(|candidate| candidate.eq_ignore_ascii_case(tag))
-            && name[tag.len()..].chars().next().is_none_or(|next| {
-                matches!(next, ' ' | '\t' | '\n' | '\r' | '\x0b' | '\x0c' | '>' | '/')
-            });
+            && {
+                let after = &name[tag.len()..];
+                after.is_empty()
+                    || after.starts_with([' ', '\t', '\n', '\r', '\x0b', '\x0c', '>'])
+                    || after.starts_with("/>")
+            };
         if is_tag {
             return Cow::Owned(format!(
                 "<{}{replacement}{}",
@@ -401,7 +609,8 @@ fn html_heading_offsets(html: &str) -> Vec<usize> {
 }
 
 /// The length of the comment `html` starts with, up to the end of its `-->` or `--!>`, or `None`
-/// if it doesn't close.
+/// if it doesn't close. The search starts right after `<!`, so the `--` that opens the comment
+/// can also close it, which makes `<!-->` and `<!--->` empty comments, as HTML has them.
 fn comment_end(html: &str) -> Option<usize> {
     let body = html.get(2..)?;
     let ends = [
@@ -411,50 +620,109 @@ fn comment_end(html: &str) -> Option<usize> {
     ends.into_iter().flatten().min().map(|end| end + 2)
 }
 
-/// The byte offset of the first thing in `html`, an HTML block, that opens and doesn't close
-/// inside it: a comment, a processing instruction, a declaration, a CDATA section, or a tag or
-/// a quoted attribute value in it. `None` if everything closes.
-fn unclosed_html(html: &str) -> Option<usize> {
+/// The tags in `html`, an HTML block or inline HTML, in order, past its comments, processing
+/// instructions, declarations and CDATA sections. `Err` holds the byte offset of the first of
+/// those, or of a tag, that opens and doesn't close.
+fn html_tags(html: &str) -> Result<Vec<Tag>, usize> {
+    let mut tags = Vec::new();
     let mut position = 0;
     while let Some(found) = html[position..].find('<') {
         let start = position + found;
         let rest = &html[start..];
         let after = &rest[1..];
+        let is_cdata = rest
+            .get(..9)
+            .is_some_and(|opener| opener.eq_ignore_ascii_case("<![cdata["));
+        let starts_name = |text: &str| text.starts_with(|c: char| c.is_ascii_alphabetic());
         let length = if rest.starts_with("<!--") {
             comment_end(rest)
         } else if rest.starts_with("<?") {
             rest.find("?>").map(|end| end + 2)
-        } else if rest.starts_with("<![CDATA[") {
+        } else if is_cdata {
             rest.find("]]>").map(|end| end + 3)
-        } else if after
-            .trim_start_matches(['/', '!'])
-            .starts_with(|c: char| c.is_ascii_alphabetic())
-        {
-            tag_end(rest)
+        } else if after.strip_prefix('!').is_some_and(starts_name) {
+            rest.find('>').map(|end| end + 1)
+        } else if starts_name(after) || after.strip_prefix('/').is_some_and(starts_name) {
+            let length = tag_end(rest).ok_or(start)?;
+            let closing = after.starts_with('/');
+            let name: String = after[usize::from(closing)..]
+                .chars()
+                .take_while(|c| !c.is_ascii_whitespace() && *c != '/' && *c != '>')
+                .collect();
+            tags.push(Tag {
+                name: name.to_ascii_lowercase(),
+                closing,
+                self_closing: rest[..length].ends_with("/>"),
+                offset: start,
+            });
+            Some(length)
         } else {
             Some(1)
         };
-        let Some(length) = length else {
-            return Some(start);
-        };
-        position = start + length;
+        position = start + length.ok_or(start)?;
     }
-    None
+    Ok(tags)
 }
 
-/// The length of the tag `html` starts with, up to its `>` outside quoted attribute values, or
-/// `None` if it doesn't close.
+/// The length of the tag `html` starts with, up to its closing `>`, read with HTML's grammar
+/// for a tag: a name, then attributes, each a name with an optional `=` and a value, which is
+/// quoted with `"` or `'` or runs to the next space or `>`. `None` if the tag doesn't close, or
+/// if a `<` comes before its `>` outside a quoted value, since GitHub then reads the tag as
+/// running on into what follows.
 fn tag_end(html: &str) -> Option<usize> {
-    let mut quote: Option<char> = None;
-    for (index, character) in html.char_indices() {
-        match quote {
-            Some(open) if character == open => quote = None,
-            None if character == '"' || character == '\'' => quote = Some(character),
-            None if character == '>' => return Some(index + 1),
-            Some(_) | None => {}
+    let bytes = html.as_bytes();
+    let is_space = |byte: u8| matches!(byte, b' ' | b'\t' | b'\n' | b'\r' | b'\x0c');
+    let mut index = 1 + usize::from(bytes.get(1) == Some(&b'/'));
+    loop {
+        let byte = *bytes.get(index)?;
+        if byte == b'>' {
+            return Some(index + 1);
+        }
+        if byte == b'<' {
+            return None;
+        }
+        if is_space(byte) || byte == b'/' {
+            index += 1;
+            continue;
+        }
+        index += 1;
+        while let Some(&next) = bytes.get(index) {
+            if next == b'<' {
+                return None;
+            }
+            if is_space(next) || matches!(next, b'=' | b'>' | b'/') {
+                break;
+            }
+            index += 1;
+        }
+        let mut value = index;
+        while bytes.get(value).is_some_and(|&next| is_space(next)) {
+            value += 1;
+        }
+        if bytes.get(value) != Some(&b'=') {
+            continue;
+        }
+        value += 1;
+        while bytes.get(value).is_some_and(|&next| is_space(next)) {
+            value += 1;
+        }
+        let quote = *bytes.get(value)?;
+        if quote == b'"' || quote == b'\'' {
+            let close = html[value + 1..].find(char::from(quote))?;
+            index = value + 1 + close + 1;
+        } else {
+            index = value;
+            while let Some(&next) = bytes.get(index) {
+                if next == b'<' {
+                    return None;
+                }
+                if is_space(next) || next == b'>' {
+                    break;
+                }
+                index += 1;
+            }
         }
     }
-    None
 }
 
 #[cfg(test)]
@@ -595,9 +863,13 @@ mod tests {
             "<div\n## Extra\n",
             "<?php echo\n",
             "<![CDATA[ x\n",
+            "<div><![cdata[ x\n</div>\n",
             "<!DOCTYPE html\n",
+            "<div it's title=\"it's>\nx\n</div>\n",
+            "<pre>\ncat <<EOF\nhi\nEOF\n</pre>\n",
+            "<pre>\nUsage: demo <file\n</pre>\n",
         ] {
-            assert!(unclosed_html(html).is_some(), "{html:?} doesn't close");
+            assert!(html_tags(html).is_err(), "{html:?} doesn't close");
         }
         for html in [
             "<details>\n<summary>More</summary>\n",
@@ -606,9 +878,12 @@ mod tests {
             "<!-- a --!>\n",
             "<!-->\n",
             "<div title='a > b'>1 < 2 <3</div>\n",
+            "<div title=it's>\nx\n</div>\n",
+            "<pre>\nfn spawn<F: 'static>(f: F)\n</pre>\n",
+            "<img src=a.png alt=\"<b>\"/>\n",
             "<?php x ?>\n",
         ] {
-            assert_eq!(unclosed_html(html), None, "{html:?} closes");
+            assert!(html_tags(html).is_ok(), "{html:?} closes");
         }
         let arena = Arena::new();
         let markdown = Markdown::parse(&arena, "# T\n\n<div>\na\n<!-- b\n\n## C\n");
@@ -616,6 +891,69 @@ mod tests {
             markdown.unclosed_html_lines(),
             [5],
             "the line the comment opens on"
+        );
+    }
+
+    #[test]
+    fn elements_balance_within_a_section() {
+        let unbalanced = |text: &str| {
+            let arena = Arena::new();
+            let markdown = Markdown::parse(&arena, text);
+            let mut found = Vec::new();
+            for element in markdown.unbalanced_elements() {
+                let slash = if element.closing { "/" } else { "" };
+                found.push(format!("{} <{slash}{}>", element.line, element.name));
+            }
+            found
+        };
+        for text in [
+            "# T\n\n<details>\n<summary>More</summary>\n\n```sh\nrun\n```\n\n</details>\n",
+            "# T\n\n<div align=\"center\">\n\n[![CI](a.svg)](b)\n\n</div>\n",
+            "# T\n\n<picture>\n<source srcset=a.png>\n<img src=b.png>\n</picture>\n\nA<br>b.\n",
+            "# T\n\nPress <kbd>Ctrl</kbd>. <!-- <div> -->\n\n`<div>`\n\n```\n<div>\n```\n",
+            "# T\n\n<pre>\nfn spawn<F: 'static>(f: F)\n</pre>\n",
+        ] {
+            assert!(
+                unbalanced(text).is_empty(),
+                "{text:?} balances: {:?}",
+                unbalanced(text)
+            );
+        }
+        assert_eq!(
+            unbalanced("# T\n\n<details>\n<summary>S</summary>\n\n```\nx\n```\n\n## A\n"),
+            ["3 <details>"],
+            "an element left open at the next section"
+        );
+        assert_eq!(
+            unbalanced("# T\n\n<details>\n\n## Install\n\n</details>\n"),
+            ["3 <details>", "7 </details>"],
+            "a heading inside an element splits it"
+        );
+        assert_eq!(
+            unbalanced("# T\n\n<div align=\"center\">\n\nText.\n\n</detail>\n"),
+            ["3 <div>"],
+            "a misspelled closing tag closes nothing"
+        );
+        assert_eq!(
+            unbalanced("# T\n\n<div><b>x</div>\n\n<select>\n"),
+            ["3 <b>", "5 <select>"],
+            "an element closed by its parent's tag, and one left open at the end"
+        );
+    }
+
+    #[test]
+    fn comment_blocks_are_found() {
+        let arena = Arena::new();
+        let markdown = Markdown::parse(
+            &arena,
+            "<!-- SPDX-License-Identifier: MIT -->\n\n<!-- a -->\n<!-- b -->\n\n<!-- c\n\n\
+             <div>\n\n<!-- d --> x\n",
+        );
+        let comments: Vec<bool> = markdown.blocks().into_iter().map(is_comment).collect();
+        assert_eq!(
+            comments,
+            [true, true, true, false],
+            "closed comments only, and an unclosed one runs to the end"
         );
     }
 

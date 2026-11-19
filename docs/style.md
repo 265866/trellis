@@ -306,7 +306,7 @@ text in code, in HTML or in an HTML comment is neither a heading nor a link.
   `SECURITY.md`, `CHANGELOG.md`, the license files and the pages in `docs/`. A missing setting
   fails rather than checking nothing.
 - The root `README.md` has exactly one level-1 heading, its title, written as a `#` line with
-  text, outside any list or quote, with only badges and blank lines before it.
+  text, outside any list or quote, with only badges, comments and blank lines before it.
 - Its top-level `##` headings are exactly the sections `readme_sections` lists, in order, each
   written as plain text, such as `## Install`. It has no `##` heading inside a list item, quote
   or footnote, no setext heading (a line underlined with `=` or `-`) and no HTML heading tag such
@@ -320,8 +320,9 @@ text in code, in HTML or in an HTML comment is neither a heading nor a link.
 - Every page, at any depth under `docs/`, starts with a `# Title` line, a blank line and a
   paragraph with a letter in it outside images. Pages use the `.md` extension, and neither the
   README nor a page starts with a byte order mark.
-- No HTML block in the README or a page leaves a comment, a tag or a quoted attribute value
-  open, which can hide what follows from readers.
+- No HTML in the README or a page leaves a comment, a tag or a quoted attribute value open, and
+  every HTML element opened in a section closes in the same section, so nothing that follows is
+  hidden or rendered inside it. Comments may come before the title and in the index.
 
 ### Docs review checklist
 
