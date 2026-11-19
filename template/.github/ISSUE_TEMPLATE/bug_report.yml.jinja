@@ -4,12 +4,14 @@ name: Bug report
 description: Something doesn't work as documented
 labels: [bug]
 body:
+{%- if visibility == 'public' %}
   - type: markdown
     attributes:
       value: >-
         Report a vulnerability privately, as
         [SECURITY.md](https://github.com/{{ github_owner }}/{{ project_name }}/blob/main/SECURITY.md)
         says, not here.
+{%- endif %}
   - type: input
     id: version
     attributes:

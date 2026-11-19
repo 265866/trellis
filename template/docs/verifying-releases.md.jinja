@@ -1,7 +1,20 @@
 # Verify a release
 
+{% if visibility == 'public' -%}
 The [release workflow](../.github/workflows/release.yml) builds every release on GitHub Actions
 from its tag and attests where it came from. Check that before you run it.
+{%- elif kind == 'binary' -%}
+The [release workflow](../.github/workflows/release.yml) builds every release on GitHub Actions
+from its tag and lists each archive's checksum. Check a download against it before you run it. The
+checksums sit in the same release as the archives, so they catch a broken download, not a swapped
+one. Without GitHub Enterprise Cloud, GitHub attests release files only in public repositories,
+so this private repository's releases carry no attestation.
+{%- else -%}
+The [release workflow](../.github/workflows/release.yml) builds every release on GitHub Actions
+from its tag and names the image it pushed by its digest. The image is neither attested nor signed.
+Without GitHub Enterprise Cloud, GitHub attests images only in public repositories, and a keyless
+signature would name this private repository in Sigstore's public log.
+{%- endif %}
 {% if kind == 'binary' %}
 ## Check the checksum
 
@@ -16,6 +29,7 @@ On macOS, use `shasum -a 256 --check --ignore-missing SHA256SUMS`.
 `(Get-FileHash <archive>).Hash` in PowerShell and compare it with the archive's line in
 `SHA256SUMS`; the case doesn't matter.
 {%- endif %}
+{%- if visibility == 'public' %}
 
 ## Check the attestation
 
@@ -30,12 +44,19 @@ gh attestation verify <archive> --bundle attestation.json \
 
 It needs no GitHub sign-in. It fails unless this repository's `release.yml`, running on `main`,
 attested that exact file.
+{%- endif %}
 {%- else %}
 ## Find the digest
 
 Each release's notes on GitHub name the image by its digest, such as
-`ghcr.io/{{ github_owner | lower }}/{{ project_name }}@sha256:<digest>`. Verify that digest and run it.
+`ghcr.io/{{ github_owner | lower }}/{{ project_name }}@sha256:<digest>`.
+{%- if visibility == 'public' %} Verify that digest and run it.
 A tag such as `latest` or `1.4` can move to another image after you check it; a digest can't.
+{%- else %}
+Run that digest to get that release exactly. A tag such as `latest` or `1.4` can move to another
+image; a digest can't.
+{%- endif %}
+{%- if visibility == 'public' %}
 
 ## Check the signature
 
@@ -61,6 +82,7 @@ gh attestation verify oci://ghcr.io/{{ github_owner | lower }}/{{ project_name }
 ```
 
 The release workflow runs both checks on the digest before it moves the minor and `latest` tags.
+{%- endif %}
 
 ## Run the digest
 

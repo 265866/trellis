@@ -55,6 +55,19 @@ kind:
     A long-running service shipped as a container image: service
     A library: library
 
+visibility:
+  type: str
+  help: >-
+    Who can see the repository. Without GitHub Enterprise Cloud, GitHub attests releases only in
+    public repositories, and it takes private vulnerability reports only in public ones, so a
+    private project's releases aren't attested or signed. A private repository's Actions minutes
+    come out of the account's included usage, and a macOS minute costs about ten times a Linux one
+    and a Windows minute about twice.
+  choices:
+    Public: public
+    Private: private
+  default: public
+
 platforms:
   type: str
   help: The platforms CI tests on and releases for
@@ -74,6 +87,11 @@ publish_crate:
     library has no optional features.
   default: false
   when: "{{ kind == 'library' }}"
+  validator: >-
+    {% if publish_crate and visibility == 'private' %}
+    A crate on crates.io is public, so a private library can't publish one. Answer no, or make the
+    repository public.
+    {% endif %}
 
 license:
   type: str

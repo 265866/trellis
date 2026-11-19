@@ -1,7 +1,7 @@
 # {{ project_name }}
 
 [![CI](https://github.com/{{ github_owner }}/{{ project_name }}/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/{{ github_owner }}/{{ project_name }}/actions/workflows/ci.yml?query=branch%3Amain)
-{%- if kind != 'library' %}
+{%- if kind != 'library' and visibility == 'public' %}
 [![Latest release](https://img.shields.io/github/v/release/{{ github_owner }}/{{ project_name }})](https://github.com/{{ github_owner }}/{{ project_name }}/releases/latest)
 {%- endif %}
 
@@ -20,7 +20,12 @@ as [Verify a release](docs/verifying-releases.md) shows, and put `{{ project_nam
 docker run --rm ghcr.io/{{ github_owner | lower }}/{{ project_name }}:latest
 ```
 
+{% if visibility == 'private' -%}
+The image is private, so sign in to `ghcr.io` first. [Install](docs/install.md) shows how and has
+the details.
+{%- else -%}
 [Install](docs/install.md) has the details.
+{%- endif %}
 {%- else %}
 ## Use it
 
@@ -39,13 +44,28 @@ docker run --rm ghcr.io/{{ github_owner | lower }}/{{ project_name }}:latest
 
 Replace `<tag>` with a release tag, such as the
 [latest](https://github.com/{{ github_owner }}/{{ project_name }}/releases/latest).
+{%- if visibility == 'private' %}
+The repository is private, so have Cargo fetch it with your Git credentials. Add this to your
+`~/.cargo/config.toml`:
+
+```toml
+[net]
+git-fetch-with-cli = true
+```
+{%- endif %}
 {%- endif %}
 {%- endif %}
 
 ## Documentation
 {% if kind != 'library' %}
 - [Install](docs/install.md): every way to install and update it.
+{%- if visibility == 'public' %}
 - [Verify a release](docs/verifying-releases.md): check that a download came from this repository.
+{%- elif kind == 'binary' %}
+- [Verify a release](docs/verifying-releases.md): check that a download arrived intact.
+{%- else %}
+- [Verify a release](docs/verifying-releases.md): find the image digest a release pushed.
+{%- endif %}
 {%- endif %}
 - [Design](docs/design.md): the goals, the architecture, and the decisions behind them.
 - [Stability](docs/stability.md): what a release can change, and what to read before you upgrade.

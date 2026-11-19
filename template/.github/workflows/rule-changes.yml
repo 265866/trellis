@@ -21,7 +21,8 @@ name: Rule changes
 # never count as a pass.
 #
 # From 2026-12-02 GitHub blocks `pull_request_target` in public repositories unless an Actions
-# policy allows it for this file; CONTRIBUTING.md has the one command that adds the policy.
+# policy allows it for this file; a public project's CONTRIBUTING.md has the one command that adds
+# the policy. Private repositories aren't blocked.
 
 on:
   # zizmor: ignore[dangerous-triggers] No job checks out, builds or runs the pull request's code; the job that runs the base branch's code can only read, and the jobs that write statuses run no repository code.
