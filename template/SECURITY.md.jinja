@@ -5,10 +5,15 @@
 Only the latest release gets fixes.
 
 ## Report a vulnerability
-
+{% if visibility == 'public' %}
 Report it privately through
 [GitHub](https://github.com/{{ github_owner }}/{{ project_name }}/security/advisories/new), not in a
 public issue. Include the version, what you did, and what happened, and leave secrets such as
 tokens and keys out of the report. You get a reply within 7 days.
+{%- else %}
+Open an [issue](https://github.com/{{ github_owner }}/{{ project_name }}/issues/new). The repository
+is private, so only its collaborators see it. Include the version, what you did, and what happened,
+and leave secrets such as tokens and keys out of the report. You get a reply within 7 days.
+{%- endif %}
 
 A fix lands on `main` and ships in the next release.

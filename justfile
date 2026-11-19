@@ -170,7 +170,9 @@ templates: (template "binary") (template "service") (template "library") shapes 
 # Copies the working tree into a scratch repository as two tagged trellis versions, generates a
 # library from the first, edits its code and changelog the way an owner would, changes the
 # template's scaffold, a rule file and a docs page, and runs `copier update` to the second. The
-# rule file and docs page must move, and the owner's code and changelog must not.
+# rule file and docs page must move, and the owner's code and changelog must not. Then it makes the
+# project private and public again with `--vcs-ref=:current:`, which must keep v2 and the owner's
+# code.
 #
 # Checks that `copier update` moves the rules and leaves the owner's code alone.
 update:
@@ -221,6 +223,18 @@ update:
     [ ! -e "$lib/added.rs" ] || fail "a new scaffold file was added to the owner's crate"
     tail -n 1 CHANGELOG.md | grep --quiet "An owner's line" || fail "CHANGELOG.md was rewritten"
     if grep --recursive --quiet '^<<<<<<<' --exclude-dir=.git .; then fail "the update left conflict markers"; fi
+    for visibility in private public; do
+      git add --all
+      commit commit --quiet --allow-empty --message "chore: make the repository $visibility"
+      copier update --quiet --defaults --vcs-ref=:current: --data "visibility=$visibility"
+      grep --quiet "^visibility: $visibility$" .copier-answers.yml || fail "the answers don't record $visibility"
+      grep --quiet '^_commit: v2$' .copier-answers.yml || fail "changing the visibility moved trellis off v2"
+      advisories=$(grep --count 'security/advisories/new' SECURITY.md || true)
+      [ "$advisories" = "$([ "$visibility" = public ] && echo 1 || echo 0)" ] \
+        || fail "SECURITY.md doesn't match a $visibility repository"
+      grep --quiet '^//! Mine.$' "$lib/lib.rs" || fail "making it $visibility rewrote the owner's lib.rs"
+      if grep --recursive --quiet '^<<<<<<<' --exclude-dir=.git .; then fail "making it $visibility left conflict markers"; fi
+    done
     echo "copier update moved the rules and left the owner's code alone."
 
 # Generates a project of one kind, `binary`, `service` or `library`, from the working tree, with
@@ -289,7 +303,7 @@ dependencies:
     "$trellis/tests/dependencies/violations.sh" "$project"
 
 # Checks the real shape of each answer set in `shape`.
-shapes: (shape "binary") (shape "binary-windows-macos-dual") (shape "library-published") (shape "library-unlicensed") (shape "service-unlicensed")
+shapes: (shape "binary") (shape "binary-windows-macos-dual") (shape "library-published") (shape "library-unlicensed") (shape "service-unlicensed") (shape "binary-private") (shape "service-private") (shape "library-private")
 
 # Generates the project a user gets for `answers`, with the lints and the checker from GitHub rather
 # than this checkout, and runs the checks that don't fetch them: formatting, spelling, the
@@ -306,6 +320,9 @@ shape answers:
       library-published) data=(--data kind=library --data publish_crate=true --data 'license=MIT OR Apache-2.0') ;;
       library-unlicensed) data=(--data kind=library --data license=none) ;;
       service-unlicensed) data=(--data kind=service --data license=none) ;;
+      binary-private) data=(--data kind=binary --data visibility=private) ;;
+      service-private) data=(--data kind=service --data visibility=private) ;;
+      library-private) data=(--data kind=library --data visibility=private) ;;
       *) echo "error: no answer set named {{ answers }}" >&2; exit 2 ;;
     esac
     trellis="{{ justfile_directory() }}"

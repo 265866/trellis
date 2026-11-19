@@ -18,6 +18,10 @@ platform:
 ## Install a release
 
 1. Download the archive for your platform and `SHA256SUMS` from the release.
+{%- if visibility == 'private' %} The repository
+   is private, so sign in to GitHub first, or use the [GitHub CLI](https://cli.github.com/):
+   `gh release download <tag> --repo {{ github_owner }}/{{ project_name }}`.
+{%- endif %}
 2. Check the download as [Verify a release](verifying-releases.md) shows.
 3. Unpack the archive and move `{{ project_name }}` to a directory on your `PATH`.
 
@@ -28,8 +32,17 @@ To update, install the new release the same way.
 You need [Rust](https://rustup.rs/).
 
 ```sh
+{%- if visibility == 'private' %}
+cargo install --locked --config net.git-fetch-with-cli=true \
+  --git https://github.com/{{ github_owner }}/{{ project_name }} {{ crate_name }}
+{%- else %}
 cargo install --locked --git https://github.com/{{ github_owner }}/{{ project_name }} {{ crate_name }}
+{%- endif %}
 ```
+{%- if visibility == 'private' %}
+
+The repository is private, so Cargo fetches it with your Git credentials.
+{%- endif %}
 {%- else %}
 Read this page to run {{ project_name }} on your server. It shows how to run the container image
 and how to update it.
@@ -42,6 +55,19 @@ pushes three tags, such as these for 1.4.2:
 | `v1.4.2`, the version | That release only |
 | `1.4`, the minor version | The latest patch release of 1.4 |
 | `latest` | The latest release |
+{%- if visibility == 'private' %}
+
+## Sign in to the registry
+
+The image is private. Create a [classic token](https://github.com/settings/tokens/new) with only
+the `read:packages` scope, then sign in with it on the server:
+
+```sh
+docker login ghcr.io --username <your GitHub username> --password-stdin
+```
+
+Paste the token, press Enter, then press Ctrl-D. Podman takes the same arguments.
+{%- endif %}
 
 ## Run the image
 
@@ -53,8 +79,12 @@ docker run -d --name {{ project_name }} --restart unless-stopped \
 Replace `<minor>` with the latest release's minor version, such as `1.4`, so updates within it
 arrive when you pull.
 
-Podman takes the same arguments. Check the image first as
+Podman takes the same arguments.
+{%- if visibility == 'public' %} Check the image first as
 [Verify a release](verifying-releases.md) shows.
+{%- else %} To run one release exactly, use its digest, which
+[Verify a release](verifying-releases.md) shows how to find.
+{%- endif %}
 
 ## Update
 

@@ -1,5 +1,7 @@
 blank_issues_enabled: false
+{%- if visibility == 'public' %}
 contact_links:
   - name: Report a vulnerability
     url: https://github.com/{{ github_owner }}/{{ project_name }}/security/advisories/new
     about: Report it privately. SECURITY.md says how.
+{%- endif %}

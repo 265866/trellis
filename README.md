@@ -16,7 +16,8 @@ generates starts with:
   each project keeps, the README's docs index, and how each page opens.
 - **Rules apart from code.** A pull request changes the rules or the code, never both.
 - **CI and releases.** Checks on Linux, macOS and Windows; release-plz versions and changelogs;
-  attested release archives or a signed container image; Renovate for updates.
+  release archives or a container image, attested and signed when the repository is public;
+  Renovate for updates.
 - **The same docs layout.** A short README with a docs index, task pages under `docs/`,
   `CONTRIBUTING.md`, `SECURITY.md`, and one `AGENTS.md` for coding agents.
 
@@ -31,20 +32,23 @@ uvx copier copy https://github.com/265866/trellis.git my-project
 ```
 
 It asks for a name, a description, what the project ships (a binary, a container service or a
-library), the platforms and a license. Then put it on GitHub, install the tools that the generated
-`CONTRIBUTING.md` lists, follow its "Set up once per repository" list, and run every check:
+library), whether the repository is public or private, the platforms and a license. Then put it on
+GitHub, install the tools that the generated `CONTRIBUTING.md` lists, follow its "Set up once per
+repository" list, and run every check:
 
 ```sh
 cd my-project
 git init && git add -A && git commit -m "chore: generate from trellis"
-gh repo create 265866/my-project --public --source . --push
+gh repo create 265866/my-project --public --source . --push  # or --private
 just install-toolchains
 just ci
 ```
 
-`just ci` compares the working tree with `origin/main`, so it needs the pushed `main`. A binary or
-a service must be public: on a personal account, GitHub attests release artifacts only in public
-repositories, and the release workflow stops when it can't attest.
+`just ci` compares the working tree with `origin/main`, so it needs the pushed `main`. Create the
+repository with the visibility you answered. Without GitHub Enterprise Cloud, GitHub attests
+release artifacts only in public repositories, and it takes private vulnerability reports only in
+public ones, so a private project's releases aren't attested or signed, and its security reports go
+in issues.
 
 ## Update a project
 

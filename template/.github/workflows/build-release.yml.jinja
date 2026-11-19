@@ -118,9 +118,12 @@ jobs:
           rm -r "dist/$stem"
           echo "artifact=$stem" >> "$GITHUB_OUTPUT"
 
+      # A week is long enough to re-run a failed publish job, and keeps the archives from filling a
+      # private repository's storage.
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ${{ steps.archive.outputs.artifact }}
           path: dist/*
+          retention-days: 7
           if-no-files-found: error
 {%- endraw %}

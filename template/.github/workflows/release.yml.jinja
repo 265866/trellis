@@ -10,16 +10,30 @@ name: Release
 # after the first manual `cargo publish`.
 {%- else %}.
 {%- endif %}
-{%- elif kind == 'binary' -%}
+{%- elif kind == 'binary' and visibility == 'public' -%}
 # On every push to main, release-plz either tags a release (when the push is a merged release PR)
 # or opens and updates the release PR. A tagged release is built from its tag, attested, and only
 # then published on GitHub with its archives, checksums and attestation, so a published release has
 # them. If building or publishing fails, re-running the failed jobs picks up from the same tag.
-{%- else -%}
+{%- elif kind == 'binary' -%}
+# On every push to main, release-plz either tags a release (when the push is a merged release PR)
+# or opens and updates the release PR. A tagged release is built from its tag and only then
+# published on GitHub with its archives and checksums, so a published release has them. If building
+# or publishing fails, re-running the failed jobs picks up from the same tag. Without GitHub
+# Enterprise Cloud, GitHub attests release files only in public repositories, so this one isn't
+# attested.
+{%- elif visibility == 'public' -%}
 # On every push to main, release-plz either tags a release (when the push is a merged release PR)
 # or opens and updates the release PR. A tagged release builds the container image from its tag,
 # pushes it by version, attests and signs it, verifies both, and only then moves the minor and
 # `latest` tags to it and publishes the GitHub release.
+{%- else -%}
+# On every push to main, release-plz either tags a release (when the push is a merged release PR)
+# or opens and updates the release PR. A tagged release builds the container image from its tag,
+# pushes it by version, and only then moves the minor and `latest` tags to it and publishes the
+# GitHub release. Without GitHub Enterprise Cloud, GitHub attests images only in public
+# repositories, and a keyless signature would name this private repository in Sigstore's public
+# log, so the image is neither attested nor signed.
 {%- endif %}
 #
 # A PR that GITHUB_TOKEN opens starts no pull_request_target workflow, so the release PR needs the
@@ -142,14 +156,20 @@ jobs:
       ref: ${{ needs.release.outputs.tag }}
 
   publish:
-    name: Attest and publish
+{%- endraw %}
+    name: {{ 'Attest and publish' if visibility == 'public' else 'Publish' }}
+{%- raw %}
     needs: [release, build]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
       contents: write
+{%- endraw %}
+{%- if visibility == 'public' %}
       id-token: write
       attestations: write
+{%- endif %}
+{%- raw %}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -178,6 +198,9 @@ jobs:
       - name: Write the checksums
         working-directory: dist
         run: sha256sum -- * > SHA256SUMS
+{%- endraw %}
+{%- if visibility == 'public' %}
+{%- raw %}
 
       - name: Attest the archives
         id: attest
@@ -187,13 +210,25 @@ jobs:
 
       # The release carries the attestation as attestation.json, so `gh attestation verify --bundle`
       # works without signing in. gh keeps a new release a draft until its files are uploaded.
+{%- endraw %}
+{%- else %}
+
+      # gh keeps a new release a draft until its files are uploaded.
+{%- endif %}
+{%- raw %}
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.release.outputs.tag }}
-          BUNDLE: ${{ steps.attest.outputs.bundle-path }}
+{%- endraw %}
+{%- if visibility == 'public' %}
+          BUNDLE: {% raw %}${{ steps.attest.outputs.bundle-path }}{% endraw %}
+{%- endif %}
         run: |
+{%- if visibility == 'public' %}
           cp "$BUNDLE" dist/attestation.json
+{%- endif %}
+{%- raw %}
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
             # A draft survives only if a run was killed mid-upload; gh deletes it on a failed one.
             gh release upload "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --clobber
@@ -207,7 +242,7 @@ jobs:
 {%- if kind == 'service' %}
 
   image:
-    name: Build, attest and sign the image
+    name: {{ 'Build, attest and sign the image' if visibility == 'public' else 'Build and push the image' }}
     needs: release
     if: needs.release.outputs.tag != ''
     runs-on: ubuntu-24.04
@@ -215,8 +250,10 @@ jobs:
     permissions:
       contents: write
       packages: write
+{%- if visibility == 'public' %}
       id-token: write
       attestations: write
+{%- endif %}
     env:
       IMAGE: ghcr.io/{{ github_owner | lower }}/{{ project_name }}
       TAG: {% raw %}${{ needs.release.outputs.tag }}{% endraw %}
@@ -271,6 +308,9 @@ jobs:
           sbom: true
           provenance: mode=max
           no-cache: true
+{%- endraw %}
+{%- if visibility == 'public' %}
+{%- raw %}
 
       - name: Attest the image
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
@@ -297,6 +337,10 @@ jobs:
             --source-ref refs/heads/main
 
       # Only a signed and verified digest gets the tags people pull.
+{%- endraw %}
+{%- else %}
+{% endif %}
+{%- raw %}
       - name: Move the minor and latest tags
         env:
           DIGEST: ${{ steps.build.outputs.digest }}
@@ -305,7 +349,12 @@ jobs:
           docker buildx imagetools create "$IMAGE@$DIGEST" \
             --tag "$IMAGE:${version%.*}" --tag "$IMAGE:latest"
 
-      # The notes name the digest, which docs/verifying-releases.md tells users to verify and run.
+      # The notes name the digest, which docs/verifying-releases.md tells users to
+{%- endraw %}
+{%- if visibility == 'public' %} verify and run.
+{%- else %} run.
+{%- endif %}
+{%- raw %}
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}

@@ -111,15 +111,37 @@ the changed files:
 
 ## Set up once per repository
 
-{% if kind != 'library' -%}
-- Keep the repository public. On a personal account, GitHub attests release files only in public
-  repositories, and the release workflow stops when it can't attest.
+{% if visibility == 'private' -%}
+- Keep the repository private. Protecting `main` in a private repository needs GitHub Pro or a paid
+  organization plan, and its Actions minutes come out of the account's included usage: a macOS
+  minute costs about ten times a Linux one, and a Windows minute about twice. To make it public,
+  make the repository public first, then run
+  `uvx copier update --defaults --vcs-ref=:current: --data visibility=public`, follow the setup
+  steps it adds to this list, and merge its change before any release PR.
+{%- if kind == 'binary' %} It adds the release
+  attestations, which fail in a private repository.
+{%- elif kind == 'service' %} It adds the image
+  attestation and signature, which a private repository can't use.
+{%- endif %}
+{% elif kind != 'library' -%}
+- Keep the repository public. Without GitHub Enterprise Cloud, GitHub attests release files only in
+  public repositories, and the release workflow stops when it can't attest. To make it private,
+  first merge the change that
+  `uvx copier update --defaults --vcs-ref=:current: --data visibility=private` makes.
+{%- if kind == 'service' %} The image's
+  package stays public, because GitHub can't make a public package private again. Delete it in its
+  package settings before the next release, which then publishes a new, private package.
+{%- endif %}
+{% elif not publish_crate -%}
+- To make the repository private, first merge the change that
+  `uvx copier update --defaults --vcs-ref=:current: --data visibility=private` makes.
 {% endif -%}
 - In Settings, General, allow squash merging only, with the pull request title as its default
   message, so the title becomes the commit on `main`.
 - Install the [Renovate app](https://github.com/apps/renovate) on the repository. Each week it opens
   one pull request with the crate updates other than major ones, and one for each major update.
   The toolchain, tool, action and image pins arrive with trellis updates.
+{%- if visibility == 'public' %}
 - Allow the rule-change check to run. From 2026-12-02 GitHub blocks `pull_request_target` in
   public repositories unless an Actions policy allows it, and without it no pull request gets the
   "Rule changes stand alone" status:
@@ -132,22 +154,26 @@ the changed files:
               "parameters": {"allowed_events": ["pull_request_target"]}}]}
   EOF
   ```
-
+{% endif %}
 - Create the label release-plz puts on its PR: `gh label create release`.
 - Add a fine-grained token with contents and pull request write access to this repository as the
   `RELEASE_PLZ_TOKEN` secret. A pull request that `GITHUB_TOKEN` opens starts no
   `pull_request_target` workflow, so without the token the release PR never gets the
   "Rule changes stand alone" status and can't merge.
+{%- if visibility == 'public' %}
 - Turn on private vulnerability reporting, which [SECURITY.md](SECURITY.md) points to.
+{%- endif %}
 {%- if kind == 'library' and publish_crate %}
 - Publish the first version by hand with `cargo publish`. If that commit has no `vX.Y.Z` tag, tag it
   with its version and push the tag, so release-plz starts from it. Then add this repository's
   `release.yml` as a trusted publisher in the crate's settings on crates.io. Later releases publish
   through it. Every crate you add is published too, so do the same for each one.
 {%- endif %}
-{%- if kind == 'service' %}
+{%- if kind == 'service' and visibility == 'public' %}
 - After the first release, make the `{{ project_name }}` package public in its package settings on
-  GitHub, so others can pull the image.
+  GitHub, so others can pull the image. GitHub can't make it private again.
+{%- elif kind == 'service' %}
+- Sign in to `ghcr.io` on each server that pulls the image, as [Install](docs/install.md) shows.
 {%- endif %}
 {%- set os_list = ['linux'] if kind == 'service' else platforms %}
 {%- set job_names = {'linux': 'Ubuntu', 'macos': 'macOS', 'windows': 'Windows'} %}
@@ -189,7 +215,8 @@ minor version and a `fix` the patch version. To ship:
 [Verify a release](docs/verifying-releases.md) gives users commands that name the `vX.Y.Z` tag
 form, the `release.yml` file and the `main` branch it runs on, the repository
 `{{ github_owner }}/{{ project_name }}`, and
-{%- if kind == 'binary' %} the archive, `SHA256SUMS` and `attestation.json` file names.
+{%- if kind == 'binary' and visibility == 'public' %} the archive, `SHA256SUMS` and `attestation.json` file names.
+{%- elif kind == 'binary' %} the archive and `SHA256SUMS` file names.
 {%- else %} the image `ghcr.io/{{ github_owner | lower }}/{{ project_name }}`.
 {%- endif %} Changing
 one breaks the commands users have copied.
