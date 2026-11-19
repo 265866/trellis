@@ -24,10 +24,10 @@ const RULE_NAMES: [&str; 3] = ["build.rs", "justfile", ".justfile"];
 const RULE_FILES: [&str; 3] = ["CONTRIBUTING.md", "docs/style.md", ".copier-answers.yml"];
 
 /// The files, besides the licenses and the Markdown files under `docs/` other than
-/// `docs/style.md`, that are neither rules nor code. No check reads them. `Cargo.lock` changes
-/// with every dependency, and `cargo deny` checks what it pins. These names match exactly and win
-/// over the tool configuration names, so the root `.editorconfig` is neither while a nested one is
-/// a rule.
+/// `docs/style.md`, that are neither rules nor code. The docs checks read the readme and the
+/// pages, but nothing they say is a rule. `Cargo.lock` changes with every dependency, and
+/// `cargo deny` checks what it pins. These names match exactly and win over the tool
+/// configuration names, so the root `.editorconfig` is neither while a nested one is a rule.
 const OTHER_FILES: [&str; 5] = [
     "README.md",
     "Cargo.lock",

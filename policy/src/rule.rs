@@ -32,11 +32,11 @@ pub enum Rule {
     /// lists.
     InternalDependencies,
     /// The `Documentation` section of the root `README.md` links every page directly under
-    /// `docs/`.
+    /// `docs/`, and a page in the directory above links each page in a subdirectory.
     DocsIndex,
-    /// The docs files `docs_files` lists exist, the root `README.md` has the sections
-    /// `readme_sections` lists and an index for its `Documentation` section, and every page in
-    /// `docs/` opens with its title and a paragraph.
+    /// The docs files `docs_files` lists exist, the root `README.md` has one title, the
+    /// sections `readme_sections` lists and an index for its `Documentation` section, and every
+    /// page in `docs/` opens with its title and a paragraph.
     DocsLayout,
     /// The main package's entry in `release-plz.toml` takes every other member into its
     /// changelog.

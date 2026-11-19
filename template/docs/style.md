@@ -177,9 +177,9 @@ Beyond the Google guide, the workspace also turns on:
 
 ## Checked in review
 
-No check decides these, so review does. Agents give this list, and the one under
-[Documentation](#documentation), to the review subagent they spawn before every commit (see
-AGENTS.md).
+No check decides these, so review does. Agents give this list, and the
+[docs review checklist](#docs-review-checklist), to the review subagent they spawn before every
+commit (see AGENTS.md).
 
 - **Ownership.** Each `Rc` or `Arc` the `shared_ownership` lint makes you justify is really
   needed, and no `.clone()` stands in for a borrow.
@@ -296,22 +296,30 @@ Write these like this rather than inventing a workaround:
 A trellis project's docs have one shape: a short README, an index in its Documentation section,
 and a page in `docs/` for each task a reader has.
 
-### Checked by `just policy`
+### Docs checked by `just policy`
 
 `trellis-policy`'s `docs_index` and `docs_layout` rules check these, with `docs_files` and
-`readme_sections` in `[workspace.metadata.policy]`:
+`readme_sections` in `[workspace.metadata.policy]`. They read Markdown as CommonMark does, so
+text in a code block, an HTML block or a code span is not a heading or a link.
 
 - Every file `docs_files` lists exists: `README.md`, `AGENTS.md`, `CONTRIBUTING.md`,
   `SECURITY.md`, `CHANGELOG.md`, the license files and the pages in `docs/`. A missing setting
   fails rather than checking nothing.
-- The root `README.md` has exactly the `##` sections `readme_sections` lists, in order, written as
-  `#` lines outside code blocks.
-- Its Documentation section is an index and nothing else. Each entry is
-  `- [Title](path): what the reader does with it.`, with a relative path, and every page directly
-  under `docs/` has one.
-- Every page directly under `docs/` starts with a `# Title` line, a blank line and a paragraph.
+- The root `README.md` has one `#` heading, its title, on its first line or after only badges
+  and blank lines. Its `##` sections are exactly the ones `readme_sections` lists, in order.
+- No heading hides from that comparison: no setext heading (a line underlined with `=` or `-`),
+  no `#` heading inside a list item or block quote, and no HTML heading tag such as `<h2>`.
+- The Documentation section is an index and nothing else. Each entry is one line,
+  `- [Title](path): what the reader does with it.`, with a relative path and a description that
+  has words and ends in `.`. Every page directly under `docs/` has an entry.
+- A page in a subdirectory of `docs/` is linked from a page in the directory above it.
+- Every page, at any depth under `docs/`, starts with a `# Title` line, a blank line and a
+  paragraph with words in it. Pages use the `.md` extension, and neither the README nor a page
+  starts with a byte order mark.
 
-### Checked in review
+### Docs review checklist
+
+No check decides these, so review does.
 
 - **A short README.** Anything longer than a few commands moves to a page in `docs/`.
 - **One page per task.** Each page covers one task a reader has, such as installing, verifying a
@@ -324,4 +332,4 @@ and a page in `docs/` for each task a reader has.
   `docs/stability.md`. release-plz writes `CHANGELOG.md`, which isn't edited by hand except as the
   release steps in `CONTRIBUTING.md` say.
 - **Same pull request.** A change to user-facing behavior updates its page in the same pull
-  request.
+  request, and a change to the design updates `docs/design.md`.

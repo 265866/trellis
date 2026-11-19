@@ -32,7 +32,8 @@ The docs keep one shape. `just policy` checks the parts a tool can decide, which
 {%- endif %}
 
 - **README.** It stays short. Anything longer than a few commands moves to a page in `docs/`.
-  Its `##` sections are exactly {{ readme_sections }}, in that order.
+  Its `##` sections are exactly the ones `readme_sections` lists, in that order; trellis starts
+  it with {{ readme_sections }}.
 - **Pages.** One page in `docs/` per reader task, such as installing, verifying a release or
   configuring. The Documentation section links each page with one line that says what the reader
   does with it: `- [Title](path): what the reader does with it.`

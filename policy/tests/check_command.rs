@@ -135,7 +135,6 @@ impl Project {
             "docs/install.md",
             "# Install\n\nFor people who run the demo: how to install it.\n",
         );
-        project.write("docs/guides/setup.md", "# Setup\n");
         project.lock();
         project
     }
@@ -413,8 +412,8 @@ fn a_page_the_index_doesnt_link_fails() {
     );
     run.assert_reports(1, "doesn't link the page `docs/Upper.MD`");
     assert!(
-        !run.stdout.contains("docs/install.md") && !run.stdout.contains("docs/guides"),
-        "the linked page and the page in a subdirectory pass: {run:#?}"
+        !run.stdout.contains("docs/install.md"),
+        "the linked page passes: {run:#?}"
     );
     run.assert_reports(1, "2 structure rule violation(s)");
 }
@@ -530,7 +529,8 @@ fn readme_sections_must_match_in_order() {
                 "[docs_layout] README.md: The readme's `##` sections are {found}, but \
                  `readme_sections` in `[workspace.metadata.policy]` lists `Install`, \
                  `Documentation`. Give the readme exactly those sections, in that order, and \
-                 move anything longer than a few commands to a page in `docs/`."
+                 move anything longer than a few commands to a page in `docs/`, or change \
+                 `readme_sections` in a rule change if the project's sections change."
             ),
         );
         run.assert_reports(1, "1 structure rule violation(s)");
@@ -622,7 +622,6 @@ fn a_page_without_a_title_and_a_paragraph_fails() {
         );
         run.assert_reports(1, "1 structure rule violation(s)");
     }
-    project.write("docs/guides/setup.md", "No title.\n");
     project.write(
         "docs/install.md",
         "# Install\n\nFor people who run the demo.\n",
@@ -848,4 +847,260 @@ fn a_member_the_release_changelog_leaves_out_fails() {
     project
         .check()
         .assert_reports(0, "All 12 structure rules hold");
+}
+
+/// The project's `README.md` with `extra` at the end of its `Install` section.
+fn readme_with_install(extra: &str) -> String {
+    README.replace(
+        "## Documentation\n",
+        &format!("{extra}\n\n## Documentation\n"),
+    )
+}
+
+/// Asserts that `readme` fails `docs_layout` on `README.md` with a message that contains `text`.
+fn assert_readme_fails(project: &Project, readme: &str, text: &str) {
+    project.write("README.md", readme);
+    let run = project.check();
+    assert!(
+        run.code == Some(1)
+            && run
+                .stdout
+                .lines()
+                .any(|line| line.contains("[docs_layout] README.md: ") && line.contains(text)),
+        "the readme should fail with {text:?}:\n{readme}\n{run:#?}"
+    );
+}
+
+#[test]
+fn a_section_hidden_by_a_line_that_isnt_a_fence_fails() {
+    let project = Project::new();
+    let mismatch = "The readme's `##` sections are `Install`, `Extra section`, `Documentation`";
+    for hidden in [
+        "```just ci``` runs the checks.\n\n## Extra section\n",
+        "Run it:\n\n    ```\n\n## Extra section\n",
+        "````md\n```\n````\n\n## Extra section\n",
+        "~~~\n~~\n~~~\n\n## Extra section\n",
+    ] {
+        assert_readme_fails(&project, &readme_with_install(hidden), mismatch);
+    }
+    project.write(
+        "README.md",
+        &readme_with_install("````md\n```\n## Not a section\n```\n````\n\n    ## Code\n"),
+    );
+    project
+        .check()
+        .assert_reports(0, "All 12 structure rules hold");
+}
+
+#[test]
+fn a_setext_heading_after_another_block_fails() {
+    let project = Project::new();
+    for hidden in [
+        "***\nExtra section\n-----\n",
+        "Run it:\n\n    just run\nExtra section\n-----\n",
+        "Extra\n2. section\n---\n",
+        "Extra\nsection\n=====\n",
+    ] {
+        assert_readme_fails(
+            &project,
+            &readme_with_install(hidden),
+            "underlines the line above it",
+        );
+    }
+    project.write(
+        "README.md",
+        &readme_with_install("Steps:\n- run it\n---\n\nText.\n\n---\n"),
+    );
+    project
+        .check()
+        .assert_reports(0, "All 12 structure rules hold");
+}
+
+#[test]
+fn the_readme_has_one_title_first() {
+    let project = Project::new();
+    for (readme, text) in [
+        (
+            readme_with_install("# Another title\n"),
+            "has 2 `#` headings",
+        ),
+        (
+            README.replacen("# Demo\n", "Demo\n", 1),
+            "has 0 `#` headings",
+        ),
+        (format!("Intro.\n\n{README}"), "Its `#` title comes after"),
+    ] {
+        assert_readme_fails(&project, &readme, text);
+    }
+    project.write(
+        "README.md",
+        &format!("[![CI](https://example.com/ci.svg)](https://example.com/ci)\n\n{README}"),
+    );
+    project
+        .check()
+        .assert_reports(0, "All 12 structure rules hold");
+}
+
+#[test]
+fn a_heading_in_a_quote_a_list_or_html_fails() {
+    let project = Project::new();
+    for (hidden, text) in [
+        ("> ## Extra\n", "inside a block quote or list item"),
+        ("- ## Extra\n", "inside a block quote or list item"),
+        (
+            "- Item\n\n  ## Extra\n",
+            "inside a block quote or list item",
+        ),
+        ("<h2>Extra</h2>\n", "an HTML heading tag"),
+        ("Text <H1 class=\"x\">Extra</H1>.\n", "an HTML heading tag"),
+    ] {
+        assert_readme_fails(&project, &readme_with_install(hidden), text);
+    }
+    project.write(
+        "README.md",
+        &readme_with_install("Write `<h2>` as `## Title`.\n\n```html\n<h2>x</h2>\n```\n"),
+    );
+    project
+        .check()
+        .assert_reports(0, "All 12 structure rules hold");
+}
+
+#[test]
+fn an_index_entry_needs_one_line_and_words() {
+    let project = Project::new();
+    for (index, text) in [
+        (
+            "- [Install](docs/install.md): .\n",
+            "its description has no words",
+        ),
+        (
+            "- [Install](docs/install.md): 1.\n",
+            "its description has no words",
+        ),
+        (
+            "- [Install](docs/install.md): install the\n  demo.\n",
+            "one single-line list item per page or file",
+        ),
+        (
+            "- [Install](docs/install.md): install the\ndemo.\n",
+            "one single-line list item per page or file",
+        ),
+        (
+            "- [Install](docs/install.md \"Install\"): install it.\n",
+            "its link has a title or angle brackets",
+        ),
+        (
+            "- [Install](<docs/install.md>): install it.\n",
+            "its link has a title or angle brackets",
+        ),
+    ] {
+        let readme = README.replace(
+            "- [Install](docs/install.md#linux): install the demo.\n",
+            index,
+        );
+        assert_readme_fails(&project, &readme, text);
+    }
+}
+
+#[test]
+fn readme_sections_can_change_in_a_rule_change() {
+    let project = Project::new();
+    assert_readme_fails(
+        &project,
+        &readme_with_install("## Usage\n"),
+        "or change `readme_sections` in a rule change if the project's sections change.",
+    );
+}
+
+#[test]
+fn a_page_opening_that_isnt_a_paragraph_fails() {
+    let project = Project::new();
+    for opening in [
+        "\tjust install\n",
+        "<!-- For people who run the demo. -->\n",
+        "![The demo](demo.png)\n",
+        "[install]: install.md\n",
+        "For people\nwho run it\n-----\n",
+        "For people who run it.\n=====\n",
+    ] {
+        project.write("docs/install.md", &format!("# Install\n\n{opening}"));
+        let run = project.check();
+        run.assert_reports(
+            1,
+            "[docs_layout] docs/install.md: Its title isn't followed by a paragraph",
+        );
+    }
+}
+
+#[test]
+fn a_page_with_a_byte_order_mark_fails() {
+    let project = Project::new();
+    project.write(
+        "docs/install.md",
+        "\u{feff}# Install\n\nFor people who run the demo.\n",
+    );
+    let run = project.check();
+    run.assert_reports(
+        1,
+        "[docs_layout] docs/install.md: It starts with a byte order mark.",
+    );
+    run.assert_reports(1, "1 structure rule violation(s)");
+}
+
+#[test]
+fn pages_in_subdirectories_are_linked_and_shaped() {
+    let project = Project::new();
+    project.write("docs/guides/setup.md", "No title.\n");
+    let run = project.check();
+    run.assert_reports(
+        1,
+        "[docs_index] docs/guides/setup.md: No page in `docs/` links this page",
+    );
+    run.assert_reports(
+        1,
+        "[docs_layout] docs/guides/setup.md: It doesn't start with a `# Title` line.",
+    );
+    run.assert_reports(1, "2 structure rule violation(s)");
+    project.write(
+        "docs/guides/setup.md",
+        "# Setup\n\nFor people who set up the demo.\n",
+    );
+    project.write(
+        "docs/install.md",
+        "# Install\n\nFor people who run the demo. [Set it up](guides/setup.md#first) first.\n",
+    );
+    project
+        .check()
+        .assert_reports(0, "All 12 structure rules hold");
+}
+
+#[test]
+fn a_markdown_file_under_docs_without_the_md_extension_fails() {
+    let project = Project::new();
+    project.write("docs/extra.markdown", "Anything.\n");
+    project.write("docs/guides/more.MKD", "Anything.\n");
+    let run = project.check();
+    run.assert_reports(
+        1,
+        "[docs_layout] docs/extra.markdown: Pages in `docs/` use the `.md` extension",
+    );
+    run.assert_reports(1, "[docs_layout] docs/guides/more.MKD: Pages in `docs/`");
+    run.assert_reports(1, "2 structure rule violation(s)");
+}
+
+#[test]
+fn a_link_in_an_html_comment_doesnt_count() {
+    let project = Project::new();
+    project.write(
+        "docs/guides/setup.md",
+        "# Setup\n\nFor people who set up the demo.\n",
+    );
+    project.write(
+        "docs/install.md",
+        "# Install\n\nFor people who run the demo.\n\n<!--\n[Set it up](guides/setup.md).\n-->\n",
+    );
+    project.check().assert_reports(
+        1,
+        "[docs_index] docs/guides/setup.md: No page in `docs/` links this page",
+    );
 }
