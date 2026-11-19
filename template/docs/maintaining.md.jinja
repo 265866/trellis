@@ -1,0 +1,236 @@
+# Maintain {{ project_name }}
+{%- set published = kind == 'library' and publish_crate %}
+{%- set os_list = ['linux'] if kind == 'service' else platforms %}
+{%- set job_names = {'linux': 'Ubuntu', 'macos': 'macOS', 'windows': 'Windows'} %}
+
+This page is for the repository's owner. It lists the work that needs the owner's rights, in the
+order it comes up: setting up the repository, releasing, changing an answer, updating trellis and
+renewing the release token.
+
+## Before the first push
+
+The release workflow runs on every push to `main`, so set the repository up before you push.
+Commit the generated project on a branch named `main` (`git init --initial-branch main`), then
+create the repository on GitHub as {{ visibility }}, as you answered, without pushing:
+
+```sh
+gh repo create {{ github_owner }}/{{ project_name }} --{{ visibility }} --source .
+```
+{%- if visibility == 'private' %}
+
+A private repository's Actions minutes come out of the account's included usage.
+{%- if kind != 'service' %}
+A macOS minute costs about ten times a Linux one, and a Windows minute about twice.
+{%- endif %}
+[Change an answer](#change-an-answer) says how to make it public.
+{%- elif kind != 'library' %}
+
+Without GitHub Enterprise Cloud, GitHub attests release files only in public repositories, and the
+release workflow stops when it can't attest. [Change an answer](#change-an-answer) says how to make
+the repository private.
+{%- endif %}
+
+Then:
+
+1. In Settings, General, allow squash merging only, with the pull request title as its default
+   message, so the title becomes the commit on `main`.
+2. Install the [Renovate app](https://github.com/apps/renovate) on the repository. Each week it
+   opens one pull request with the crate updates other than major ones, and one for each major
+   update. The toolchain, tool, action and image pins arrive with trellis updates.
+3. Create the label release-plz puts on its pull request: `gh label create release`.
+4. Create a fine-grained token with contents and pull request write access to this repository,
+   and add it as the `RELEASE_PLZ_TOKEN` secret with `gh secret set RELEASE_PLZ_TOKEN`. A pull
+   request that `GITHUB_TOKEN` opens starts no `pull_request_target` workflow, so without the
+   token the release pull request never gets the "Rule changes stand alone" status and can't
+   merge.
+{%- if visibility == 'public' %}
+5. Allow the rule-change check to run. A public repository needs an Actions policy that allows
+   `pull_request_target` for `rule-changes.yml`. Without it, GitHub doesn't run the check, and no
+   pull request gets the "Rule changes stand alone" status:
+
+   ```sh
+   gh api --method POST repos/{{ github_owner }}/{{ project_name }}/actions/policies --input - <<'EOF'
+   {"name": "Rule-change check", "enforcement": "active",
+    "conditions": {"workflow_path": {"include": [".github/workflows/rule-changes.yml"], "exclude": []}},
+    "rules": [{"type": "restrict_action_events",
+               "parameters": {"allowed_events": ["pull_request_target"]}}]}
+   EOF
+   ```
+
+6. Turn on private vulnerability reporting, which [SECURITY.md](../SECURITY.md) points to.
+{%- endif %}
+
+Then push `main`:
+
+```sh
+git push --set-upstream origin main
+```
+
+## After the first pull request's checks run
+
+GitHub offers only the checks it has seen, so wait until the first pull request's checks have run.
+Then protect `main` and require these checks: `PR title`, `Quick checks`,
+{% for os in os_list %}`{{ job_names[os] }}`, {% endfor %}
+{%- if kind == 'service' %}`Container image`, {% endif %}and the "Rule changes stand alone"
+status with GitHub Actions as its source.
+{%- if kind == 'binary' %} The `Release build` checks run only when a pull request
+changes what goes into a release, so don't require them.
+{%- elif kind == 'service' %} `Container image` builds the image, as `just image`
+does, and runs it with `--version`, so the service must answer `--version` and exit 0.
+{%- endif %}
+{%- if visibility == 'private' %}
+
+Protecting `main` in a private repository needs GitHub Pro or a paid organization plan. Without
+one, nothing stops a pull request whose checks fail, or one that changes rules and code together,
+from merging.
+{%- endif %}
+{%- if published %}
+
+## At the first release
+
+Publish the first version by hand with `cargo publish`. If that commit has no `vX.Y.Z` tag, tag it
+with its version and push the tag, so release-plz starts from it. Then add this repository's
+`release.yml` as a trusted publisher in the crate's settings on crates.io. Later releases publish
+through it.
+{%- elif kind == 'service' and visibility == 'public' %}
+
+## At the first release
+
+Once the first release has pushed the image, make the `{{ project_name }}` package public in its
+package settings on GitHub, so others can pull the image. GitHub can't make it private again.
+{%- endif %}
+
+## Each release
+
+release-plz keeps a release pull request open with the next version and its `CHANGELOG.md` entry.
+Merging it releases that version, with that entry as the release notes;
+[release.yml](../.github/workflows/release.yml) does the rest. Before 1.0, a `feat` or a `!` bumps
+the minor version and a `fix` the patch version. To ship:
+
+1. To reword an entry, edit `CHANGELOG.md` on the release pull request's branch, as the last step
+   before you merge: the next merge to `main` closes the release pull request and opens a new one
+   without the edit. The first release after you add a crate comes out as a patch when only that
+   crate changed. For a minor one, change the version on that branch too: in the root
+   `Cargo.toml`, in `Cargo.lock` and in the `CHANGELOG.md` heading. Its notes can repeat older
+   entries; delete those. Renaming the main crate stops the release workflow with an error that
+   says what to do by hand.
+2. Merge it once its checks pass. Merge no other pull request until the release workflow's
+   **{{ 'Release' if kind == 'library' else 'Tag' }}** job finishes, or release-plz may propose the same version again.
+{%- if kind != 'library' %}
+3. If a later job fails, re-run the failed jobs. They pick up from the same tag.
+
+### Keep releases verifiable
+
+[Verify a release](verifying-releases.md) gives users commands that name the `vX.Y.Z` tag form,
+the `release.yml` file and the `main` branch it runs on, the repository
+`{{ github_owner }}/{{ project_name }}`, and
+{%- if kind == 'binary' and visibility == 'public' %} the archive, `SHA256SUMS` and `attestation.json` file names.
+{%- elif kind == 'binary' %} the archive and `SHA256SUMS` file names.
+{%- else %} the image `ghcr.io/{{ github_owner | lower }}/{{ project_name }}`.
+{%- endif %} Changing
+one breaks the commands users have copied.
+{%- endif %}
+{%- if published %}
+
+## Add a crate to a published library
+
+Every crate you add is published too, and crates.io takes a new crate only by hand. Publish its
+first version with `cargo publish --package <crate>`, then add this repository's `release.yml` as
+a trusted publisher in its settings on crates.io. Later releases publish it through `release.yml`.
+{%- endif %}
+
+## Change an answer
+
+To change an answer, keep the trellis version and pass the new value, such as
+{%- if kind == 'service' %} the license:
+
+```sh
+uvx copier update --defaults --vcs-ref=:current: --data 'license=MIT OR Apache-2.0'
+```
+{%- else %} the platforms:
+
+```sh
+uvx copier update --defaults --vcs-ref=:current: --data 'platforms=[linux, macos]'
+```
+{%- endif %}
+
+The change is a rule change, so it can't also change code. Some answers also change what GitHub
+needs:
+{% if kind != 'service' %}
+- **Platforms.** CI runs one job per platform. Once the change merges, update the checks `main`
+  requires: add the job for a new platform, such as `macOS`, and remove the job for a platform you
+  dropped, or every pull request waits for a check that never reports.
+{%- endif %}
+{%- if visibility == 'private' %}
+- **Visibility.** To make the repository public, run
+  `uvx copier update --defaults --vcs-ref=:current: --data visibility=public` on a branch.
+{%- if kind == 'binary' %}
+  It adds the release attestations, which fail in a private repository.
+{%- elif kind == 'service' %}
+  It adds the image attestation and signature, which a private repository can't use.
+{%- endif %}
+  Make the repository public on GitHub, then do the two steps the update adds to "Before the
+  first push" in the branch's copy of this page: the Actions policy, without which a public
+  repository doesn't run the rule-change check, and private vulnerability reporting. Only then
+  open the pull request, so the check runs, and merge it before any release pull request.
+{%- if kind == 'service' %}
+  The image's package stays private until you make it public in its package settings, as the
+  updated page's "At the first release" says.
+{%- endif %}
+{%- elif published %}
+- **Visibility.** The repository stays public while it publishes to crates.io, and the template
+  refuses `visibility=private` until `publish_crate` is off.
+{%- else %}
+- **Visibility.** To make the repository private, first merge the change that
+  `uvx copier update --defaults --vcs-ref=:current: --data visibility=private` makes, then make
+  the repository private on GitHub.
+{%- if kind == 'service' %}
+  The image's package stays public, because GitHub can't make a public package private again.
+  Delete it in its package settings before the next release, which then publishes a new, private
+  package.
+{%- endif %}
+  GitHub takes private vulnerability reports only in public repositories, so `SECURITY.md` then
+  sends reports to issues, and the Actions policy for the rule-change check no longer matters.
+  Protecting `main` in a private repository needs GitHub Pro or a paid organization plan, and its
+  Actions minutes come out of the account's included usage.
+{%- if kind != 'service' %}
+  A macOS minute costs about ten times a Linux one, and a Windows minute about twice.
+{%- endif %}
+{%- endif %}
+{%- if kind == 'library' and visibility == 'public' %}
+{%- if publish_crate %}
+- **License.** After changing the license, copy the root `LICENSE*` files into the crate's
+  directory and remove the old ones, in the same pull request; `just package` fails until you do.
+{%- else %}
+- **Publishing.** After turning on `publish_crate`, publish the first version as the updated
+  page's "At the first release" says.
+{%- if license == 'none' %} crates.io needs a license, so pass one in the same update,
+  such as `--data license=MIT`.
+{%- endif %} In the same pull request as the change, copy the root
+  `LICENSE*` files into the crate's directory; `just package` fails until you do.
+{%- endif %}
+{%- endif %}
+
+## Update trellis
+
+Renovate opens a pull request when trellis tags a new version. To update by hand:
+
+```sh
+uvx copier update --defaults
+```
+
+An update never touches `crates/`, `Cargo.lock`, `CHANGELOG.md` or `docs/design.md`, which are
+yours after the project is generated. It is a rule change, so it can't also change code. Copier
+merges the new template into your edits; resolve any conflict markers it leaves before you commit.
+
+## Renew the release token
+
+A fine-grained token expires on the date you set when you created it. Before it does, create a new
+one with the same access and replace the secret:
+
+```sh
+gh secret set RELEASE_PLZ_TOKEN
+```
+
+Until you do, the release workflow's **Update the release PR** job fails, and the release pull
+request stops updating.

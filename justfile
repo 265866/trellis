@@ -113,8 +113,8 @@ pins:
     done
     versions=$(grep --only-matching --no-filename --extended-regexp \
       '\b[a-z][a-z0-9-]*@v?[0-9]+\.[0-9]+\.[0-9]+\b' \
-      .github/workflows/*.yml template/.github/workflows/* justfile CONTRIBUTING.md \
-      template/CONTRIBUTING.md.jinja tests/dependencies/*.sh | sed 's/@v/@/; s/^typos-cli@/typos@/; s/^taplo-cli@/taplo@/'
+      .github/workflows/*.yml template/.github/workflows/* justfile template/justfile.jinja \
+      CONTRIBUTING.md template/CONTRIBUTING.md.jinja tests/dependencies/*.sh | sed 's/@v/@/; s/^typos-cli@/typos@/; s/^taplo-cli@/taplo@/'
       sed -n 's/^ *version: \([0-9.]*\)$/release-plz@\1/p' template/.github/workflows/release.yml.jinja
       sed -n 's/.*\[shellcheck\]([^)]*) \([0-9.]*\),.*/shellcheck@\1/p' template/CONTRIBUTING.md.jinja)
     versions=$(sort --unique <<< "$versions")

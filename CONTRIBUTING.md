@@ -2,8 +2,9 @@
 
 ## Set up
 
-Install [rustup](https://rustup.rs/), [uv](https://docs.astral.sh/uv/), Docker, and the tools the
-generated projects' `CONTRIBUTING.md` lists. Then run `just install-nightly-rustfmt`.
+Install [rustup](https://rustup.rs/), [uv](https://docs.astral.sh/uv/), Docker, the tools a
+generated project's `CONTRIBUTING.md` lists, and the check tools its `just install-tools` installs.
+Then run `just install-nightly-rustfmt`.
 
 ## Check a change
 
@@ -14,8 +15,8 @@ generated projects' `CONTRIBUTING.md` lists. Then run `just install-nightly-rust
 | `just pins` | The template pins the same toolchains and config files as this repository and `lints/`, and every tool has one version wherever it's pinned. |
 | `just lints-lint`, `just lints-comments`, `just lints-test` | clippy, `code_comment` and the UI tests for the custom lints. The lints' own code has no code comments either; the UI fixtures in `lints/ui/` keep theirs, since their test directives are comments. |
 | `just template <kind> [recipes] [publish]` | Generates a `binary`, `service` or `library` project from the working tree and runs its `just ci`, or the recipes you name. `true` as `publish` makes a library a published one. |
-| `just shapes` | Generates the project a user gets, with the lints from GitHub, for eight sets of answers, and runs the checks that don't fetch them. |
-| `just dependencies` | Generates a binary that uses serde, thiserror, anyhow, clap, tokio and tracing, runs its checks, then checks that the lints reject each way past them in `tests/dependencies/violations.sh`. |
+| `just shapes` | Generates the project a user gets, with the lints from GitHub, for each set of answers the `shape` recipe lists, and runs the checks that don't fetch them. |
+| `just dependencies` | Generates a binary that uses the crates most projects use, as `tests/dependencies/setup.sh` adds them, runs its checks, then checks that the lints reject each way past them in `tests/dependencies/violations.sh`. |
 | `just update` | Generates a project from one scratch trellis version, edits it as an owner would, updates it to a second, and checks the rules moved and the owner's code didn't. Then it switches the project to private and back. |
 | `just templates` | `template` for each kind, `shapes`, `dependencies` and `update`. |
 
@@ -42,9 +43,11 @@ and in `template/` together. These move by hand:
 - **The rustfmt nightly**: `nightly` in `justfile`, `template/justfile.jinja` and the Editors
   section of `template/CONTRIBUTING.md.jinja`.
 - **cargo-dylint and dylint-link**, at the version of `dylint_linting` in `lints/Cargo.toml`.
-- **The check tools**, on the workflows' `tool:` lines, in both `CONTRIBUTING` files and in
-  `tests/dependencies/`; the release-plz `version:` inputs in `template/.github/workflows/`; and
-  actionlint's `go install` and copier's version in the justfiles and workflows.
+- **The check tools**, on the workflows' `tool:` lines and in `install-tools` in
+  `template/justfile.jinja`; just and shellcheck in the Set up section of
+  `template/CONTRIBUTING.md.jinja`; release-plz's `version:` inputs and the `tool@x.y.z` mentions
+  in the comments of `template/.github/workflows/`; actionlint's `go install` in
+  `template/justfile.jinja` and the workflows; and copier's version in `justfile`.
 - **`rust-version`** in both `Cargo.toml` files: push it to Renovate's toolchain pull request,
   which fails `just pins` until then.
 

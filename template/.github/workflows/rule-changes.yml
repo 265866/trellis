@@ -20,9 +20,9 @@ name: Rule changes
 # and a title or body edit reruns the check rather than skip, since a skipped or cancelled run must
 # never count as a pass.
 #
-# From 2026-12-02 GitHub blocks `pull_request_target` in public repositories unless an Actions
-# policy allows it for this file; a public project's CONTRIBUTING.md has the one command that adds
-# the policy. Private repositories aren't blocked.
+# A public repository needs an Actions policy that allows `pull_request_target` for this file, or
+# GitHub doesn't run it; a public project's docs/maintaining.md has the one command that adds the
+# policy. Private repositories don't need it.
 
 on:
   # zizmor: ignore[dangerous-triggers] No job checks out, builds or runs the pull request's code; the job that runs the base branch's code can only read, and the jobs that write statuses run no repository code.

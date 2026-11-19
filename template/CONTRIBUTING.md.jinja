@@ -6,6 +6,9 @@ every style rule, what checks it, and the review checklist for the rest;
 [AGENTS.md](AGENTS.md) holds the rules no check decides. Both apply to people and coding agents
 alike.
 
+The owner's work, such as the repository settings and releases, is in
+[docs/maintaining.md](docs/maintaining.md).
+
 ## Set up
 
 Install [rustup](https://rustup.rs/), [cargo-binstall](https://github.com/cargo-bins/cargo-binstall),
@@ -15,21 +18,15 @@ Install [rustup](https://rustup.rs/), [cargo-binstall](https://github.com/cargo-
 Windows, also install the [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
 with the "Desktop development with C++" workload, which Rust's MSVC toolchain links with.
 {%- endif %}
-Then install the tools the checks use:
+Then install just, and use it to install the tools and toolchains the checks use:
 
 ```sh
-cargo binstall just@1.59.0 cargo-deny@0.20.2 cargo-shear@1.14.0 cargo-nextest@0.9.150 \
-  cargo-dylint@6.3.0 dylint-link@6.3.0 typos-cli@1.51.1 taplo-cli@0.10.0 lychee@0.24.2
-{%- if kind != 'library' %}
-cargo binstall cargo-about@0.9.3
-{%- endif %}
-go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
-uv tool install zizmor@1.31.1
+cargo binstall just@1.59.0
+just install-tools
 just install-toolchains
 ```
 
-These are the versions CI pins in `.github/workflows/`.
-
+`just install-tools` installs the check tools at the versions CI pins in `.github/workflows/`.
 `just install-toolchains` installs the stable toolchain from `rust-toolchain.toml`, the nightly
 rustfmt, and the nightly the custom lints build on.
 
@@ -108,149 +105,6 @@ the changed files:
   and `[patch]`, the tool configuration files, the `justfile`, build scripts, `.github/`,
   `.copier-answers.yml`, this file, `docs/style.md` and `AGENTS.md`. A file the checker doesn't
   know{{ ', such as `Containerfile`,' if kind == 'service' else '' }} is a rule too.
-
-## Set up once per repository
-
-{% if visibility == 'private' -%}
-- Keep the repository private. Protecting `main` in a private repository needs GitHub Pro or a paid
-  organization plan, and its Actions minutes come out of the account's included usage: a macOS
-  minute costs about ten times a Linux one, and a Windows minute about twice. To make it public,
-  make the repository public first, then run
-  `uvx copier update --defaults --vcs-ref=:current: --data visibility=public`, follow the setup
-  steps it adds to this list, and merge its change before any release PR.
-{%- if kind == 'binary' %} It adds the release
-  attestations, which fail in a private repository.
-{%- elif kind == 'service' %} It adds the image
-  attestation and signature, which a private repository can't use.
-{%- endif %}
-{% elif kind != 'library' -%}
-- Keep the repository public. Without GitHub Enterprise Cloud, GitHub attests release files only in
-  public repositories, and the release workflow stops when it can't attest. To make it private,
-  first merge the change that
-  `uvx copier update --defaults --vcs-ref=:current: --data visibility=private` makes.
-{%- if kind == 'service' %} The image's
-  package stays public, because GitHub can't make a public package private again. Delete it in its
-  package settings before the next release, which then publishes a new, private package.
-{%- endif %}
-{% elif not publish_crate -%}
-- To make the repository private, first merge the change that
-  `uvx copier update --defaults --vcs-ref=:current: --data visibility=private` makes.
-{% endif -%}
-- In Settings, General, allow squash merging only, with the pull request title as its default
-  message, so the title becomes the commit on `main`.
-- Install the [Renovate app](https://github.com/apps/renovate) on the repository. Each week it opens
-  one pull request with the crate updates other than major ones, and one for each major update.
-  The toolchain, tool, action and image pins arrive with trellis updates.
-{%- if visibility == 'public' %}
-- Allow the rule-change check to run. From 2026-12-02 GitHub blocks `pull_request_target` in
-  public repositories unless an Actions policy allows it, and without it no pull request gets the
-  "Rule changes stand alone" status:
-
-  ```sh
-  gh api --method POST repos/{{ github_owner }}/{{ project_name }}/actions/policies --input - <<'EOF'
-  {"name": "Rule-change check", "enforcement": "active",
-   "conditions": {"workflow_path": {"include": [".github/workflows/rule-changes.yml"], "exclude": []}},
-   "rules": [{"type": "restrict_action_events",
-              "parameters": {"allowed_events": ["pull_request_target"]}}]}
-  EOF
-  ```
-{% endif %}
-- Create the label release-plz puts on its PR: `gh label create release`.
-- Add a fine-grained token with contents and pull request write access to this repository as the
-  `RELEASE_PLZ_TOKEN` secret. A pull request that `GITHUB_TOKEN` opens starts no
-  `pull_request_target` workflow, so without the token the release PR never gets the
-  "Rule changes stand alone" status and can't merge.
-{%- if visibility == 'public' %}
-- Turn on private vulnerability reporting, which [SECURITY.md](SECURITY.md) points to.
-{%- endif %}
-{%- if kind == 'library' and publish_crate %}
-- Publish the first version by hand with `cargo publish`. If that commit has no `vX.Y.Z` tag, tag it
-  with its version and push the tag, so release-plz starts from it. Then add this repository's
-  `release.yml` as a trusted publisher in the crate's settings on crates.io. Later releases publish
-  through it. Every crate you add is published too, so do the same for each one.
-{%- endif %}
-{%- if kind == 'service' and visibility == 'public' %}
-- After the first release, make the `{{ project_name }}` package public in its package settings on
-  GitHub, so others can pull the image. GitHub can't make it private again.
-{%- elif kind == 'service' %}
-- Sign in to `ghcr.io` on each server that pulls the image, as [Install](docs/install.md) shows.
-{%- endif %}
-{%- set os_list = ['linux'] if kind == 'service' else platforms %}
-{%- set job_names = {'linux': 'Ubuntu', 'macos': 'macOS', 'windows': 'Windows'} %}
-- After the first pull request's checks run (GitHub offers only checks it has seen), protect
-  `main` and require these checks: `PR title`, `Quick checks`,
-  {% for os in os_list %}`{{ job_names[os] }}`, {% endfor %}
-{%- if kind == 'service' %}`Container image`, {% endif %}and the "Rule changes stand alone"
-  status with GitHub Actions as its source.
-{%- if kind == 'binary' %} The `Release build` checks run only when a pull request
-  changes what goes into a release, so don't require them.
-{%- endif %}
-{%- if kind == 'service' %}
-  `Container image` builds the image, as `just image` does, and runs it with `--version`, so the
-  service must answer `--version` and exit 0.
-{%- endif %}
-
-## Releases
-
-release-plz keeps a release PR open with the next version and its `CHANGELOG.md` entry. Merging it
-releases that version, with that entry as the release notes;
-[release.yml](.github/workflows/release.yml) does the rest. Before 1.0, a `feat` or a `!` bumps the
-minor version and a `fix` the patch version. To ship:
-
-1. To reword an entry, edit `CHANGELOG.md` on the release PR's branch, as the last step before you
-   merge: the next merge to `main` closes the release PR and opens a new one without the edit.
-   The first release after you add a crate comes out as a patch when only that crate changed. For a
-   minor one, change the version on that branch too: in the root `Cargo.toml`, in `Cargo.lock` and
-   in the `CHANGELOG.md` heading. Its notes can repeat older entries; delete those. Renaming the
-   main crate stops the release workflow with an error that says what to do by hand.
-2. Merge it once its checks pass. Merge no other PR until the release workflow's
-   **{{ 'Release' if kind == 'library' else 'Tag' }}** job finishes, or release-plz may propose the same version again.
-{%- if kind != 'library' %}
-3. If a later job fails, re-run the failed jobs. They pick up from the same tag.
-{%- endif %}
-{%- if kind != 'library' %}
-
-### Keep releases verifiable
-
-[Verify a release](docs/verifying-releases.md) gives users commands that name the `vX.Y.Z` tag
-form, the `release.yml` file and the `main` branch it runs on, the repository
-`{{ github_owner }}/{{ project_name }}`, and
-{%- if kind == 'binary' and visibility == 'public' %} the archive, `SHA256SUMS` and `attestation.json` file names.
-{%- elif kind == 'binary' %} the archive and `SHA256SUMS` file names.
-{%- else %} the image `ghcr.io/{{ github_owner | lower }}/{{ project_name }}`.
-{%- endif %} Changing
-one breaks the commands users have copied.
-{%- endif %}
-
-## Update trellis
-
-Renovate opens a pull request when trellis tags a new version. To update by hand:
-
-```sh
-uvx copier update --defaults
-```
-
-To change an answer, keep the trellis version and pass the new value, such as
-{%- if kind == 'service' %} the license:
-
-```sh
-uvx copier update --defaults --vcs-ref=:current: --data 'license=MIT OR Apache-2.0'
-```
-{%- else %} the platforms:
-
-```sh
-uvx copier update --defaults --vcs-ref=:current: --data 'platforms=[linux, macos]'
-```
-{%- endif %}
-
-An update never touches `crates/`, `Cargo.lock`, `CHANGELOG.md` or `docs/design.md`, which are
-yours after the project is generated. It is a rule change, so it can't also change code.
-Copier merges the new template into your edits; resolve any conflict markers it leaves before you
-commit.
-{%- if kind == 'library' %} After turning on `publish_crate`, or changing a published crate's
-license, copy the root `LICENSE*` files into the crate's directory and remove the old ones, in the
-same pull request; `just package` fails until you do.
-{%- endif %}
 {%- if license == 'MIT' %}
 
 ## License

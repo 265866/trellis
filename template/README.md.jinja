@@ -11,7 +11,7 @@
 
 Download the archive for your platform from the
 [latest release](https://github.com/{{ github_owner }}/{{ project_name }}/releases/latest), check it
-as [Verify a release](docs/verifying-releases.md) shows, and put `{{ project_name }}` on your `PATH`.
+as [Verify a release](docs/verifying-releases.md) shows, and unpack it.
 [Install](docs/install.md) has the details.
 {%- elif kind == 'service' %}
 ## Run it
@@ -70,7 +70,8 @@ git-fetch-with-cli = true
 - [Design](docs/design.md): the goals, the architecture, and the decisions behind them.
 - [Stability](docs/stability.md): what a release can change, and what to read before you upgrade.
 - [Code style](docs/style.md): which style rules a tool checks, and the review checklist for the rest.
-- [Contributing](CONTRIBUTING.md): the checks, the rules for changes, and how releases work.
+- [Contributing](CONTRIBUTING.md): set up, run the checks, and send a change.
+- [Maintain](docs/maintaining.md): the owner's repository settings, releases and trellis updates.
 - [Security policy](SECURITY.md): how to report a vulnerability.
 - [Changelog](CHANGELOG.md): what changed in each release.
 {%- if license != 'none' or kind != 'library' %}
