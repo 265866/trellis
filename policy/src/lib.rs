@@ -1,15 +1,6 @@
-//! Checks the structure rules of a project generated from the trellis template that the compiler
-//! and the lints can't see: every crate inherits the workspace lints, holds only the manifest
-//! settings the workspace allows, reads its sources only from its own directory, has no build
-//! script and uses only the proc macros the workspace lists; no tool reads a configuration file
-//! other than the workspace's; the root `AGENTS.md` is the only file of instructions for coding
-//! agents; each crate depends only on the workspace crates its entry in `internal_dependencies`
-//! allows; the workspace keeps its shape and loads the trellis lints; every page in `docs/` is
-//! linked, from the `Documentation` section of the root `README.md` or a page above it; the files
-//! `docs_files` lists exist, the readme has one title, exactly the sections `readme_sections`
-//! lists and an index for its `Documentation` section, and every page in `docs/` opens with a
-//! title and a paragraph; and the main package's changelog in `release-plz.toml` takes in every
-//! other crate.
+//! Checks the structure rules of a trellis project that the compiler and the lints can't see.
+//! [The style guide](https://github.com/265866/trellis/blob/main/docs/style.md#checked-by-tools)
+//! lists them under Checked by tools and Docs checked by just policy.
 //!
 //! The `trellis-policy check [--manifest-path <Cargo.toml>]` command runs every [`Rule`] on a
 //! workspace. The `trellis-policy rule-changes <base> [--head <commit>]` command keeps changes to

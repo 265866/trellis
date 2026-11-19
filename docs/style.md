@@ -4,8 +4,8 @@ A trellis project follows the
 [Google Rust Style Guide](https://google.github.io/styleguide/rustguide.html), and through it the
 official [Rust Style Guide](https://doc.rust-lang.org/nightly/style-guide/) and the
 [Rust API Guidelines](https://rust-lang.github.io/api-guidelines/). This page lists which of the
-Google guide's rules a check enforces, which ones only review can catch, where trellis goes
-further than the guide, and how the docs are laid out.
+Google guide's rules a check enforces, how to silence a lint, which rules only review can catch,
+where trellis goes further than the guide, and how the docs are laid out.
 
 ## Checked by tools
 
@@ -77,26 +77,8 @@ structure rules are [`trellis-policy`](https://github.com/265866/trellis/tree/ma
 Beyond the Google guide, the workspace also turns on:
 
 - `code_comment`: no `//` or `/* */` comments in Rust code except `// SAFETY:` ones (see below).
-- `suppression_policy`: no `allow` or `warn` attributes and no inner `#![expect]`. An `expect`
-  names single lints, never a group, and has a reason; a reason has at least 20 characters and 4
-  different words besides the words of the lint's name, so `"x"` or the lint's name spelled out
-  fails. No `clippy::` attribute such as `#[clippy::msrv]` or `#[clippy::cognitive_complexity]`,
-  which change what clippy checks without an `expect`: set the Rust version with `rust-version`
-  and thresholds in `clippy.toml`; `cfg_attr` may wrap a lint level only as
-  `cfg_attr(dylint_lib = "trellis_lints", expect(lint, reason = "..."))`. No lint-level
-  attribute goes on a `mod`; on an `impl` block or a trait it may name only a lint that reports at
-  the block. It reads the source text, so a `cfg_attr` that only one of the clippy and dylint
-  runs sees can't hide anything. No lint attribute is built from macro variables or assembled by
-  a macro: a `#` that doesn't start an attribute, an attribute that doesn't start with a path
-  (`paste`'s `[<...>]`), or brackets after a `$name:tt` variable fail. After expansion, an
-  `allow`, `warn`, inner lint level, or `expect` without a reason or naming a group that a macro
-  writes fails, unless `trusted_macro_crates` in `dylint.toml` lists the crate that defines the
-  macro. Even then, a lint level a trusted macro writes over code written in the source may name
-  only lints `trusted_macro_lints` in `dylint.toml` lists for that crate, and never a group, so a
-  macro can't switch clippy off for the code passed to it, whatever that code is, a literal or a
-  path included. So trellis trusts no macro that writes lint levels over code passed to it, such
-  as clap's derives, `#[tokio::main]`, `#[tokio::test]` and `#[tracing::instrument]`; the idioms
-  below replace them.
+- `suppression_policy`: an exception is an `expect` with a reason, written as
+  [Silencing a lint](#silencing-a-lint) says.
 - `needless_raw_identifier`: no `r#name` unless `name` is a keyword, since a raw identifier
   changes nothing for the compiler but hides the name from checks that read the source text.
 - `missing_workspace_lints`: every crate compiles with the workspace lint levels, clippy's default
@@ -128,10 +110,6 @@ Beyond the Google guide, the workspace also turns on:
 - `local_doc_hidden`: no `#[doc(hidden)]` on the project's own items, which would skip
   `missing_docs`. An item a macro needs public takes
   `#[cfg_attr(dylint_lib = "trellis_lints", expect(local_doc_hidden, reason = "..."))]`.
-- `suppression_policy`, `missing_workspace_lints`, `disabled_code`, `code_comment`,
-  `needless_raw_identifier`, `file_named_after_item`, `non_leaf_module_items` and
-  `macro_definition` have no exceptions: an
-  `expect` naming any of them fails.
 - `clippy::let_underscore_must_use`, `clippy::unused_result_ok` and `discarded_result`: no
   `let _ =`, `_ =` or `.ok();` that discards a `Result` or a `#[must_use]` value, no unread
   `let _name =` binding of a `Result` (or its `.is_ok()`, `.is_err()`, `.ok()`, `.err()`), and no
@@ -156,12 +134,12 @@ Beyond the Google guide, the workspace also turns on:
   loads only the trellis lints as its dylint library; that each crate's `Cargo.toml` holds only
   allowed keys (no `test = false`, `harness = false`, `auto*` or `required-features`), inherits
   `edition`, `rust-version` and `publish`, and keeps its sources, `#[path]` files included, inside
-  the crate; that `.cargo/config.toml` holds only the Windows `+crt-static` flags; that a crate
-  depends directly only on proc-macro crates listed in `proc_macro_crates`, since a proc macro
-  writes code the custom lints don't check; that the root `AGENTS.md` is the only file of
-  instructions for coding agents; that every crate's commits reach the release notes through
-  `changelog_include` in `release-plz.toml`; and that the docs keep the layout under
-  [Documentation](#documentation).
+  the crate, with no symbolic link in or above its directory; that `.cargo/config.toml` holds
+  only the Windows `+crt-static` flags; that a crate depends directly only on proc-macro crates
+  listed in `proc_macro_crates`, since a proc macro writes code the custom lints don't check;
+  that the root `AGENTS.md` is the only file of instructions for coding agents; that every
+  crate's commits reach the release notes through `changelog_include` in `release-plz.toml`; and
+  that the docs keep the layout under [Documentation](#documentation).
 - `overflow-checks` and `panic = "abort"` in release builds: an overflow stops the program rather
   than wrapping, and nothing catches a panic. `trellis-policy` fails a change that turns either
   off, including a per-package or `.cargo/config.toml` override.
@@ -174,6 +152,48 @@ Beyond the Google guide, the workspace also turns on:
   dependency nothing uses. A `.rs` change that only adds, removes or moves `expect` attributes is
   neither, so a new lint lands with the `expect`s it needs, and a code change with the `expect`s
   it forces elsewhere.
+
+## Silencing a lint
+
+Put an `expect` with a reason on the smallest item the lint applies to:
+
+- a clippy or rustc lint: `#[expect(clippy::lint_name, reason = "...")]`;
+- a custom lint: `#[cfg_attr(dylint_lib = "trellis_lints", expect(lint_name, reason = "..."))]`.
+  The `cfg_attr` keeps ordinary builds, which don't know the lint, from warning about it.
+
+An `expect` fails once its lint stops firing, so a stale exception doesn't linger. Nothing else
+silences a lint, and these all fail `just dylint`. `suppression_policy` reads the source text, so
+a `cfg_attr` that only one of the clippy and dylint runs sees can't hide any of them.
+
+- `allow` and `warn`, and every inner lint attribute (`#![...]`), at the top of a crate or module
+  or inside a function.
+- An `expect` without a reason, or one that names a lint group, such as `warnings` or
+  `clippy::pedantic`, rather than single lints.
+- A reason with fewer than 20 characters or fewer than 4 different words besides the words of the
+  lint's name, so `"x"` or the lint's name spelled out fails.
+- Any `#[clippy::...]` attribute, such as `#[clippy::msrv]` or `#[clippy::cognitive_complexity]`,
+  which changes what clippy checks without an `expect`. Set the Rust version with `rust-version`
+  and thresholds in `clippy.toml`.
+- A `cfg_attr` around a lint level in any other form than
+  `cfg_attr(dylint_lib = "trellis_lints", expect(lint, reason = "..."))`.
+- A lint-level attribute on a `mod`, or on an `impl` block or a trait for a lint that doesn't
+  report at the block.
+- A lint attribute built from macro variables or assembled by a macro: a `#` that doesn't start
+  an attribute, an attribute that doesn't start with a path (`paste`'s `[<...>]`), or brackets
+  after a `$name:tt` variable.
+- After expansion, an `allow`, `warn`, inner lint level, or `expect` without a reason or naming a
+  group that a macro writes, unless `trusted_macro_crates` in `dylint.toml` lists the crate that
+  defines the macro (`serde_derive`, not `serde`). Even then, a lint level a trusted macro writes
+  over code written in the source may name only lints `trusted_macro_lints` in `dylint.toml` lists
+  for that crate, and never a group, so a macro can't switch clippy off for the code passed to it,
+  whatever that code is, a literal or a path included. So trellis trusts no macro that writes lint
+  levels over code passed to it, such as clap's derives, `#[tokio::main]`, `#[tokio::test]` and
+  `#[tracing::instrument]`; the [idioms](#idioms-under-these-rules) replace them.
+
+Some lints have no exceptions, and an `expect` naming one fails: `code_comment`,
+`suppression_policy`, `missing_workspace_lints`, `disabled_code` and `needless_raw_identifier`
+(fix the code), `file_named_after_item` and `non_leaf_module_items` (rename or move the code), and
+`macro_definition` (a macro goes only in a crate that `macro_crates` in `dylint.toml` lists).
 
 ## Checked in review
 

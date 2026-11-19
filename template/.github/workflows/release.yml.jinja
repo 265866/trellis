@@ -78,7 +78,9 @@ jobs:
       - name: Install the pinned toolchain
         run: rustup toolchain install
 
-      # In git_only mode, which every project but a published library uses, release-plz@0.4.3 looks
+{% endraw %}
+{%- set release_plz_config_step -%}
+{% raw %}      # In git_only mode, which every project but a published library uses, release-plz@0.4.3 looks
       # every crate up by name at the last release tag and stops on one added or renamed since. A
       # crate missing there gets its own tag name for this run, so release-plz treats it as new;
       # release-plz.toml can't name it before it exists.
@@ -106,6 +108,8 @@ jobs:
                 done
           fi
           echo "path=$config" >> "$GITHUB_OUTPUT"
+{%- endraw %}{% endset -%}
+{{ release_plz_config_step }}{% raw %}
 
       - name: Release if this push merged the release PR
         id: release-plz
@@ -397,34 +401,7 @@ jobs:
       - name: Install the pinned toolchain
         run: rustup toolchain install
 
-      # In git_only mode, which every project but a published library uses, release-plz@0.4.3 looks
-      # every crate up by name at the last release tag and stops on one added or renamed since. A
-      # crate missing there gets its own tag name for this run, so release-plz treats it as new;
-      # release-plz.toml can't name it before it exists.
-      - name: Write the release-plz config
-        id: config
-        run: |
-          config="$RUNNER_TEMP/release-plz.toml"
-          cp release-plz.toml "$config"
-          if tag=$(git describe --tags --abbrev=0 --match 'v[0-9]*' 2> /dev/null); then
-            at_tag=$(git ls-tree -r --name-only "$tag" | grep -E '(^|/)Cargo\.toml$' \
-              | while read -r manifest; do
-                  git show "$tag:$manifest" \
-                    | awk '/^\[/ { package = ($0 == "[package]") } package && /^name = "/ { print; exit }'
-                done)
-            cargo metadata --locked --no-deps --format-version 1 | jq -r '.packages[].name' \
-              | while read -r name; do
-                  if ! grep --quiet --line-regexp --fixed-strings "name = \"$name\"" <<< "$at_tag"; then
-                    if grep --quiet --line-regexp --fixed-strings "name = \"$name\"" release-plz.toml; then
-                      echo "::error::$name has an entry in release-plz.toml but isn't in $tag, so release-plz can't version it. Bump the version, update CHANGELOG.md, push the tag by hand, then re-run this workflow."
-                      exit 1
-                    fi
-                    printf '\n[[package]]\nname = "%s"\ngit_tag_name = "{{ package }}-v{{ version }}"\n' \
-                      "$name" >> "$config"
-                  fi
-                done
-          fi
-          echo "path=$config" >> "$GITHUB_OUTPUT"
+{% endraw %}{{ release_plz_config_step }}{% raw %}
 
       - uses: release-plz/action@66b324fd6c72d05d2a08568492ecdd62bfb8a62b # v0.5.148
         with:
