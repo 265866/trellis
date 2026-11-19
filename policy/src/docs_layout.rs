@@ -504,9 +504,11 @@ fn link_problem(source_line: &str, paragraph: Node<'_>) -> Option<&'static str> 
 }
 
 /// Whether the link target `target` is a relative path to a file, as [`docs_index::resolve`]
-/// reads one from the root, with no `..` part at all.
+/// reads one from the root, with no `..` part at all in its path. The `#` fragment isn't part of
+/// the path.
 fn is_relative(target: &str) -> bool {
-    !target.split('/').any(|part| part == "..") && docs_index::resolve("", target).is_some()
+    let path = target.split_once('#').map_or(target, |(path, _)| path);
+    !path.split('/').any(|part| part == "..") && docs_index::resolve("", target).is_some()
 }
 
 /// What keeps `page` from opening with a `# Title` line, a blank line and a paragraph, or `None`
@@ -811,10 +813,25 @@ mod tests {
 
     #[test]
     fn relative_targets_are_recognized() {
-        for target in ["docs/a.md", "./docs/a.md#b", "CONTRIBUTING.md", "a.md#k:v"] {
+        for target in [
+            "docs/a.md",
+            "./docs/a.md#b",
+            "CONTRIBUTING.md",
+            "a.md#k:v",
+            "a.md#b/../c",
+        ] {
             assert!(is_relative(target), "{target} is relative");
         }
-        for target in ["", "https://x", "/a.md", "#a", "mailto:a", "../x.md"] {
+        for target in [
+            "",
+            "https://x",
+            "/a.md",
+            "#a",
+            "mailto:a",
+            "../x.md",
+            "a/..#b",
+            "docs/install.md/x/..#a",
+        ] {
             assert!(!is_relative(target), "{target:?} isn't relative");
         }
     }
