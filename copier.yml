@@ -79,11 +79,9 @@ kind:
 visibility:
   type: str
   help: >-
-    Who can see the repository. Without GitHub Enterprise Cloud, GitHub attests releases only in
-    public repositories, and it takes private vulnerability reports only in public ones, so a
-    private project's releases aren't attested or signed. A private repository's Actions minutes
-    come out of the account's included usage, and a macOS minute costs about ten times a Linux one
-    and a Windows minute about twice.
+    Who can see the repository. A private one's releases aren't attested or signed, its security
+    reports go in issues, protecting its main branch needs a paid GitHub plan, and its CI draws on
+    the account's included Actions usage. The generated docs/maintaining.md has the details.
   choices:
     Public: public
     Private: private

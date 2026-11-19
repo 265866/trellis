@@ -1,4 +1,6 @@
-# Every check CI runs is a recipe here, so `just ci` before pushing runs the same checks.
+# Every check CI runs is a recipe here, so `just ci` before pushing runs the same checks, apart from
+# what needs GitHub or another platform: the pull request title, and the template entries CI runs
+# on macOS and Windows (`binary on macOS`, `binary on Windows` and `published library on Windows`).
 
 # Only the formatter runs on this nightly. The policy crate builds on the stable toolchain in
 # rust-toolchain.toml, and the lints on the nightly in lints/rust-toolchain.toml.
@@ -14,24 +16,27 @@ export CLIPPY_CONF_DIR := justfile_directory()
 default:
     @just --list
 
-# Runs every check CI runs.
+# Runs every check CI runs, except the pull request title and the macOS and Windows entries.
 ci: fmt-check typos actionlint zizmor shear deny links pins lint dylint test docs lints-lint lints-comments lints-test templates
 
 # Installs the pinned nightly rustfmt that `just fmt` uses.
 install-nightly-rustfmt:
     rustup toolchain install {{ nightly }} --profile minimal --component rustfmt
 
+# taplo reads `.taplo.toml`, which projects share and which excludes only `target/`, so these pass
+# it the TOML files git doesn't ignore, which leaves out `lints/target/` too.
+#
 # Formats the Rust and TOML files.
 fmt:
     cargo +{{ nightly }} fmt --all
     cargo +{{ nightly }} fmt --all --manifest-path lints/Cargo.toml
-    taplo fmt
+    git ls-files -z --cached --others --exclude-standard -- '*.toml' | xargs -0 taplo fmt
 
 # Checks the Rust and TOML files are formatted.
 fmt-check:
     cargo +{{ nightly }} fmt --all -- --check
     cargo +{{ nightly }} fmt --all --manifest-path lints/Cargo.toml -- --check
-    taplo fmt --check
+    git ls-files -z --cached --others --exclude-standard -- '*.toml' | xargs -0 taplo fmt --check
 
 # Checks spelling in code and docs.
 typos:
@@ -62,7 +67,10 @@ links:
     lychee --offline --include-fragments --no-progress --exclude-path target --exclude-path lints/target --exclude-path template './**/*.md'
 
 # Checks that the template pins the same toolchains as this repository and its lints, that the
-# config files both keep are the same, and that every tool has one version wherever it's pinned.
+# config files and workflows both keep are the same, that both `[workspace.lints]` tables agree
+# apart from the library-only lints, that the versions template/dylint.toml.jinja says trellis read
+# each trusted macro crate at are the ones tests/dependencies/setup.sh pins, and that every tool has
+# one version wherever it's pinned.
 #
 # Checks that pinned versions and the shared config files agree.
 pins:
@@ -105,11 +113,60 @@ pins:
       echo "error: template/CONTRIBUTING.md.jinja's rust-analyzer setting doesn't name the nightly in template/justfile.jinja" >&2
       status=1
     fi
-    for file in rustfmt.toml clippy.toml .taplo.toml .editorconfig .gitattributes .config/nextest.toml docs/style.md; do
+    for file in rustfmt.toml clippy.toml .taplo.toml .editorconfig .gitattributes .config/nextest.toml docs/style.md \
+      .github/workflows/pr-title.yml .github/workflows/deny.yml; do
       if ! cmp --quiet "$file" "template/$file"; then
         echo "error: $file differs from template/$file" >&2
         status=1
       fi
+    done
+    # The template's lints tables add a block only a library gets.
+    lints_tables() {
+      awk '/^\[/ { inside = ($0 ~ /^\[workspace\.lints\./) } inside' "$1" \
+        | sed "/^{%- if kind == 'library' %}$/,/^{%- endif %}$/d"
+    }
+    if ! diff <(lints_tables Cargo.toml) <(lints_tables template/Cargo.toml.jinja) >&2; then
+      echo "error: [workspace.lints] in Cargo.toml differs from template/Cargo.toml.jinja's" >&2
+      status=1
+    fi
+    # Each crate's comment in trusted_macro_crates names the version trellis read its macros at, the
+    # one tests/dependencies/setup.sh pins, as `<macros>, X.Y.Z: <what they write>`. The standard
+    # library's crates have no version. A `_impl` crate is pinned through its parent.
+    audited=$(awk '
+      /^trusted_macro_crates = \[$/ { inside = 1; next }
+      inside && /^\]$/ { inside = 0 }
+      !inside { next }
+      !version && /^ *#.*, [0-9]+\.[0-9]+\.[0-9]+:/ {
+        match($0, /[0-9]+\.[0-9]+\.[0-9]+/)
+        version = substr($0, RSTART, RLENGTH)
+      }
+      /^ *"[a-z0-9_]+",$/ {
+        gsub(/[ ",]/, "")
+        if ($0 !~ /^(alloc|core|std)$/) print $0 "@" version
+        version = ""
+        next
+      }
+      !/^ *(#.*)?$/ {
+        print "error: trusted_macro_crates in template/dylint.toml.jinja has a line pins cannot read: " $0 > "/dev/stderr"
+        unreadable = 1
+      }
+      END { exit unreadable }
+    ' template/dylint.toml.jinja) || status=1
+    pinned=$(sed -n -e 's/^\([a-z_-]*\) = \(.*version = \)\{0,1\}"=\([0-9.]*\)".*$/\1@\3/p' \
+      -e 's/.*--package \([a-z_-]*\) --precise \([0-9.]*\)$/\1@\2/p' tests/dependencies/setup.sh)
+    if [ -z "$audited" ]; then
+      echo "error: found no crates besides alloc, core and std in template/dylint.toml.jinja's trusted_macro_crates" >&2
+      status=1
+    fi
+    for crate_version in $audited; do
+      crate=${crate_version%@*} version=${crate_version#*@}
+      if [ -z "$version" ]; then
+        echo "error: $crate in template/dylint.toml.jinja's trusted_macro_crates has no audited version; its comment must say \`<macros>, X.Y.Z: <what they write>\`" >&2
+        status=1
+        continue
+      fi
+      check "the version $crate is audited at in template/dylint.toml.jinja and tests/dependencies/setup.sh" \
+        "$version" "$(grep "^${crate%_impl}@" <<< "$pinned" | cut -d@ -f2)"
     done
     versions=$(grep --only-matching --no-filename --extended-regexp \
       '\b[a-z][a-z0-9-]*@v?[0-9]+\.[0-9]+\.[0-9]+\b' \
@@ -398,11 +455,11 @@ shapes: (shape "binary") (shape "binary-windows-macos-dual") (shape "library-pub
 # Generates the project a user gets for `answers`, with the lints and the checker from GitHub rather
 # than this checkout, and runs the checks that don't fetch them: formatting, spelling, the
 # workflows, dependencies, links, the license notices, and this checkout's `trellis-policy check`. A
-# published library must also package the README and its licenses. The copy runs without
-# `--quiet`, so Copier prints the next steps, which must name the repository and install just.
-# `just setup-github --dry-run` must print the required checks and the label, and the Actions policy
-# and vulnerability reporting only for a public repository, without calling `gh`. `just
-# check-github` runs against the fixtures in tests/check-github/.
+# published library also runs its `package` recipe, which no other recipe here runs on Unix. The
+# copy runs without `--quiet`, so Copier prints the next steps, which must name the repository and
+# install just. `just setup-github --dry-run` must print the required checks and the label, and the
+# Actions policy and vulnerability reporting only for a public repository, without calling `gh`.
+# `just check-github` runs against the fixtures in tests/check-github/.
 #
 # Checks the project a user gets for one set of answers.
 shape answers:
@@ -459,12 +516,6 @@ shape answers:
       just notices
     fi
     if [ "{{ answers }}" = library-published ]; then
-      files=$(cargo package --list --locked --allow-dirty --package demo_shape)
-      for file in README.md LICENSE-MIT LICENSE-APACHE; do
-        if ! grep --quiet --line-regexp --fixed-strings "$file" <<< "$files"; then
-          echo "error: the published crate doesn't ship $file" >&2
-          exit 1
-        fi
-      done
+      just package
     fi
     cargo run --locked --quiet --manifest-path "$trellis/Cargo.toml" --package trellis-policy -- check
