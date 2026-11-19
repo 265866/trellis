@@ -229,9 +229,12 @@ yours after the project is generated.
 {%- if published %} The crate's `LICENSE*` files are the exception: they
 follow the license answer.
 {%- endif %} It is a rule change, so it can't also change code. Copier
-merges the new template into your edits; resolve any conflict markers it leaves before you commit.
-Once the update merges, run `just check-github` on `main`. A newer trellis can set more than the one
-you set up with, so if it reports a wrong setting, run `just setup-github`.
+merges the new template into your edits to the files it renders, such as a crate's row in
+`AGENTS.md`, its settings in `Cargo.toml` and `release-plz.toml`, and a page's line in `README.md`.
+Where trellis changed a line you changed, or one next to it, Copier leaves conflict markers;
+resolve them before you commit. Once the update merges, run `just check-github` on `main`. A
+newer trellis can set more than the one you set up with, so if it reports a wrong setting, run
+`just setup-github`.
 
 ## Renew the release token
 
