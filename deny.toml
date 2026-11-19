@@ -19,7 +19,7 @@ confidence-threshold = 0.9
 # finl_unicode, which comrak reads Unicode categories with, also carries the Unicode data-file
 # license of 2016, the earlier form of the Unicode-3.0 license allowed above. Only it may use it.
 [[licenses.exceptions]]
-crate = "finl_unicode"
+crate = "finl_unicode@1"
 allow = ["Unicode-DFS-2016"]
 
 [licenses.private]

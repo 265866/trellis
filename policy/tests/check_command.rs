@@ -872,62 +872,289 @@ fn assert_readme_fails(project: &Project, readme: &str, text: &str) {
     );
 }
 
-/// README snippets that GitHub renders as a heading, or that hide a section, each placed at the
-/// end of the `Install` section. Each must fail `docs_layout`.
-const README_REGRESSIONS: [(&str, &str); 29] = [
-    ("setext in a list item", "- Extra\n  ---"),
-    ("level-1 setext in a list item", "- Extra\n  ==="),
-    ("setext in a quote", "> Extra\n> ---"),
-    ("list in a list", "- - ## Extra"),
-    ("list in a quote", "> - ## Extra"),
-    ("quote in a list", "- > ## Extra"),
-    ("nested item on the next line", "- item\n  - ## Extra"),
-    ("second ordered item", "1. first\n2. ## Extra"),
-    ("quote, a space and a tab", "> \t## Extra"),
-    ("tab after a list marker", "-\ta\n\n    ## Extra"),
+/// The message for `##` sections other than `readme_sections`.
+const SECTIONS: &str = "The readme's `##` sections are";
+
+/// The message for a `##` heading inside a list item, quote or footnote.
+const NESTED: &str = "inside a list item, quote or footnote. A section heading must be a top-level";
+
+/// The message for a setext heading.
+const SETEXT: &str = "underlines the line above it";
+
+/// The message for an HTML heading tag.
+const HTML_HEADING: &str = "has an HTML heading tag";
+
+/// The message for HTML that doesn't close.
+const UNCLOSED: &str = "opens HTML that doesn't close";
+
+/// The message for a `##` heading with markup.
+const MARKUP: &str = "Write the heading as plain text";
+
+/// README snippets that GitHub renders as a heading, or that hide what follows, each placed at
+/// the end of the `Install` section, with the message each must fail with.
+const README_REGRESSIONS: [(&str, &str, &str); 45] = [
+    ("setext in a list item", "- Extra\n  ---", NESTED),
+    (
+        "level-1 setext in a list item",
+        "- Extra\n  ===",
+        "has 2 `#` headings",
+    ),
+    ("setext in a quote", "> Extra\n> ---", NESTED),
+    ("list in a list", "- - ## Extra", NESTED),
+    ("list in a quote", "> - ## Extra", NESTED),
+    ("quote in a list", "- > ## Extra", NESTED),
+    (
+        "nested item on the next line",
+        "- item\n  - ## Extra",
+        NESTED,
+    ),
+    ("second ordered item", "1. first\n2. ## Extra", NESTED),
+    ("quote, a space and a tab", "> \t## Extra", NESTED),
+    ("tab after a list marker", "-\ta\n\n    ## Extra", NESTED),
     (
         "tab after a list marker, HTML",
         "-\ta\n\n    <h2>Extra</h2>",
+        HTML_HEADING,
     ),
-    ("URL autolink", "<https://example.com/demo>\n## Extra"),
-    ("email autolink", "<me@example.com>\n## Extra"),
-    ("text that isn't a tag", "<x =>\n## Extra"),
-    ("empty processing instruction", "<?>\n## Extra"),
+    (
+        "URL autolink",
+        "<https://example.com/demo>\n## Extra",
+        SECTIONS,
+    ),
+    ("email autolink", "<me@example.com>\n## Extra", SECTIONS),
+    ("text that isn't a tag", "<x =>\n## Extra", SECTIONS),
+    ("empty processing instruction", "<?>\n## Extra", SECTIONS),
     (
         "definition-like setext",
         "[Extra section]: more text here\n---",
+        SETEXT,
     ),
-    ("table-like setext", "Extra | section\n-|-|-\n---"),
-    ("level-1 table-like setext", "Extra | section\n-|-|-\n==="),
+    ("table-like setext", "Extra | section\n-|-|-\n---", SETEXT),
+    (
+        "level-1 table-like setext",
+        "Extra | section\n-|-|-\n===",
+        SETEXT,
+    ),
     (
         "definition-like line, then HTML",
         "[x]: y z\n    <h2>Extra</h2>",
+        HTML_HEADING,
     ),
-    ("escaped code span", "\\`<h2>Extra</h2>\\`"),
+    ("escaped code span", "\\`<h2>Extra</h2>\\`", HTML_HEADING),
     (
         "code span from the line before",
         "Run `a\nx` <h2>Extra</h2> `y`",
+        HTML_HEADING,
     ),
-    ("backticks in a div", "<div>`<h2>Extra</h2>`</div>"),
-    ("a lone carriage return", "Some text.\r## Extra"),
-    ("declaration", "<!a\n## Extra"),
-    ("search tag", "<search>x\n## Extra"),
-    ("search tag in a quote", "> <search>x\n> ## Extra"),
+    (
+        "backticks in a div",
+        "<div>`<h2>Extra</h2>`</div>",
+        HTML_HEADING,
+    ),
+    ("a lone carriage return", "Some text.\r## Extra", SECTIONS),
+    (
+        "lowercase declaration",
+        "<!a\n## Extra",
+        "`Install`, `Extra`, `Documentation`",
+    ),
+    (
+        "lowercase declaration in an item",
+        "- <!x\n\n  ## Extra",
+        NESTED,
+    ),
+    (
+        "lowercase declaration, then a quote",
+        "<!x\n\n## Extra\n\n> quote",
+        SECTIONS,
+    ),
+    (
+        "lowercase doctype",
+        "<!doctype html\n\n## Extra\n\nRun `a -> b`.",
+        SECTIONS,
+    ),
+    ("search tag", "<search>x\n## Extra", SECTIONS),
+    (
+        "search tag and a form feed",
+        "<search\x0cx\n## Extra",
+        SECTIONS,
+    ),
+    (
+        "source tag, a form feed and no end",
+        "<source\x0cx\n## Hidden",
+        UNCLOSED,
+    ),
+    ("search tag in a quote", "> <search>x\n> ## Extra", NESTED),
+    (
+        "search tag in a footnote",
+        "Note.[^1]\n\n[^1]: <search>x\n    ## Extra",
+        NESTED,
+    ),
     (
         "referenced footnote body",
         "See this.[^1]\n\n[^1]: note\n\n    ## Extra",
+        NESTED,
     ),
-    ("no-break space", "\u{a0}\n---"),
-    ("empty item, then a heading", "-\n\n  ## Extra"),
+    ("no-break space", "\u{a0}\n---", SETEXT),
+    (
+        "empty item, then a heading",
+        "-\n\n  ## Extra",
+        "`Install`, `Extra`, `Documentation`",
+    ),
+    (
+        "comment ended by --!>",
+        "<div><!-- a --!> <h2>Extra</h2> --></div>",
+        HTML_HEADING,
+    ),
+    (
+        "comment opener in a value",
+        "<div><a b=\"<!--\"><h2>Extra</h2><i c=\"-->\"></i></div>",
+        HTML_HEADING,
+    ),
+    (
+        "form feed after a tag name",
+        "<div><h2\x0cid=x>Extra</div>",
+        HTML_HEADING,
+    ),
+    (
+        "quote after a tag name",
+        "<div><h2\"id=x>Extra</div>",
+        HTML_HEADING,
+    ),
+    ("unclosed comment in an item", "- <!--\n\nText.", UNCLOSED),
+    ("unclosed comment in a div", "<div><!-- a\n</div>", UNCLOSED),
+    (
+        "unclosed attribute value",
+        "<div title=\"\n</div>",
+        UNCLOSED,
+    ),
+    ("start tag with no end", "<div\n## Extra", UNCLOSED),
+    (
+        "heading with a link and an image",
+        "## [Extra](x.md) ![img](a.png)",
+        MARKUP,
+    ),
+    ("inline heading tags", "Text <h2>x</h2>.", HTML_HEADING),
+];
+
+/// Changes to the README's own lines, each from one text to another, with the message each must
+/// fail with.
+const README_EDIT_REGRESSIONS: [(&str, &str, &str, &str); 9] = [
+    (
+        "comment hiding a section",
+        "## Install\n",
+        "<!--\n\n## Install\n\n-->\n",
+        SECTIONS,
+    ),
+    (
+        "section in a quote",
+        "## Install\n",
+        "> ## Install\n",
+        NESTED,
+    ),
+    (
+        "section in a list",
+        "## Install\n",
+        "- ## Install\n",
+        NESTED,
+    ),
+    (
+        "emphasized section",
+        "## Install\n",
+        "## *Install*\n",
+        MARKUP,
+    ),
+    (
+        "linked section",
+        "## Install\n",
+        "## [Install](x.md)\n",
+        MARKUP,
+    ),
+    (
+        "section in a tag",
+        "## Install\n",
+        "## <kbd>Install</kbd>\n",
+        MARKUP,
+    ),
+    (
+        "section as an image",
+        "## Install\n",
+        "## ![Install](x.png)\n",
+        MARKUP,
+    ),
+    (
+        "empty title",
+        "# Demo\n",
+        "#\n",
+        "Its `#` title has no text",
+    ),
+    (
+        "image title",
+        "# Demo\n",
+        "# ![Demo](demo.png)\n",
+        "Its `#` title has no text",
+    ),
+];
+
+/// Index entries for `docs/install.md`, with the message each must fail with.
+const INDEX_REGRESSIONS: [(&str, &str, &str); 9] = [
+    (
+        "space and angle brackets",
+        "- [Install]( <docs/install.md>): install the demo.",
+        "has a title, angle brackets or spaces",
+    ),
+    (
+        "empty title",
+        "- [Install](docs/install.md \"\"): install the demo.",
+        "has a title, angle brackets or spaces",
+    ),
+    (
+        "image as the link text",
+        "- [![Install](a.png)](docs/install.md): install the demo.",
+        "its link has no text",
+    ),
+    (
+        "task list item",
+        "- [ ] [Install](docs/install.md): install the demo.",
+        "task list item",
+    ),
+    (
+        "empty path part",
+        "- [Install](docs//install.md): install the demo.",
+        "isn't a relative path",
+    ),
+    (
+        "trailing slash",
+        "- [Install](docs/install.md/): install the demo.",
+        "isn't a relative path",
+    ),
+    (
+        "words only in a comment",
+        "- [Install](docs/install.md): <!-- install the demo -->.",
+        "its description has no words",
+    ),
+    (
+        "escaped bracket",
+        "- [Install\\](docs/install.md): install the demo.",
+        "doesn't start with a link",
+    ),
+    (
+        "link with no closing parenthesis",
+        "- [Install](docs/install.md: install the demo.",
+        "doesn't start with a link",
+    ),
 ];
 
 /// README snippets that GitHub renders without an extra heading, each placed at the end of the
 /// `Install` section. Each must pass.
-const README_FALSE_POSITIVES: [(&str, &str); 12] = [
+const README_FALSE_POSITIVES: [(&str, &str); 13] = [
     ("comment over paragraphs", "<!--\n\n## Old section\n\n-->"),
     ("pre block", "<pre>\n\n# a comment\n</pre>"),
     ("source tag", "<source>x\n## Hidden"),
     ("unreferenced footnote", "[^1]: note\n\n    ## Unrendered"),
+    (
+        "footnote before the last section",
+        "Built with Rust 1.100.[^msrv]\n\n[^msrv]: The oldest Rust it builds with.",
+    ),
     ("fenced comments", "```sh\n# install it\njust install\n```"),
     (
         "ordered steps with code",
@@ -950,30 +1177,37 @@ const README_FALSE_POSITIVES: [(&str, &str); 12] = [
     ),
 ];
 
+/// The line of the fixture's index entry for `docs/install.md`.
+const INSTALL_ENTRY: &str = "- [Install](docs/install.md#linux): install the demo.\n";
+
+/// Asserts that the project's check fails with a line that contains `expected`, for the case
+/// `name`.
+fn assert_case_fails(project: &Project, name: &str, expected: &str) {
+    let run = project.check();
+    assert!(
+        run.code == Some(1) && run.stdout.lines().any(|line| line.contains(expected)),
+        "{name} should fail with {expected:?}: {run:#?}"
+    );
+}
+
 #[test]
 fn readme_shapes_github_renders_as_headings_fail() {
     let project = Project::new();
-    for (name, snippet) in README_REGRESSIONS {
+    for (name, snippet, expected) in README_REGRESSIONS {
         project.write("README.md", &readme_with_install(snippet));
-        let run = project.check();
-        assert!(
-            run.code == Some(1) && run.stdout.contains("[docs_layout] README.md: "),
-            "{name}: {snippet:?} should fail docs_layout: {run:#?}"
-        );
+        assert_case_fails(&project, name, expected);
     }
-    project.write("README.md", &readme_with_install("-\n\n  ## Extra"));
-    project.check().assert_reports(
-        1,
-        "The readme's `##` sections are `Install`, `Extra`, `Documentation`",
-    );
-    project.write(
-        "README.md",
-        &README.replace("## Install\n", "<!--\n\n## Install\n\n-->\n"),
-    );
-    project.check().assert_reports(
-        1,
-        "The readme's `##` sections are `Documentation`, but `readme_sections`",
-    );
+    for (name, from, to, expected) in README_EDIT_REGRESSIONS {
+        project.write("README.md", &README.replacen(from, to, 1));
+        assert_case_fails(&project, name, expected);
+    }
+    for (name, entry, expected) in INDEX_REGRESSIONS {
+        project.write(
+            "README.md",
+            &README.replace(INSTALL_ENTRY, &format!("{entry}\n")),
+        );
+        assert_case_fails(&project, name, expected);
+    }
 }
 
 #[test]
@@ -1003,11 +1237,15 @@ fn readme_shapes_github_renders_without_a_heading_pass() {
                 1,
             ),
         ),
+        (
+            "closing `#` sequence",
+            README.replacen("## Install\n", "##  Install  ##\n", 1),
+        ),
         ("CRLF line breaks", README.replace('\n', "\r\n")),
         (
             "a tight ordered index",
             README.replace(
-                "- [Install](docs/install.md#linux): install the demo.\n",
+                INSTALL_ENTRY,
                 "1. [Install](docs/install.md#linux): install the demo.\n\
                  2. [Agents](AGENTS.md): what agents follow.\n",
             ),
@@ -1121,11 +1359,11 @@ fn an_index_entry_needs_one_line_and_words() {
         ),
         (
             "- [Install](docs/install.md \"Install\"): install it.\n",
-            "its link has a title or angle brackets",
+            "its link has a title, angle brackets or spaces",
         ),
         (
             "- [Install](<docs/install.md>): install it.\n",
-            "its link has a title or angle brackets",
+            "its link has a title, angle brackets or spaces",
         ),
     ] {
         let readme = README.replace(
@@ -1238,4 +1476,52 @@ fn a_link_in_an_html_comment_doesnt_count() {
         1,
         "[docs_index] docs/guides/setup.md: No page in `docs/` links this page",
     );
+}
+
+/// Pages for `docs/install.md`, with the message each must fail with.
+const PAGE_REGRESSIONS: [(&str, &str, &str); 3] = [
+    (
+        "image title",
+        "# ![Install](logo.png)\n\nFor people who run the demo.\n",
+        "It doesn't start with a `# Title` line",
+    ),
+    (
+        "unclosed attribute value",
+        "# Install\n\nFor people who run the demo.\n\n<div title=\"\n</div>\n",
+        "[docs_layout] docs/install.md: Line 5 opens HTML that doesn't close",
+    ),
+    (
+        "unclosed comment",
+        "# Install\n\nFor people who run the demo.\n\n<!--\n",
+        "[docs_layout] docs/install.md: Line 5 opens HTML that doesn't close",
+    ),
+];
+
+#[test]
+fn page_shapes_that_hide_text_or_lack_a_title_fail() {
+    let project = Project::new();
+    for (name, page, expected) in PAGE_REGRESSIONS {
+        project.write("docs/install.md", page);
+        assert_case_fails(&project, name, expected);
+    }
+}
+
+#[test]
+fn a_link_with_an_empty_path_part_doesnt_link_a_page() {
+    let project = Project::new();
+    project.write(
+        "docs/guides/setup.md",
+        "# Setup\n\nFor people who set up the demo.\n",
+    );
+    for link in ["guides//setup.md", "guides/setup.md/"] {
+        project.write(
+            "docs/install.md",
+            &format!("# Install\n\nFor people who run the demo. [Set it up]({link}).\n"),
+        );
+        assert_case_fails(
+            &project,
+            link,
+            "[docs_index] docs/guides/setup.md: No page in `docs/` links this page",
+        );
+    }
 }

@@ -35,9 +35,9 @@ pub(crate) const BYTE_ORDER_MARK: char = '\u{feff}';
 /// directory above it, `docs/`, with a path relative to that page. A page no one links is a page
 /// readers don't find.
 ///
-/// The links are the ones GitHub renders, read with the parser its Markdown uses: inline and
-/// reference links and autolinks, but not text in code, in HTML or in an HTML comment.
-/// `docs_layout` holds the index to inline links.
+/// The links are the `Link` nodes comrak parses: inline and reference links and autolinks, but
+/// not text in code, in HTML or in an HTML comment. A path with an empty part, such as `a//b.md`
+/// or `a.md/`, links no page. `docs_layout` holds the index to inline links.
 ///
 /// It reads the files git tracks and the untracked ones `.gitignore` doesn't exclude.
 ///
@@ -214,7 +214,8 @@ fn resolve(directory: &str, target: &str) -> Option<String> {
         .collect();
     for part in path.split('/') {
         match part {
-            "" | "." => {}
+            "" => return None,
+            "." => {}
             ".." => {
                 parts.pop()?;
             }

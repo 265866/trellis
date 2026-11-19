@@ -299,27 +299,29 @@ and a page in `docs/` for each task a reader has.
 ### Docs checked by `just policy`
 
 `trellis-policy`'s `docs_index` and `docs_layout` rules check these, with `docs_files` and
-`readme_sections` in `[workspace.metadata.policy]`. They read Markdown with comrak, which
-implements cmark-gfm, the parser GitHub renders Markdown with, so a heading or a link is one
-GitHub renders, at any depth, and text in code, in HTML or in an HTML comment is neither.
+`readme_sections` in `[workspace.metadata.policy]`. They read Markdown as GitHub renders it:
+text in code, in HTML or in an HTML comment is neither a heading nor a link.
 
 - Every file `docs_files` lists exists: `README.md`, `AGENTS.md`, `CONTRIBUTING.md`,
   `SECURITY.md`, `CHANGELOG.md`, the license files and the pages in `docs/`. A missing setting
   fails rather than checking nothing.
-- The root `README.md` has exactly one level-1 heading, its title, written as a `#` line outside
-  any list or quote, with only badges and blank lines before it.
-- Its level-2 headings, wherever they are, a list item or a quote included, are exactly the
-  sections `readme_sections` lists, in order. It has no setext heading (a line underlined with
-  `=` or `-`) and no HTML heading tag such as `<h2>`.
-- The Documentation section is an index and nothing else. Each entry is a one-line list item,
-  an inline link with a relative path, then `: ` and a description that has a letter and ends in
-  `.`, such as `- [Title](path): what the reader does with it.` Every page directly under
-  `docs/` has an entry.
+- The root `README.md` has exactly one level-1 heading, its title, written as a `#` line with
+  text, outside any list or quote, with only badges and blank lines before it.
+- Its top-level `##` headings are exactly the sections `readme_sections` lists, in order, each
+  written as plain text, such as `## Install`. It has no `##` heading inside a list item, quote
+  or footnote, no setext heading (a line underlined with `=` or `-`) and no HTML heading tag such
+  as `<h2>`.
+- The Documentation section is an index and nothing else. Each entry is a one-line list item: a
+  link written exactly `[Title](path)` with a relative path, then `: ` and a description that
+  has a letter and ends in `.`, such as `- [Title](path): what the reader does with it.` Every
+  page directly under `docs/` has an entry.
 - A page in a subdirectory of `docs/` is linked from a page in the directory above it, with any
   link GitHub renders.
 - Every page, at any depth under `docs/`, starts with a `# Title` line, a blank line and a
   paragraph with a letter in it outside images. Pages use the `.md` extension, and neither the
   README nor a page starts with a byte order mark.
+- No HTML block in the README or a page leaves a comment, a tag or a quoted attribute value
+  open, which can hide what follows from readers.
 
 ### Docs review checklist
 

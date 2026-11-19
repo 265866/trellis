@@ -1,7 +1,10 @@
-//! Markdown read the way GitHub reads it. The docs checks parse it with comrak, which implements
-//! cmark-gfm, the parser GitHub renders Markdown with, and turn on the extensions GitHub uses:
-//! tables, strikethrough, autolinks, task lists and footnotes.
+//! Markdown parsed to match how GitHub renders it. The docs checks parse it with comrak, which
+//! implements cmark-gfm, the parser GitHub renders Markdown with, turn on the extensions GitHub
+//! uses (tables, strikethrough, autolinks, task lists and footnotes), and adjust the HTML block
+//! starts where comrak follows a newer version of the specification than GitHub does.
 
+use std::borrow::Cow;
+use std::collections::BTreeSet;
 use std::ops::RangeInclusive;
 
 use comrak::nodes::{Node, NodeHeading, NodeValue};
@@ -72,8 +75,11 @@ impl<'tree> Markdown<'tree> {
 
     /// The top-level blocks after the first top-level level-2 heading whose text is `title`, up
     /// to the next top-level heading of level 1 or 2, or `None` if there is no such heading.
+    /// Footnote definitions aren't in any section: the parser moves them to the end.
     pub(crate) fn section(&self, title: &str) -> Option<Vec<Node<'tree>>> {
-        let blocks = self.blocks();
+        let mut blocks = self.blocks();
+        blocks
+            .retain(|block| !matches!(block.data.borrow().value, NodeValue::FootnoteDefinition(_)));
         let start = blocks.iter().position(|block| {
             heading(block).is_some_and(|heading| heading.level == 2) && text(block) == title
         })? + 1;
@@ -101,21 +107,29 @@ impl<'tree> Markdown<'tree> {
             .any(|line| !line.trim().is_empty())
     }
 
-    /// The 1-based lines that start an HTML block or inline HTML holding an HTML heading tag,
-    /// `<h1>` to `<h6>` or its closing tag, outside HTML comments.
+    /// The 1-based lines with an HTML heading tag, `<h1>` to `<h6>` or its closing tag, in an
+    /// HTML block or inline HTML, each line once.
     pub(crate) fn html_heading_lines(&self) -> Vec<usize> {
+        let mut lines = BTreeSet::new();
+        for node in self.document.descendants() {
+            if let Some(html) = html(node) {
+                for offset in html_heading_offsets(&html) {
+                    lines.insert(first_line(node) + line_breaks(&html[..offset]));
+                }
+            }
+        }
+        lines.into_iter().collect()
+    }
+
+    /// The 1-based lines where an HTML block opens a comment, a quoted attribute value or a tag
+    /// that doesn't close inside the block, which hides what follows from readers.
+    pub(crate) fn unclosed_html_lines(&self) -> Vec<usize> {
         let mut lines = Vec::new();
         for node in self.document.descendants() {
-            let value = &node.data.borrow().value;
-            let has_heading = if let NodeValue::HtmlBlock(block) = value {
-                has_html_heading(&block.literal)
-            } else if let NodeValue::HtmlInline(html) = value {
-                has_html_heading(html)
-            } else {
-                false
-            };
-            if has_heading {
-                lines.push(first_line(node));
+            if let NodeValue::HtmlBlock(block) = &node.data.borrow().value
+                && let Some(offset) = unclosed_html(&block.literal)
+            {
+                lines.push(first_line(node) + line_breaks(&block.literal[..offset]));
             }
         }
         lines
@@ -147,17 +161,36 @@ pub(crate) fn columns(node: Node<'_>) -> RangeInclusive<usize> {
     sourcepos.start.column..=sourcepos.end.column
 }
 
-/// The text of `node` and the nodes inside it, as GitHub renders it, without markup.
+/// The text of `node` and the nodes inside it, as GitHub renders it, without markup, images or
+/// HTML.
 pub(crate) fn text(node: Node<'_>) -> String {
     let mut text = String::new();
-    for descendant in node.descendants() {
-        if let Some(literal) = literal(descendant) {
-            text.push_str(&literal);
-        } else if is_break(descendant) {
-            text.push(' ');
+    if let Some(literal) = literal(node) {
+        text.push_str(&literal);
+    } else if is_break(node) {
+        text.push(' ');
+    } else if !is_image(node) {
+        for child in node.children() {
+            text.push_str(&self::text(child));
         }
     }
     text
+}
+
+/// The text of the inlines after `node`, its siblings that follow it, as [`text`] reads them.
+pub(crate) fn text_after(node: Node<'_>) -> String {
+    let mut text = String::new();
+    let mut next = node.next_sibling();
+    while let Some(sibling) = next {
+        text.push_str(&self::text(sibling));
+        next = sibling.next_sibling();
+    }
+    text
+}
+
+/// Whether `node` is a task list item, `- [ ] ...`.
+pub(crate) fn is_task_item(node: Node<'_>) -> bool {
+    matches!(node.data.borrow().value, NodeValue::TaskItem(_))
 }
 
 /// Whether `node` has a letter in its text outside images, so it says something in words.
@@ -213,6 +246,23 @@ fn is_image(node: Node<'_>) -> bool {
     matches!(node.data.borrow().value, NodeValue::Image(_))
 }
 
+/// The HTML `node` holds, if it is an HTML block or inline HTML.
+fn html(node: Node<'_>) -> Option<String> {
+    let value = &node.data.borrow().value;
+    if let NodeValue::HtmlBlock(block) = value {
+        Some(block.literal.clone())
+    } else if let NodeValue::HtmlInline(html) = value {
+        Some(html.clone())
+    } else {
+        None
+    }
+}
+
+/// How many line breaks `text` holds: `\n`, `\r\n` or a lone `\r`.
+fn line_breaks(text: &str) -> usize {
+    split_lines(text).len().saturating_sub(1) + usize::from(text.ends_with(['\n', '\r']))
+}
+
 /// The destinations of the links in `node` and the nodes inside it, in order, as GitHub
 /// renders them: inline and reference links and autolinks, but not images.
 pub(crate) fn link_urls(node: Node<'_>) -> Vec<String> {
@@ -225,44 +275,59 @@ pub(crate) fn link_urls(node: Node<'_>) -> Vec<String> {
     urls
 }
 
-/// `text` with the HTML block tags whose meaning comrak and GitHub disagree on renamed, at the
-/// start of a line or after its quote and list markers, where a block can start. comrak follows
-/// version 0.31 of the specification at <https://spec.commonmark.org>, which made `<search>`
-/// start an HTML block and `<source>` not, while GitHub's cmark-gfm follows version 0.29, which
-/// has it the other way round. `search` becomes `searcx`, which no
-/// block starts with, and `source` becomes `header`, which one does, so comrak reads each line
-/// as GitHub does, and a tag of the same length keeps every line and column where it was.
+/// `text` with the HTML block starts that comrak and GitHub read differently changed to read as
+/// GitHub reads them, where a block can start: at the start of a line, or after its quote
+/// markers, list markers or footnote label. comrak follows version 0.31 of the specification at
+/// <https://spec.commonmark.org>, and GitHub's cmark-gfm version 0.29. Their HTML blocks differ
+/// in three ways: `<search>` starts one only in 0.31, `<source>` only in 0.29, and `<!` starts
+/// one before any letter in 0.31 but only before an uppercase letter in 0.29. So `search`
+/// becomes `searcx`, which starts no block, `source` becomes `header`, which does, and the `<` of
+/// `<!` before a lowercase letter becomes `&`, which makes the line text. Each change keeps the
+/// length, so every line and column stays where it was.
 fn github_block_tags(text: &str) -> String {
     let mut adjusted = String::with_capacity(text.len());
     for line in text.split_inclusive(['\n', '\r']) {
         let start = block_start(line);
-        let rest = &line[start..];
-        let slash = usize::from(rest.starts_with("</"));
-        let name = rest.get(1 + slash..).unwrap_or("");
-        let renamed = [("search", "searcx"), ("source", "header")]
-            .into_iter()
-            .find(|(tag, _)| {
-                name.get(..tag.len())
-                    .is_some_and(|candidate| candidate.eq_ignore_ascii_case(tag))
-                    && name[tag.len()..]
-                        .chars()
-                        .next()
-                        .is_none_or(|next| matches!(next, ' ' | '\t' | '>' | '/' | '\n' | '\r'))
-            });
-        match renamed {
-            Some((tag, replacement)) if rest.starts_with('<') => {
-                let tag_start = start + 1 + slash;
-                adjusted.push_str(&line[..tag_start]);
-                adjusted.push_str(replacement);
-                adjusted.push_str(&line[tag_start + tag.len()..]);
-            }
-            Some(_) | None => adjusted.push_str(line),
-        }
+        adjusted.push_str(&line[..start]);
+        adjusted.push_str(&github_block_start(&line[start..]));
     }
     adjusted
 }
 
-/// Where a block could start on `line`: after its indentation, quote markers and list markers.
+/// `rest`, the text where a block can start, with an HTML block start changed to read as GitHub
+/// reads it, as [`github_block_tags`] says.
+fn github_block_start(rest: &str) -> Cow<'_, str> {
+    let Some(after) = rest.strip_prefix('<') else {
+        return Cow::Borrowed(rest);
+    };
+    if after
+        .strip_prefix('!')
+        .is_some_and(|declaration| declaration.starts_with(|c: char| c.is_ascii_lowercase()))
+    {
+        return Cow::Owned(format!("&{after}"));
+    }
+    let slash = usize::from(after.starts_with('/'));
+    let name = &after[slash..];
+    for (tag, replacement) in [("search", "searcx"), ("source", "header")] {
+        let is_tag = name
+            .get(..tag.len())
+            .is_some_and(|candidate| candidate.eq_ignore_ascii_case(tag))
+            && name[tag.len()..].chars().next().is_none_or(|next| {
+                matches!(next, ' ' | '\t' | '\n' | '\r' | '\x0b' | '\x0c' | '>' | '/')
+            });
+        if is_tag {
+            return Cow::Owned(format!(
+                "<{}{replacement}{}",
+                &after[..slash],
+                &name[tag.len()..]
+            ));
+        }
+    }
+    Cow::Borrowed(rest)
+}
+
+/// Where a block could start on `line`: after its indentation, quote markers, list markers and
+/// footnote label, such as `[^1]: `.
 fn block_start(line: &str) -> usize {
     let mut position = 0;
     loop {
@@ -275,6 +340,8 @@ fn block_start(line: &str) -> usize {
             1
         } else if (1..=9).contains(&digits) && rest[digits..].starts_with(['.', ')']) {
             digits + 1
+        } else if rest.starts_with("[^") {
+            rest.find("]:").map_or(0, |end| end + 2)
         } else {
             0
         };
@@ -305,25 +372,89 @@ fn split_lines(text: &str) -> Vec<&str> {
     lines
 }
 
-/// Whether `html` holds an HTML heading tag, `<h1>` to `<h6>` or its closing tag, in any case,
-/// outside HTML comments.
-fn has_html_heading(html: &str) -> bool {
-    let mut lower = html.to_ascii_lowercase();
-    while let Some(start) = lower.find("<!--") {
-        let end = lower[start..]
-            .find("-->")
-            .map_or(lower.len(), |end| start + end + 3);
-        lower.replace_range(start..end, "");
-    }
-    ["<h", "</h"].into_iter().any(|opener| {
-        lower.match_indices(opener).any(|(start, _)| {
+/// The byte offsets in `html` of its HTML heading tags, `<h1>` to `<h6>` or their closing tags,
+/// in any case, after a comment the HTML starts with, which ends at `-->` or `--!>`. Any byte but
+/// a letter or a digit after `<h1` ends the tag name.
+fn html_heading_offsets(html: &str) -> Vec<usize> {
+    let lower = html.to_ascii_lowercase();
+    let skipped = if lower.trim_start().starts_with("<!--") {
+        let start = lower.len() - lower.trim_start().len();
+        comment_end(&lower[start..]).map_or(lower.len(), |end| start + end)
+    } else {
+        0
+    };
+    let mut offsets = Vec::new();
+    for opener in ["<h", "</h"] {
+        for (start, _) in lower.match_indices(opener) {
             let after = &lower.as_bytes()[start + opener.len()..];
-            matches!(after.first(), Some(b'1'..=b'6'))
+            let is_heading = start >= skipped
+                && matches!(after.first(), Some(b'1'..=b'6'))
                 && after
                     .get(1)
-                    .is_none_or(|next| matches!(next, b'>' | b' ' | b'\t' | b'\n' | b'/'))
-        })
-    })
+                    .is_none_or(|next| !next.is_ascii_alphanumeric());
+            if is_heading {
+                offsets.push(start);
+            }
+        }
+    }
+    offsets
+}
+
+/// The length of the comment `html` starts with, up to the end of its `-->` or `--!>`, or `None`
+/// if it doesn't close.
+fn comment_end(html: &str) -> Option<usize> {
+    let body = html.get(2..)?;
+    let ends = [
+        body.find("-->").map(|end| end + 3),
+        body.find("--!>").map(|end| end + 4),
+    ];
+    ends.into_iter().flatten().min().map(|end| end + 2)
+}
+
+/// The byte offset of the first thing in `html`, an HTML block, that opens and doesn't close
+/// inside it: a comment, a processing instruction, a declaration, a CDATA section, or a tag or
+/// a quoted attribute value in it. `None` if everything closes.
+fn unclosed_html(html: &str) -> Option<usize> {
+    let mut position = 0;
+    while let Some(found) = html[position..].find('<') {
+        let start = position + found;
+        let rest = &html[start..];
+        let after = &rest[1..];
+        let length = if rest.starts_with("<!--") {
+            comment_end(rest)
+        } else if rest.starts_with("<?") {
+            rest.find("?>").map(|end| end + 2)
+        } else if rest.starts_with("<![CDATA[") {
+            rest.find("]]>").map(|end| end + 3)
+        } else if after
+            .trim_start_matches(['/', '!'])
+            .starts_with(|c: char| c.is_ascii_alphabetic())
+        {
+            tag_end(rest)
+        } else {
+            Some(1)
+        };
+        let Some(length) = length else {
+            return Some(start);
+        };
+        position = start + length;
+    }
+    None
+}
+
+/// The length of the tag `html` starts with, up to its `>` outside quoted attribute values, or
+/// `None` if it doesn't close.
+fn tag_end(html: &str) -> Option<usize> {
+    let mut quote: Option<char> = None;
+    for (index, character) in html.char_indices() {
+        match quote {
+            Some(open) if character == open => quote = None,
+            None if character == '"' || character == '\'' => quote = Some(character),
+            None if character == '>' => return Some(index + 1),
+            Some(_) | None => {}
+        }
+    }
+    None
 }
 
 #[cfg(test)]
@@ -392,32 +523,111 @@ mod tests {
     fn block_tags_follow_github() {
         assert_eq!(
             github_block_tags(
-                "<search>x\n> - </SEARCH>\r\n<source src=a>\n`<search>` <searching>\n"
+                "<search>x\n> - </SEARCH>\r\n<source src=a>\n`<search>` <searching>\n\
+                 <search\x0cx\n[^1]: <search>x\n<!x\n- <!doctype html\n<!X\n<!--\n"
             ),
-            "<searcx>x\n> - </searcx>\r\n<header src=a>\n`<search>` <searching>\n",
-            "the two tags are renamed where a block starts, and nowhere else"
+            "<searcx>x\n> - </searcx>\r\n<header src=a>\n`<search>` <searching>\n\
+             <searcx\x0cx\n[^1]: <searcx>x\n&!x\n- &!doctype html\n<!X\n<!--\n",
+            "the tags and lowercase declarations change where a block starts, and nowhere else"
         );
         assert_eq!(
-            headings("<search>x\n## A\n\n<source>x\n## B\n"),
-            ["2 A"],
-            "a search tag starts no HTML block on GitHub, and a source tag does"
+            headings("<search>x\n## A\n\n<source>x\n## B\n\n<!x\n\n## C\n"),
+            ["2 A", "2 C"],
+            "a search tag and a lowercase declaration start no HTML block on GitHub, and a \
+             source tag does"
         );
     }
 
     #[test]
-    fn html_heading_tags_are_found_outside_comments() {
-        for html in ["<h2>A</h2>", "<H1 id=a>", "text </h6>", "<h3\nclass=x>"] {
-            assert!(has_html_heading(html), "{html:?} has a heading tag");
+    fn html_heading_tags_are_found_after_a_leading_comment() {
+        for html in [
+            "<h2>A</h2>",
+            "<H1 id=a>",
+            "text </h6>",
+            "<h3\nclass=x>",
+            "<div><!-- a --!> <h2>Extra</h2> --></div>",
+            "<div><a b=\"<!--\"><h2>Extra</h2><i c=\"-->\"></i></div>",
+            "<div><h2\x0cid=x>Extra</div>",
+            "<div><h2\"id=x>Extra</div>",
+            "<!-- a --> <h2>b</h2>",
+        ] {
+            assert!(
+                !html_heading_offsets(html).is_empty(),
+                "{html:?} has a heading tag"
+            );
         }
         for html in [
             "<header>",
             "<hr>",
             "<!-- <h2>old</h2> -->",
+            "<!-- <h2>old</h2> --!>",
             "<html>",
             "<h7>",
+            "<h2x>",
         ] {
-            assert!(!has_html_heading(html), "{html:?} has no heading tag");
+            assert!(
+                html_heading_offsets(html).is_empty(),
+                "{html:?} has no heading tag"
+            );
         }
+    }
+
+    #[test]
+    fn html_headings_are_reported_once_on_their_own_line() {
+        let arena = Arena::new();
+        let markdown = Markdown::parse(
+            &arena,
+            "# T\n\nText <h2>x</h2>.\n\n<div>\n\n</div>\n\n<div>\na\n<h3>b</h3>\n</div>\n",
+        );
+        assert_eq!(
+            markdown.html_heading_lines(),
+            [3, 11],
+            "inline tags once per line, and a block's tag on its own line"
+        );
+    }
+
+    #[test]
+    fn unclosed_html_is_found() {
+        for html in [
+            "<!--\n",
+            "<div><!-- a\n</div>\n",
+            "<div title=\"\n</div>\n",
+            "<div\n## Extra\n",
+            "<?php echo\n",
+            "<![CDATA[ x\n",
+            "<!DOCTYPE html\n",
+        ] {
+            assert!(unclosed_html(html).is_some(), "{html:?} doesn't close");
+        }
+        for html in [
+            "<details>\n<summary>More</summary>\n",
+            "<pre>\n\n# a comment\n</pre>\n",
+            "<!--\n\n## Old\n\n-->\n",
+            "<!-- a --!>\n",
+            "<!-->\n",
+            "<div title='a > b'>1 < 2 <3</div>\n",
+            "<?php x ?>\n",
+        ] {
+            assert_eq!(unclosed_html(html), None, "{html:?} closes");
+        }
+        let arena = Arena::new();
+        let markdown = Markdown::parse(&arena, "# T\n\n<div>\na\n<!-- b\n\n## C\n");
+        assert_eq!(
+            markdown.unclosed_html_lines(),
+            [5],
+            "the line the comment opens on"
+        );
+    }
+
+    #[test]
+    fn text_leaves_out_images_and_html() {
+        let arena = Arena::new();
+        let markdown = Markdown::parse(&arena, "## ![I](i.png) A <kbd>B</kbd> `c`\n");
+        assert_eq!(
+            text(markdown.blocks()[0]),
+            " A B c",
+            "the image and the tags go"
+        );
     }
 
     #[test]
