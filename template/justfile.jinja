@@ -4,8 +4,8 @@
 # builds for each platform and the container image, which CI runs on their own runners. CI runs
 # `rule-changes` against the pull request's base, with the checker the base branch pins.
 # On Windows, recipes run in Windows PowerShell, which every Windows install has. The owner's
-# recipes, `setup-github` and `check-github`, need admin rights on the repository, so `just ci`
-# leaves them out.
+# recipes, in the `owner` group, need admin rights on the repository or the release token, so
+# `just ci` leaves them out.
 
 set windows-shell := ["powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-Command"]
 
@@ -338,7 +338,7 @@ setup-github $dry_run="false":
     echo "Left to do by hand, as docs/maintaining.md says:"
     echo "- Install the Renovate app on $repo: https://github.com/apps/renovate"
     echo "- Create a fine-grained token with contents and pull request write access to $repo, then"
-    echo "  add it: gh secret set RELEASE_PLZ_TOKEN --repo $repo"
+    echo "  check and store it: just set-release-token"
     echo "- Run just check-github, then push main if it isn't pushed yet."
     {%- if published or (kind == 'service' and visibility == 'public') %}
     echo "- At the first release, do the steps in its section of docs/maintaining.md."
@@ -412,5 +412,84 @@ check-github:
     verdict "classic branch protection's required checks" "${classic:-none}" none
     token=$(gh api --paginate "repos/$repo/actions/secrets?per_page=100" --jq '.secrets[] | select(.name == "RELEASE_PLZ_TOKEN") | "present"')
     verdict "RELEASE_PLZ_TOKEN secret" "${token:-missing}" present
-    echo "Not checked: the token's access and expiry, and whether the Renovate app is installed."
+    echo "Not checked: whether the Renovate app is installed, and the release token's access and expiry."
+    echo "GitHub doesn't show a secret's value; the release workflow checks the token on every push to main."
     exit "$wrong"
+
+# The repository's `permissions.push` says whether the token's account may push. A classic or
+# OAuth token then gets 422 for a request missing its required fields whatever it may do, but a
+# fine-grained token without the permission a request needs gets 403 first, so the two requests
+# below create nothing and show the token's own permissions. An expired or revoked token gets 401.
+# The release workflow runs this before release-plz, which would otherwise fail with a bare 403.
+#
+# Checks that the token in RELEASE_PLZ_TOKEN can update the release pull request.
+[group("owner")]
+check-release-token:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    repo={{ repo }}
+    fix="docs/maintaining.md says which access the token needs, under Before the first push, and how to replace it, under Renew the release token."
+    report() {
+      if [ -n "${GITHUB_ACTIONS:-}" ]; then
+        echo "::$1::$2"
+      else
+        echo "$1: $2" >&2
+      fi
+    }
+    if [ -z "${RELEASE_PLZ_TOKEN:-}" ]; then
+      report error "RELEASE_PLZ_TOKEN is empty or missing. $fix"
+      exit 1
+    fi
+    # Prints the response's status line and headers, then its body; gh fails on any status but 2xx.
+    request() {
+      if [ -n "${3:-}" ]; then
+        GH_TOKEN="$RELEASE_PLZ_TOKEN" gh api --include --method "$1" "$2" --input - <<< "$3" 2> /dev/null || true
+      else
+        GH_TOKEN="$RELEASE_PLZ_TOKEN" gh api --include --method "$1" "$2" 2> /dev/null || true
+      fi
+    }
+    status() { awk 'NR == 1 { print $2; exit }' <<< "$1"; }
+    failure() { echo "${1:-no response from GitHub}" | head -n 1; }
+
+    response=$(request GET "repos/$repo")
+    case $(status "$response") in
+      200) echo "ok: the token can read $repo" ;;
+      401) report error "GitHub rejects the token: it has expired, been revoked or been mistyped. $fix"; exit 1 ;;
+      403 | 404) report error "The token has no access to $repo. $fix"; exit 1 ;;
+      *) report error "Reading $repo with the token failed: $(failure "$response")"; exit 1 ;;
+    esac
+    if ! grep --quiet '"push":true' <<< "$response"; then
+      report error "The token's account can't push to $repo. Create the token with an account that has write access. $fix"
+      exit 1
+    fi
+    expires=$(sed -n 's/^[Gg]ithub-[Aa]uthentication-[Tt]oken-[Ee]xpiration: *//p' <<< "$response" | tr -d '\r')
+    soon=$(date -u -d '+14 days' +%F 2> /dev/null || date -u -v+14d +%F)
+    if [ -n "$expires" ] && [[ ! "${expires%% *}" > "$soon" ]]; then
+      report warning "The release token expires $expires. Replace it before then; $fix"
+    fi
+
+    failed=0
+    for access in "contents:POST:repos/$repo/git/refs" "pull requests:POST:repos/$repo/pulls"; do
+      name=${access%%:*} rest=${access#*:}
+      response=$(request "${rest%%:*}" "${rest#*:}" '{}')
+      case $(status "$response") in
+        422) echo "ok: the token can write $name" ;;
+        403 | 404) report error "The token can't write $name in $repo. $fix"; failed=1 ;;
+        *) report error "Checking the token's access to $name failed: $(failure "$response")"; failed=1 ;;
+      esac
+    done
+    exit "$failed"
+
+# The token is read without echoing it, from the terminal or from standard input, and reaches gh
+# on standard input, so it shows in no command line.
+#
+# Checks a new release token as check-release-token does, then stores it as RELEASE_PLZ_TOKEN.
+[group("owner")]
+set-release-token:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    IFS= read -r -s -p "Paste the release token: " token || [ -n "$token" ]
+    echo
+    RELEASE_PLZ_TOKEN="$token" "{% raw %}{{ just_executable() }}{% endraw %}" --justfile "{% raw %}{{ justfile() }}{% endraw %}" check-release-token
+    printf '%s' "$token" | gh secret set RELEASE_PLZ_TOKEN --repo {{ repo }}
+    echo "Stored the token as the RELEASE_PLZ_TOKEN secret of {{ repo }}."

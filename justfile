@@ -460,7 +460,9 @@ shapes: (shape "binary") (shape "binary-windows-macos-dual") (shape "library-pub
 # copy runs without `--quiet`, so Copier prints the next steps, which must name the repository and
 # install just. `just setup-github --dry-run` must print the required checks and the label, and the
 # Actions policy and vulnerability reporting only for a public repository, without calling `gh`.
-# `just check-github` runs against the fixtures in tests/check-github/.
+# `just check-github` runs against the fixtures in tests/check-github/, and
+# `just check-release-token` and `just set-release-token` against the fake gh in
+# tests/check-release-token/.
 #
 # Checks the project a user gets for one set of answers.
 shape answers:
@@ -520,3 +522,4 @@ shape answers:
       just package
     fi
     cargo run --locked --quiet --manifest-path "$trellis/Cargo.toml" --package trellis-policy -- check
+    "$trellis/tests/check-release-token/test.sh" "$project"
