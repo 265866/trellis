@@ -40,8 +40,12 @@ _exclude:
   - "{% if not (publish_crate and license == 'MIT OR Apache-2.0') %}/crates/{{ crate_name }}/LICENSE-MIT{% endif %}"
   - "{% if not (publish_crate and license == 'MIT OR Apache-2.0') %}/crates/{{ crate_name }}/LICENSE-APACHE{% endif %}"
   # The scaffold is the project's own code and history once generated, so an update leaves it
-  # alone.
+  # alone, apart from a published crate's license files, which follow the answers. A `!` item
+  # adds back what `crates` excluded, so each repeats its file's condition above.
   - "{% if _copier_operation == 'update' %}crates{% endif %}"
+  - "{% if _copier_operation == 'update' and publish_crate and license == 'MIT' %}!/crates/{{ crate_name }}/LICENSE{% endif %}"
+  - "{% if _copier_operation == 'update' and publish_crate and license == 'MIT OR Apache-2.0' %}!/crates/{{ crate_name }}/LICENSE-MIT{% endif %}"
+  - "{% if _copier_operation == 'update' and publish_crate and license == 'MIT OR Apache-2.0' %}!/crates/{{ crate_name }}/LICENSE-APACHE{% endif %}"
   - "{% if _copier_operation == 'update' %}Cargo.lock{% endif %}"
   - "{% if _copier_operation == 'update' %}CHANGELOG.md{% endif %}"
   - "{% if _copier_operation == 'update' %}docs/design.md{% endif %}"

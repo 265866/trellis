@@ -127,21 +127,19 @@ the minor version and a `fix` the patch version. To ship:
    `Cargo.toml`, in `Cargo.lock` and in the `CHANGELOG.md` heading. Its notes can repeat older
    entries; delete those. Renaming the main crate stops the release workflow with an error that
    says what to do by hand.
-2. Merge it once its checks pass. Merge no other pull request until the release workflow's
-   **{{ 'Release' if kind == 'library' else 'Tag' }}** job finishes, or release-plz may propose the same version again.
+2. Under each breaking change, from a commit marked `!` or with a `BREAKING CHANGE:` footer, write
+   what users must do before they upgrade. Edit `CHANGELOG.md` on the release pull request's
+   branch, as in step 1. [Stability](stability.md) promises users this note.
+3. Merge the release pull request once its checks pass. Merge no other pull request until the
+   release workflow's **{{ 'Release' if kind == 'library' else 'Tag' }}** job finishes, or
+   release-plz may propose the same version again.
 {%- if kind != 'library' %}
-3. If a later job fails, re-run the failed jobs. They pick up from the same tag.
+4. If a later job fails, re-run the failed jobs. They pick up from the same tag.
 
 ### Keep releases verifiable
 
-[Verify a release](verifying-releases.md) gives users commands that name the `vX.Y.Z` tag form,
-the `release.yml` file and the `main` branch it runs on, the repository
-`{{ github_owner }}/{{ project_name }}`, and
-{%- if kind == 'binary' and visibility == 'public' %} the archive, `SHA256SUMS` and `attestation.json` file names.
-{%- elif kind == 'binary' %} the archive and `SHA256SUMS` file names.
-{%- else %} the image `ghcr.io/{{ github_owner | lower }}/{{ project_name }}`.
-{%- endif %} Changing
-one breaks the commands users have copied.
+Changing a name that [Stability](stability.md#names-that-stay-the-same) lists breaks users'
+scripts, links and the commands they copied from Install and Verify a release.
 {%- endif %}
 {%- if published %}
 
@@ -210,17 +208,11 @@ Some answers also change what GitHub needs:
   A macOS minute costs about ten times a Linux one, and a Windows minute about twice.
 {%- endif %}
 {%- endif %}
-{%- if kind == 'library' and visibility == 'public' %}
-{%- if publish_crate %}
-- **License.** After changing the license, copy the root `LICENSE*` files into the crate's
-  directory and remove the old ones, in the same pull request; `just package` fails until you do.
-{%- else %}
+{%- if kind == 'library' and visibility == 'public' and not publish_crate %}
 - **Publishing.** After turning on `publish_crate`, publish the first version as the updated
   page's "At the first release" says.
 {%- if license == 'none' %} crates.io needs a license, so pass one in the same update,
   such as `--data license=MIT`.
-{%- endif %} In the same pull request as the change, copy the root
-  `LICENSE*` files into the crate's directory; `just package` fails until you do.
 {%- endif %}
 {%- endif %}
 
@@ -233,7 +225,10 @@ uvx copier update --defaults
 ```
 
 An update never touches `crates/`, `Cargo.lock`, `CHANGELOG.md` or `docs/design.md`, which are
-yours after the project is generated. It is a rule change, so it can't also change code. Copier
+yours after the project is generated.
+{%- if published %} The crate's `LICENSE*` files are the exception: they
+follow the license answer.
+{%- endif %} It is a rule change, so it can't also change code. Copier
 merges the new template into your edits; resolve any conflict markers it leaves before you commit.
 Once the update merges, run `just check-github` on `main`. A newer trellis can set more than the one
 you set up with, so if it reports a wrong setting, run `just setup-github`.

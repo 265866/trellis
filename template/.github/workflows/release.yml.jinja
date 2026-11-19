@@ -379,6 +379,16 @@ jobs:
       group: release-pr
       cancel-in-progress: false
     steps:
+      # Without the token release-plz fails on its own, so this names the secret and the page first.
+      - name: Check the release token is set
+        env:
+          RELEASE_PLZ_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
+        run: |
+          if [ -z "$RELEASE_PLZ_TOKEN" ]; then
+            echo "::error::The RELEASE_PLZ_TOKEN secret is empty or missing, so release-plz can't update the release pull request. docs/maintaining.md says how to add it, under Before the first push. Then re-run this job."
+            exit 1
+          fi
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
