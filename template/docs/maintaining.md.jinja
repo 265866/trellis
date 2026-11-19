@@ -69,14 +69,27 @@ Commit the generated project on a branch named `main` (`git init --initial-branc
    opens one pull request with the crate updates other than major ones, and one for each major
    update. The toolchain, tool, action and image pins arrive with trellis updates.
 
-4. Create a fine-grained token with contents and pull request write access to this repository,
-   and add it as the `RELEASE_PLZ_TOKEN` secret with `gh secret set RELEASE_PLZ_TOKEN`. A pull
+4. Create a [fine-grained token](https://github.com/settings/personal-access-tokens/new) for
+   this repository only, with read and write access to contents and to pull requests. A pull
    request that `GITHUB_TOKEN` opens starts no `pull_request_target` workflow, so without the
    token the release pull request never gets the "Rule changes stand alone" status and can't
-   merge.
+   merge. Store it as the `RELEASE_PLZ_TOKEN` secret:
+
+   ```sh
+   just set-release-token
+   ```
+
+   It asks for the token without echoing it, and stores it only once the token passes
+   `just check-release-token`. That check reads the repository with the token, which says whether
+   the token's account may push, then asks GitHub to create a branch and a pull request from
+   requests missing their required fields. A fine-grained token without the permission a request
+   needs gets refused before GitHub reads the request, so the answers show the token's own
+   permissions, and nothing is created. It also warns when the token expires within 14 days. The
+   release workflow runs the same check before it updates the release pull request.
 
 5. Check the settings. `just check-github` reports each one as ok or wrong, and fails if any is
-   wrong. It checks that the `RELEASE_PLZ_TOKEN` secret exists, but never reads its value.
+   wrong. It checks that the `RELEASE_PLZ_TOKEN` secret exists, but GitHub never shows it a
+   secret's value, so the token's access is left to the check in step 4.
 {%- if visibility == 'private' %}
    With no ruleset, as on a plan that can't protect `main`, it reports `main`'s protection as
    unavailable rather than wrong.
@@ -251,12 +264,13 @@ setting, run `just setup-github`.
 
 ## Renew the release token
 
-A fine-grained token expires on the date you set when you created it. Before it does, create a new
-one with the same access and replace the secret:
+A fine-grained token expires on the date you set when you created it. In its last 14 days, the
+release workflow's **Update the release PR** job warns on every run. Before it expires, create a
+new one with the same access and replace the secret:
 
 ```sh
-gh secret set RELEASE_PLZ_TOKEN
+just set-release-token
 ```
 
-Until you do, the release workflow's **Update the release PR** job fails, and the release pull
-request stops updating.
+Until you do, the **Update the release PR** job fails at its token check, which names what the
+token lacks, and the release pull request stops updating.
