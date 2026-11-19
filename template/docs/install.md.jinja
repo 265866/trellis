@@ -1,5 +1,8 @@
 # Install {{ project_name }}
 {% if kind == 'binary' %}
+Read this page to run {{ project_name }} on your machine. It shows how to install a release or
+build from source, and how to update.
+
 Each [release](https://github.com/{{ github_owner }}/{{ project_name }}/releases) has one archive per
 platform:
 {% if 'linux' in platforms %}
@@ -28,6 +31,9 @@ You need [Rust](https://rustup.rs/).
 cargo install --locked --git https://github.com/{{ github_owner }}/{{ project_name }} {{ crate_name }}
 ```
 {%- else %}
+Read this page to run {{ project_name }} on your server. It shows how to run the container image
+and how to update it.
+
 The image is `ghcr.io/{{ github_owner | lower }}/{{ project_name }}`, for Linux on x86-64. Each release
 pushes three tags, such as these for 1.4.2:
 

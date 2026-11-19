@@ -1,26 +1,31 @@
-//! The root `README.md` links every page in `docs/`.
+//! The `Documentation` section of the root `README.md` links every page in `docs/`.
 
 use std::collections::BTreeSet;
 use std::fs;
 use std::io::ErrorKind;
 use std::path::Path;
 
+use crate::markdown::Markdown;
 use crate::policy_error::PolicyError;
 use crate::repository_files;
 use crate::violation::Violation;
 use crate::workspace::Workspace;
 
 /// The file that links the docs, relative to the root.
-const README: &str = "README.md";
+pub(crate) const README: &str = "README.md";
 
 /// The directory whose pages the readme links, relative to the root, with a trailing `/`.
-const DOCS: &str = "docs/";
+pub(crate) const DOCS: &str = "docs/";
 
-/// Checks that the root `README.md` links each Markdown file directly under `docs/` with a
-/// relative Markdown link, `[text](docs/<page>.md)` or a reference definition
-/// `[label]: docs/<page>.md`, optionally with a `#anchor`. A page no index links is a page
-/// readers don't find. Links in code blocks and code spans don't count, since they don't render
-/// as links. Pages in subdirectories of `docs/` may be linked from the pages above them instead.
+/// The title of the readme's level-2 section that indexes the docs.
+pub(crate) const INDEX: &str = "Documentation";
+
+/// Checks that the `## Documentation` section of the root `README.md` links each Markdown file
+/// directly under `docs/` with a relative Markdown link, `[text](docs/<page>.md)` or a reference
+/// definition `[label]: docs/<page>.md`, optionally with a `#anchor`. A page the index doesn't
+/// link is a page readers don't find. Links elsewhere in the readme, and links in code blocks and
+/// code spans, don't count. Pages in subdirectories of `docs/` may be linked from the pages above
+/// them instead.
 ///
 /// It reads the files git tracks and the untracked ones `.gitignore` doesn't exclude.
 ///
@@ -37,28 +42,28 @@ pub fn check(workspace: &Workspace) -> Result<Vec<Violation>, PolicyError> {
     if pages.is_empty() {
         return Ok(Vec::new());
     }
-    let path = workspace.root().join(README);
-    let readme = match fs::read_to_string(&path) {
-        Ok(text) => Some(text),
-        Err(error) if error.kind() == ErrorKind::NotFound => None,
-        Err(source) => return Err(PolicyError::Read { path, source }),
-    };
-    let linked = readme.as_deref().map_or_else(BTreeSet::new, linked_targets);
+    let readme = read_readme(workspace.root())?;
+    let index = readme.as_deref().and_then(index_targets);
     let mut violations = Vec::new();
     for page in pages {
-        if linked.contains(page) {
+        if index.as_ref().is_some_and(|linked| linked.contains(page)) {
             continue;
         }
-        let problem = if readme.is_some() {
-            format!("`{README}` doesn't link the page `{page}`")
-        } else {
-            format!("there is no root `{README}` to link the page `{page}`")
+        let problem = match (&readme, &index) {
+            (None, _) => format!("there is no root `{README}` to link the page `{page}`"),
+            (Some(_), None) => {
+                format!("`{README}` has no `## {INDEX}` section to link the page `{page}`")
+            }
+            (Some(_), Some(_)) => {
+                format!("the `## {INDEX}` section of `{README}` doesn't link the page `{page}`")
+            }
         };
         violations.push(Violation::new(
             README.to_owned(),
             format!(
-                "{problem}, so readers don't find it. Add a relative link such as \
-                 `[{title}]({page})` to `{README}`, or delete the page if nothing needs it.",
+                "{problem}, so readers don't find it. Add an entry such as \
+                 `- [{title}]({page}): what the reader does with it.` under `## {INDEX}` in \
+                 `{README}`, or delete the page if nothing needs it.",
                 title = page_title(page)
             ),
         ));
@@ -66,8 +71,18 @@ pub fn check(workspace: &Workspace) -> Result<Vec<Violation>, PolicyError> {
     Ok(violations)
 }
 
+/// The root `README.md` of the workspace at `root`, or `None` if there is none.
+pub(crate) fn read_readme(root: &Path) -> Result<Option<String>, PolicyError> {
+    let path = root.join(README);
+    match fs::read_to_string(&path) {
+        Ok(text) => Ok(Some(text)),
+        Err(error) if error.kind() == ErrorKind::NotFound => Ok(None),
+        Err(source) => Err(PolicyError::Read { path, source }),
+    }
+}
+
 /// Whether `relative`, a file relative to the root, is a Markdown file directly under `docs/`.
-fn is_page(relative: &str) -> bool {
+pub(crate) fn is_page(relative: &str) -> bool {
     relative.strip_prefix(DOCS).is_some_and(|name| {
         !name.contains('/')
             && Path::new(name)
@@ -82,26 +97,19 @@ fn page_title(page: &str) -> &str {
     name.rsplit_once('.').map_or(name, |(stem, _)| stem)
 }
 
-/// The targets of the Markdown links in `text`, outside code, without a leading `./` or a
+/// The targets the `## Documentation` section of `readme` links, or `None` if it has no such
+/// section.
+fn index_targets(readme: &str) -> Option<BTreeSet<String>> {
+    Markdown::new(readme)
+        .section(INDEX)
+        .map(|section| linked_targets(&section))
+}
+
+/// The targets of the Markdown links in `markdown`, outside code, without a leading `./` or a
 /// trailing `#anchor`.
-fn linked_targets(text: &str) -> BTreeSet<String> {
+fn linked_targets(markdown: &Markdown<'_>) -> BTreeSet<String> {
     let mut targets = BTreeSet::new();
-    let mut fence: Option<&str> = None;
-    for line in text.lines() {
-        let trimmed = line.trim_start();
-        if let Some(open) = fence {
-            if trimmed.starts_with(open) {
-                fence = None;
-            }
-            continue;
-        }
-        if let Some(open) = ["```", "~~~"]
-            .into_iter()
-            .find(|open| trimmed.starts_with(open))
-        {
-            fence = Some(open);
-            continue;
-        }
+    for line in markdown.prose() {
         let prose = without_code_spans(line);
         if let Some(target) = reference_target(&prose) {
             targets.insert(normalize(target));
@@ -171,7 +179,7 @@ mod tests {
     use super::*;
 
     fn links(text: &str) -> Vec<String> {
-        linked_targets(text).into_iter().collect()
+        linked_targets(&Markdown::new(text)).into_iter().collect()
     }
 
     #[test]
@@ -226,6 +234,25 @@ mod tests {
         ] {
             assert!(!is_page(path), "{path} isn't a page");
         }
+    }
+
+    #[test]
+    fn only_links_in_the_documentation_section_count() {
+        let readme = "# Project\n\n[Install](docs/install.md) has the details.\n\n\
+                      ## Documentation\n\n- [Design](docs/design.md): the decisions.\n\n\
+                      ### Pages\n\n- [Faq](docs/faq.md): answers.\n\n\
+                      ## License\n\n[Guide](docs/guide.md).\n";
+        let targets: Vec<String> = index_targets(readme).unwrap().into_iter().collect();
+        assert_eq!(
+            targets,
+            ["docs/design.md", "docs/faq.md"],
+            "a link before or after the section isn't in the index"
+        );
+        assert_eq!(
+            index_targets("# Project\n\nSee [install](docs/install.md).\n"),
+            None,
+            "a readme without the section has no index"
+        );
     }
 
     #[test]

@@ -38,6 +38,10 @@ unwrap_used = "warn"
 [workspace.metadata.dylint]
 libraries = {libraries}
 
+[workspace.metadata.policy]
+docs_files = ["README.md", "AGENTS.md", "docs/install.md"]
+readme_sections = ["Install", "Documentation"]
+
 [workspace.metadata.policy.internal_dependencies]
 demo = ["demo_core"]
 demo_core = []
@@ -90,6 +94,12 @@ const CONFIG_FILES: [(&str, &str); 14] = [
     (".gitattributes", "* text=auto\n"),
 ];
 
+/// The project's `README.md`, with the sections `readme_sections` lists and an index that links
+/// its one page.
+const README: &str = "# Demo\n\nThe demo.\n\n## Install\n\n\
+                      See [the install guide](docs/install.md).\n\n## Documentation\n\n\
+                      - [Install](docs/install.md#linux): install the demo.\n";
+
 /// A generated project in `project/` of a temporary directory, deleted on drop.
 struct Project {
     /// The temporary directory, which holds the project and the fixture lints beside it.
@@ -98,7 +108,7 @@ struct Project {
 
 impl Project {
     /// A project that keeps every rule: the members `demo` and `demo_core`, the kept tool
-    /// configuration files, a `README.md` that links `docs/install.md`, and the fixture
+    /// configuration files, a `README.md` whose index links `docs/install.md`, and the fixture
     /// `trellis_lints` in `../lints/`, which the dylint libraries name by path.
     fn new() -> Self {
         let project = Self {
@@ -120,11 +130,11 @@ impl Project {
             project.write(file, contents);
         }
         project.write("AGENTS.md", "# Working on the demo\n");
+        project.write("README.md", README);
         project.write(
-            "README.md",
-            "# Demo\n\nSee [the install guide](docs/install.md#linux).\n",
+            "docs/install.md",
+            "# Install\n\nFor people who run the demo: how to install it.\n",
         );
-        project.write("docs/install.md", "# Install\n");
         project.write("docs/guides/setup.md", "# Setup\n");
         project.lock();
         project
@@ -134,6 +144,30 @@ impl Project {
     /// `libraries`.
     fn root_manifest(&self, exclude: &str, libraries: &str) {
         self.write("Cargo.toml", &root_manifest(exclude, libraries));
+    }
+
+    /// Adds the line `setting` to the `[workspace.metadata.policy]` table of the root
+    /// `Cargo.toml`.
+    fn policy_setting(&self, setting: &str) {
+        let root = fs::read_to_string(self.path().join("Cargo.toml"))
+            .expect("the root manifest should be read");
+        let table = "[workspace.metadata.policy]\n";
+        assert!(root.contains(table), "the root manifest has the table");
+        self.write(
+            "Cargo.toml",
+            &root.replacen(table, &format!("{table}{setting}\n"), 1),
+        );
+    }
+
+    /// Removes the line that starts with `key` from the root `Cargo.toml`.
+    fn remove_policy_setting(&self, key: &str) {
+        let root = fs::read_to_string(self.path().join("Cargo.toml"))
+            .expect("the root manifest should be read");
+        let kept: Vec<&str> = root
+            .lines()
+            .filter(|line| !line.starts_with(&format!("{key} = ")))
+            .collect();
+        self.write("Cargo.toml", &format!("{}\n", kept.join("\n")));
     }
 
     /// Writes a lints manifest under `directory`, relative to the project, for the package
@@ -290,7 +324,7 @@ fn run(directory: &Path, arguments: &[&str], ci: Ci) -> Run {
 #[test]
 fn a_generated_project_passes() {
     let run = Project::new().check();
-    run.assert_reports(0, "All 11 structure rules hold");
+    run.assert_reports(0, "All 12 structure rules hold");
     assert_eq!(
         run.stdout.lines().count(),
         1,
@@ -306,7 +340,7 @@ fn the_workspace_is_found_from_the_current_directory() {
         &["check"],
         Ci::Local,
     )
-    .assert_reports(0, "All 11 structure rules hold");
+    .assert_reports(0, "All 12 structure rules hold");
 }
 
 #[test]
@@ -325,7 +359,7 @@ fn a_lints_library_at_an_absolute_path_passes() {
     project.root_manifest("", &format!("[{{ path = {path:?} }}]"));
     project
         .check()
-        .assert_reports(0, "All 11 structure rules hold");
+        .assert_reports(0, "All 12 structure rules hold");
 }
 
 #[test]
@@ -365,15 +399,17 @@ fn a_lints_library_linked_into_the_workspace_fails() {
 }
 
 #[test]
-fn a_page_the_readme_doesnt_link_fails() {
+fn a_page_the_index_doesnt_link_fails() {
     let project = Project::new();
-    project.write("docs/extra.md", "# Extra\n");
-    project.write("docs/Upper.MD", "# Upper\n");
+    project.write("docs/extra.md", "# Extra\n\nAn extra page.\n");
+    project.write("docs/Upper.MD", "# Upper\n\nAn upper page.\n");
     let run = project.check();
     run.assert_reports(
         1,
-        "error: [docs_index] README.md: `README.md` doesn't link the page `docs/extra.md`, so \
-         readers don't find it. Add a relative link such as `[extra](docs/extra.md)`",
+        "error: [docs_index] README.md: the `## Documentation` section of `README.md` doesn't \
+         link the page `docs/extra.md`, so readers don't find it. Add an entry such as \
+         `- [extra](docs/extra.md): what the reader does with it.` under `## Documentation` in \
+         `README.md`, or delete the page if nothing needs it.",
     );
     run.assert_reports(1, "doesn't link the page `docs/Upper.MD`");
     assert!(
@@ -384,13 +420,216 @@ fn a_page_the_readme_doesnt_link_fails() {
 }
 
 #[test]
+fn a_link_outside_the_index_doesnt_count() {
+    let project = Project::new();
+    project.write(
+        "README.md",
+        "# Demo\n\nThe demo.\n\n## Install\n\nSee [the install guide](docs/install.md).\n",
+    );
+    let run = project.check();
+    run.assert_reports(
+        1,
+        "[docs_index] README.md: `README.md` has no `## Documentation` section to link the page \
+         `docs/install.md`",
+    );
+    run.assert_reports(
+        1,
+        "[docs_layout] README.md: The readme's `##` sections are `Install`, but `readme_sections` \
+         in `[workspace.metadata.policy]` lists `Install`, `Documentation`.",
+    );
+    run.assert_reports(1, "2 structure rule violation(s)");
+}
+
+#[test]
 fn a_missing_readme_fails_for_each_page() {
     let project = Project::new();
     fs::remove_file(project.path().join("README.md")).expect("the readme should be removed");
-    project.check().assert_reports(
+    let run = project.check();
+    run.assert_reports(
         1,
         "there is no root `README.md` to link the page `docs/install.md`",
     );
+    run.assert_reports(
+        1,
+        "[docs_layout] README.md: `docs_files` in `[workspace.metadata.policy]` lists this file, \
+         but it doesn't exist.",
+    );
+    run.assert_reports(1, "2 structure rule violation(s)");
+}
+
+#[test]
+fn missing_docs_settings_fail() {
+    let project = Project::new();
+    project.remove_policy_setting("docs_files");
+    project.remove_policy_setting("readme_sections");
+    let run = project.check();
+    run.assert_reports(
+        1,
+        "error: [docs_layout] Cargo.toml: `docs_files` isn't set in \
+         `[workspace.metadata.policy]`, so nothing says which docs files the project keeps. Set \
+         it to the files that must exist, such as \
+         `docs_files = [\"README.md\", \"CONTRIBUTING.md\", \"docs/design.md\"]`.",
+    );
+    run.assert_reports(
+        1,
+        "error: [docs_layout] Cargo.toml: `readme_sections` isn't set in \
+         `[workspace.metadata.policy]`, so nothing says which sections the root `README.md` has.",
+    );
+    run.assert_reports(1, "2 structure rule violation(s)");
+}
+
+#[test]
+fn an_unknown_docs_setting_is_a_load_error() {
+    let project = Project::new();
+    project.policy_setting("docs_file = []");
+    project.check().assert_reports(
+        2,
+        "it has a key `docs_file` the checks don't know; the keys are `build_script_crates`, \
+         `proc_macro_crates`, `internal_dependencies`, `dev_only_crates`, `docs_files`, \
+         `readme_sections`",
+    );
+}
+
+#[test]
+fn a_missing_docs_file_fails() {
+    let project = Project::new();
+    fs::remove_file(project.path().join("AGENTS.md")).expect("AGENTS.md should be removed");
+    let run = project.check();
+    run.assert_reports(
+        1,
+        "error: [docs_layout] AGENTS.md: `docs_files` in `[workspace.metadata.policy]` lists this \
+         file, but it doesn't exist. Restore it, or remove it from `docs_files` in a rule change \
+         if the project no longer keeps it.",
+    );
+    run.assert_reports(1, "1 structure rule violation(s)");
+}
+
+#[test]
+fn readme_sections_must_match_in_order() {
+    let project = Project::new();
+    let index = "## Documentation\n\n- [Install](docs/install.md): install the demo.\n";
+    for (readme, found) in [
+        (
+            format!("# Demo\n\n{index}\n## Install\n\nRun it.\n"),
+            "`Documentation`, `Install`",
+        ),
+        (
+            format!("# Demo\n\n## Install\n\nRun it.\n\n{index}\n## Usage\n\nMore.\n"),
+            "`Install`, `Documentation`, `Usage`",
+        ),
+        (
+            format!("# Demo\n\n## Setup\n\nRun it.\n\n{index}"),
+            "`Setup`, `Documentation`",
+        ),
+    ] {
+        project.write("README.md", &readme);
+        let run = project.check();
+        run.assert_reports(
+            1,
+            &format!(
+                "[docs_layout] README.md: The readme's `##` sections are {found}, but \
+                 `readme_sections` in `[workspace.metadata.policy]` lists `Install`, \
+                 `Documentation`. Give the readme exactly those sections, in that order, and \
+                 move anything longer than a few commands to a page in `docs/`."
+            ),
+        );
+        run.assert_reports(1, "1 structure rule violation(s)");
+    }
+    project.write(
+        "README.md",
+        &format!(
+            "# Demo\n\n```md\n## Not a section\n```\n\n## Install\n\nRun it.\n\n\
+             ### Linux\n\n{index}"
+        ),
+    );
+    project
+        .check()
+        .assert_reports(0, "All 12 structure rules hold");
+}
+
+#[test]
+fn a_setext_heading_in_the_readme_fails() {
+    let project = Project::new();
+    project.write(
+        "README.md",
+        &README.replace("## Install\n", "Usage\n-----\n\n## Install\n"),
+    );
+    let run = project.check();
+    run.assert_reports(
+        1,
+        "[docs_layout] README.md: Line 6 underlines the line above it, which makes that line a \
+         heading the section check doesn't read.",
+    );
+    run.assert_reports(1, "1 structure rule violation(s)");
+}
+
+#[test]
+fn an_index_entry_that_isnt_a_link_and_a_description_fails() {
+    let project = Project::new();
+    project.write(
+        "README.md",
+        &format!(
+            "{README}- [Contributing](https://example.com/CONTRIBUTING.md): how to help.\n\
+             - [Agents](AGENTS.md)\n\nMore pages are coming.\n"
+        ),
+    );
+    let run = project.check();
+    run.assert_reports(
+        1,
+        "[docs_layout] README.md: The `## Documentation` entry \
+         `[Contributing](https://example.com/CONTRIBUTING.md): how to help.` isn't an index \
+         entry: its link isn't a relative path to a file in the repository. Write each entry as \
+         `- [Title](path): what the reader does with it.`, with a relative path.",
+    );
+    run.assert_reports(
+        1,
+        "The `## Documentation` entry `[Agents](AGENTS.md)` isn't an index entry: the link isn't \
+         followed by `: ` and what the reader does with the page.",
+    );
+    run.assert_reports(
+        1,
+        "[docs_layout] README.md: The `## Documentation` section holds `More pages are coming.`, \
+         but it holds only its index",
+    );
+    run.assert_reports(1, "3 structure rule violation(s)");
+}
+
+#[test]
+fn a_page_without_a_title_and_a_paragraph_fails() {
+    let project = Project::new();
+    for (page, problem) in [
+        (
+            "Install the demo.\n",
+            "It doesn't start with a `# Title` line.",
+        ),
+        (
+            "# Install\n\n## Linux\n",
+            "Its title isn't followed by a paragraph",
+        ),
+        (
+            "# Install\n\n```sh\njust install\n```\n",
+            "Its title isn't followed by a paragraph",
+        ),
+    ] {
+        project.write("docs/install.md", page);
+        let run = project.check();
+        run.assert_reports(1, &format!("[docs_layout] docs/install.md: {problem}"));
+        run.assert_reports(
+            1,
+            "A page starts with its title as a `# Title` line, then a blank line and a paragraph \
+             that says who the page is for and what it gets them, before any other heading, \
+             list, table or code block.",
+        );
+        run.assert_reports(1, "1 structure rule violation(s)");
+    }
+    project.write("docs/guides/setup.md", "No title.\n");
+    project.write(
+        "docs/install.md",
+        "# Install\n\nFor people who run the demo.\n",
+    );
+    project
+        .check()
+        .assert_reports(0, "All 12 structure rules hold");
 }
 
 #[test]
@@ -492,12 +731,7 @@ fn adding_or_removing_a_build_script_is_one_rule_change_that_passes() {
     project.git(&["init", "--quiet"]);
     project.commit("a generated project");
     project.git(&["branch", "without"]);
-    let root = fs::read_to_string(project.path().join("Cargo.toml"))
-        .expect("the root manifest should be read");
-    project.write(
-        "Cargo.toml",
-        &format!("{root}\n[workspace.metadata.policy]\nbuild_script_crates = [\"demo\"]\n"),
-    );
+    project.policy_setting("build_script_crates = [\"demo\"]");
     project.write("crates/demo/build.rs", "fn main() {}\n");
     project.write(
         "crates/demo/Cargo.toml",
@@ -510,7 +744,7 @@ fn adding_or_removing_a_build_script_is_one_rule_change_that_passes() {
     project.git(&["branch", "with"]);
     project
         .check()
-        .assert_reports(0, "All 11 structure rules hold");
+        .assert_reports(0, "All 12 structure rules hold");
     project
         .run(&["rule-changes", "without", "--head", "HEAD"])
         .assert_reports(
@@ -528,7 +762,7 @@ fn adding_or_removing_a_build_script_is_one_rule_change_that_passes() {
     project.commit("remove the build script");
     project
         .check()
-        .assert_reports(0, "All 11 structure rules hold");
+        .assert_reports(0, "All 12 structure rules hold");
     project
         .run(&["rule-changes", "with", "--head", "HEAD"])
         .assert_reports(
@@ -543,17 +777,12 @@ fn a_proc_macro_lands_as_a_rule_change_then_a_code_change_that_pass() {
     project.git(&["init", "--quiet"]);
     project.commit("a generated project");
     project.git(&["branch", "generated"]);
-    let root = fs::read_to_string(project.path().join("Cargo.toml"))
-        .expect("the root manifest should be read");
-    project.write(
-        "Cargo.toml",
-        &format!("{root}\n[workspace.metadata.policy]\nproc_macro_crates = [\"serde_derive\"]\n"),
-    );
+    project.policy_setting("proc_macro_crates = [\"serde_derive\"]");
     project.commit("list a proc macro");
     project.git(&["branch", "listed"]);
     project
         .check()
-        .assert_reports(0, "All 11 structure rules hold");
+        .assert_reports(0, "All 12 structure rules hold");
     project
         .run(&["rule-changes", "generated", "--head", "HEAD"])
         .assert_reports(
@@ -573,7 +802,7 @@ fn a_proc_macro_lands_as_a_rule_change_then_a_code_change_that_pass() {
     project.commit("derive with the proc macro");
     project
         .check()
-        .assert_reports(0, "All 11 structure rules hold");
+        .assert_reports(0, "All 12 structure rules hold");
     project
         .run(&["rule-changes", "listed", "--head", "HEAD"])
         .assert_reports(
@@ -585,14 +814,7 @@ fn a_proc_macro_lands_as_a_rule_change_then_a_code_change_that_pass() {
 #[test]
 fn a_stale_build_script_entry_fails() {
     let project = Project::new();
-    let root = fs::read_to_string(project.path().join("Cargo.toml"))
-        .expect("the root manifest should be read");
-    project.write(
-        "Cargo.toml",
-        &format!(
-            "{root}\n[workspace.metadata.policy]\nbuild_script_crates = [\"demo\", \"gone\"]\n"
-        ),
-    );
+    project.policy_setting("build_script_crates = [\"demo\", \"gone\"]");
     let run = project.check();
     run.assert_reports(
         1,
@@ -625,5 +847,5 @@ fn a_member_the_release_changelog_leaves_out_fails() {
     );
     project
         .check()
-        .assert_reports(0, "All 11 structure rules hold");
+        .assert_reports(0, "All 12 structure rules hold");
 }

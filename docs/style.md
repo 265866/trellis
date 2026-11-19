@@ -4,8 +4,8 @@ A trellis project follows the
 [Google Rust Style Guide](https://google.github.io/styleguide/rustguide.html), and through it the
 official [Rust Style Guide](https://doc.rust-lang.org/nightly/style-guide/) and the
 [Rust API Guidelines](https://rust-lang.github.io/api-guidelines/). This page lists which of the
-Google guide's rules a check enforces, which ones only review can catch, and where trellis goes
-further than the guide.
+Google guide's rules a check enforces, which ones only review can catch, where trellis goes
+further than the guide, and how the docs are laid out.
 
 ## Checked by tools
 
@@ -160,8 +160,8 @@ Beyond the Google guide, the workspace also turns on:
   depends directly only on proc-macro crates listed in `proc_macro_crates`, since a proc macro
   writes code the custom lints don't check; that the root `AGENTS.md` is the only file of
   instructions for coding agents; that every crate's commits reach the release notes through
-  `changelog_include` in `release-plz.toml`; and that the root `README.md` links every page in
-  `docs/`.
+  `changelog_include` in `release-plz.toml`; and that the docs keep the layout under
+  [Documentation](#documentation).
 - `overflow-checks` and `panic = "abort"` in release builds: an overflow stops the program rather
   than wrapping, and nothing catches a panic. `trellis-policy` fails a change that turns either
   off, including a per-package or `.cargo/config.toml` override.
@@ -177,8 +177,9 @@ Beyond the Google guide, the workspace also turns on:
 
 ## Checked in review
 
-No check decides these, so review does. Agents give this list to the review subagent they spawn
-before every commit (see AGENTS.md).
+No check decides these, so review does. Agents give this list, and the one under
+[Documentation](#documentation), to the review subagent they spawn before every commit (see
+AGENTS.md).
 
 - **Ownership.** Each `Rc` or `Arc` the `shared_ownership` lint makes you justify is really
   needed, and no `.clone()` stands in for a borrow.
@@ -289,3 +290,38 @@ Write these like this rather than inventing a workaround:
   `clippy::panic`, `clippy::single_char_lifetime_names`, `clippy::string_add` (the guide asks
   for `format!` only when joining more than two strings) and `clippy::enum_glob_use` (it also
   flags enum globs inside functions, which the guide allows; `enum_glob_outside_fn` replaces it).
+
+## Documentation
+
+A trellis project's docs have one shape: a short README, an index in its Documentation section,
+and a page in `docs/` for each task a reader has.
+
+### Checked by `just policy`
+
+`trellis-policy`'s `docs_index` and `docs_layout` rules check these, with `docs_files` and
+`readme_sections` in `[workspace.metadata.policy]`:
+
+- Every file `docs_files` lists exists: `README.md`, `AGENTS.md`, `CONTRIBUTING.md`,
+  `SECURITY.md`, `CHANGELOG.md`, the license files and the pages in `docs/`. A missing setting
+  fails rather than checking nothing.
+- The root `README.md` has exactly the `##` sections `readme_sections` lists, in order, written as
+  `#` lines outside code blocks.
+- Its Documentation section is an index and nothing else. Each entry is
+  `- [Title](path): what the reader does with it.`, with a relative path, and every page directly
+  under `docs/` has one.
+- Every page directly under `docs/` starts with a `# Title` line, a blank line and a paragraph.
+
+### Checked in review
+
+- **A short README.** Anything longer than a few commands moves to a page in `docs/`.
+- **One page per task.** Each page covers one task a reader has, such as installing, verifying a
+  release or configuring, and its index entry says what the reader does with it.
+- **Page shape.** The paragraph after the title says who the page is for and what it gets them.
+  Numbered steps with commands to copy follow, then reference tables if the page needs them.
+- **Voice.** Short declarative sentences, in the second person and the present tense. No
+  marketing.
+- **Where things go.** Design decisions go in `docs/design.md`, and compatibility promises in
+  `docs/stability.md`. release-plz writes `CHANGELOG.md`, which isn't edited by hand except as the
+  release steps in `CONTRIBUTING.md` say.
+- **Same pull request.** A change to user-facing behavior updates its page in the same pull
+  request.

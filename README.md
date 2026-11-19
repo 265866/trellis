@@ -12,7 +12,8 @@ generates starts with:
   [Google Rust Style Guide](https://google.github.io/styleguide/rustguide.html) rules clippy doesn't
   check. Every exception is an `expect` with a reason.
 - **A structure checker.** [`trellis-policy`](policy) checks crate manifests, the dependencies
-  between crates, where config files live, and that every docs page is linked from the README.
+  between crates, where config files live, and the docs layout: the files and README
+  sections each project keeps, the README's docs index, and how each page opens.
 - **Rules apart from code.** A pull request changes the rules or the code, never both.
 - **CI and releases.** Checks on Linux, macOS and Windows; release-plz versions and changelogs;
   attested release archives or a signed container image; Renovate for updates.

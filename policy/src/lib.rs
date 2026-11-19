@@ -4,9 +4,11 @@
 //! script and uses only the proc macros the workspace lists; no tool reads a configuration file
 //! other than the workspace's; the root `AGENTS.md` is the only file of instructions for coding
 //! agents; each crate depends only on the workspace crates its entry in `internal_dependencies`
-//! allows; the workspace keeps its shape and loads the trellis lints; the root `README.md` links
-//! every page in `docs/`; and the main package's changelog in `release-plz.toml` takes in every
-//! other crate.
+//! allows; the workspace keeps its shape and loads the trellis lints; the `Documentation` section
+//! of the root `README.md` links every page in `docs/`; the files `docs_files` lists exist, the
+//! readme has exactly the sections `readme_sections` lists and an index for its `Documentation`
+//! section, and every page in `docs/` opens with a title and a paragraph; and the main package's
+//! changelog in `release-plz.toml` takes in every other crate.
 //!
 //! The `trellis-policy check [--manifest-path <Cargo.toml>]` command runs every [`Rule`] on a
 //! workspace. The `trellis-policy rule-changes <base> [--head <commit>]` command keeps changes to
@@ -18,11 +20,13 @@ mod case_insensitive;
 mod changed_files;
 pub mod config_files;
 pub mod docs_index;
+pub mod docs_layout;
 mod git;
 mod head;
 pub mod internal_dependencies;
 mod lint_expectations;
 pub mod lints_tables;
+mod markdown;
 pub mod member_manifests;
 pub mod member_sources;
 mod policy_config;

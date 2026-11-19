@@ -8,8 +8,8 @@ use std::{env, fs};
 
 use tempfile::TempDir;
 use trellis_policy::{
-    Violation, Workspace, agent_files, build_scripts, config_files, internal_dependencies,
-    proc_macros, release_changelog,
+    Violation, Workspace, agent_files, build_scripts, config_files, docs_layout,
+    internal_dependencies, proc_macros, release_changelog,
 };
 
 /// The manifest of the member `app`, which depends on the member `derive` only for its tests.
@@ -507,5 +507,51 @@ fn the_release_changelog_must_take_in_every_other_member() {
     assert!(
         mentions(&violations, "`derive` is a workspace member"),
         "the message should name the missing crate: {violations:?}"
+    );
+}
+
+#[test]
+fn without_docs_settings_or_a_readme_the_layout_asks_for_them() {
+    let fixture = Fixture::new("");
+    let violations = docs_layout::check(&fixture.workspace())
+        .unwrap_or_else(|error| panic!("the check should run, but {error}"));
+    assert_eq!(
+        files(&violations),
+        ["Cargo.toml", "Cargo.toml", "README.md"],
+        "each missing setting and the missing readme fail"
+    );
+    for text in [
+        "`docs_files` isn't set in `[workspace.metadata.policy]`",
+        "`readme_sections` isn't set in `[workspace.metadata.policy]`",
+        "There is no root `README.md`.",
+    ] {
+        assert!(
+            mentions(&violations, text),
+            "a message should say {text:?}: {violations:?}"
+        );
+    }
+}
+
+#[test]
+fn a_docs_layout_that_holds_passes() {
+    let fixture = Fixture::new(
+        "docs_files = [\"README.md\", \"docs/guide.md\"]\n\
+         readme_sections = [\"Use it\", \"Documentation\"]\n",
+    );
+    fixture.write(
+        "README.md",
+        "# App\n\nAn app.\n\n## Use it\n\nRun it.\n\n## Documentation\n\n\
+         - [Guide](docs/guide.md): learn what the app does.\n",
+    );
+    fixture.write(
+        "docs/guide.md",
+        "# Guide\n\nFor people new to the app: what it does.\n\n1. Run it.\n",
+    );
+    let violations = docs_layout::check(&fixture.workspace())
+        .unwrap_or_else(|error| panic!("the check should run, but {error}"));
+    assert!(
+        violations.is_empty(),
+        "the listed files exist, the sections match and the page opens with a paragraph: \
+         {violations:?}"
     );
 }
