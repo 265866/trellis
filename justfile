@@ -505,8 +505,9 @@ update:
 # Generates a project of one kind, `binary`, `service` or `library`, from the working tree, with
 # the lints and checker from this checkout, and runs `recipes` in it, `ci` by default. `true` as
 # `publish` makes a library a published one, and `true` as `web` gives a service a web UI. After
-# `ci`, a service also builds and runs its image when Docker is installed, and a web UI's build and
-# license notices must be in it. A `target` runs `test` and `build-release` for that target, as a
+# `ci`, a service also builds and runs its image when Docker is installed, under umask 077 with its
+# license files 0600, and the image's user must be able to read them. A web UI's build and license
+# notices must be in it too. A `target` runs `test` and `build-release` for that target, as a
 # project's CI does for the target a release ships.
 #
 # Generates a project of one kind and runs its checks.
@@ -545,11 +546,20 @@ template kind recipes="ci" publish="false" web="false" target="":
       fi
     done
     if [ "{{ recipes }}" = ci ] && [ "{{ kind }}" = service ] && command -v docker > /dev/null; then
-      just image
+      # A checkout or a `just notices` under umask 077 leaves the license files 0600, which the
+      # image's non-root user can't read unless the image sets their modes.
+      chmod 600 LICENSE* target/THIRD-PARTY-LICENSES*
+      (umask 077 && just image)
       docker run --rm demo-service:dev --version
+      container=$(docker create demo-service:dev)
+      trap 'docker rm "$container" > /dev/null; rm -rf "$out"' EXIT
+      docker cp "$container:/usr/share/doc/demo-service" - | tar --list --verbose > "$out/docs.txt"
+      if grep --invert-match --quiet --extended-regexp '^(drwxr-xr-x|-rw-r--r--) ' "$out/docs.txt" || ! grep --quiet '^-' "$out/docs.txt"; then
+        echo "error: the image's license files aren't readable by its user:" >&2
+        cat "$out/docs.txt" >&2
+        exit 1
+      fi
       if [ "{{ web }}" = true ]; then
-        container=$(docker create demo-service:dev)
-        trap 'docker rm "$container" > /dev/null; rm -rf "$out"' EXIT
         docker cp "$container:/usr/share/demo-service/web/index.html" "$out/index.html"
         grep --quiet 'src="./index-[a-z0-9]*\.js"' "$out/index.html" || { echo "error: the image's web UI isn't the build" >&2; exit 1; }
         docker cp "$container:/usr/share/doc/demo-service/THIRD-PARTY-LICENSES-WEB.txt" "$out/notices.txt"

@@ -6,6 +6,19 @@ part lists what a project's owner must do around the update: a rule that can fla
 a setting to change, or a step to do by hand. [CONTRIBUTING.md](CONTRIBUTING.md#release-trellis)
 has the versioning rule.
 
+## v0.7.2
+
+### Changed
+
+- A service's image makes its license files readable by everyone. The final stage copied them
+  with the modes they had in the checkout and from `just notices`, so on a machine whose umask is
+  077 they landed as root-owned 0600 files that the image's non-root user couldn't read. Images
+  built on CI's runners, whose umask is 022, weren't affected. The build stage now installs them
+  with mode 644 into `/licenses`, and the final stage copies that directory. If you edited the
+  final stage's `COPY` line for `/usr/share/doc/<name>/`, Copier can leave conflict markers there;
+  keep the new `COPY --from=build /licenses/` line, and add any file you copied to the build
+  stage's `install` line.
+
 ## v0.7.1
 
 ### Changed
