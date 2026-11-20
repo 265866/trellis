@@ -32,6 +32,10 @@ RUN case "$TARGETARCH" in \
     rustup toolchain install --no-self-update && rustup target add "$target" \
       && cargo build --locked --release --package {{ crate_name }} --target "$target" \
       && cp "target/$target/release/{{ project_name }}" /{{ project_name }}
+# The image runs as a non-root user, so its license files must be readable by all, whatever modes
+# the checkout and `just notices` gave them. COPY --chmod would set the directory BuildKit creates
+# to the same mode, which the user can't enter.
+RUN install -D --mode=644 --target-directory=/licenses target/THIRD-PARTY-LICENSES.html{% if web_ui %} target/THIRD-PARTY-LICENSES-WEB.txt{% endif %}{{ {'MIT': ' LICENSE', 'MIT OR Apache-2.0': ' LICENSE-MIT LICENSE-APACHE'}.get(license, '') }}
 {%- if web_ui %}
 
 # The web UI builds with the Bun version the workflows and CONTRIBUTING.md pin, from its lockfile.
@@ -49,7 +53,7 @@ LABEL org.opencontainers.image.source="https://github.com/{{ github_owner }}/{{ 
 {%- if license != 'none' %} \
       org.opencontainers.image.licenses="{{ license }}"
 {%- endif %}
-COPY --from=build /src/target/THIRD-PARTY-LICENSES.html {% if web_ui %}/src/target/THIRD-PARTY-LICENSES-WEB.txt {% endif %}{{ {'MIT': '/src/LICENSE ', 'MIT OR Apache-2.0': '/src/LICENSE-MIT /src/LICENSE-APACHE '}.get(license, '') }}/usr/share/doc/{{ project_name }}/
+COPY --from=build /licenses/ /usr/share/doc/{{ project_name }}/
 COPY --from=build /{{ project_name }} /usr/local/bin/{{ project_name }}
 {%- if web_ui %}
 # The service reads {{ crate_name | upper }}_WEB_DIR to find the web UI it serves.
