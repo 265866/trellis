@@ -46,8 +46,11 @@ The repository is private, so Cargo fetches it with your Git credentials.
 Read this page to run {{ project_name }} on your server. It shows how to run the container image
 and how to update it.
 
-The image is `ghcr.io/{{ github_owner | lower }}/{{ project_name }}`, for Linux on x86-64. Each release
-pushes three tags, such as these for 1.4.2:
+The image is `ghcr.io/{{ github_owner | lower }}/{{ project_name }}`, for {{ targets | map(attribute='name') | join(' and ') }}.
+{%- if targets | length > 1 %}
+Docker and Podman pull the one for your machine.
+{%- endif %}
+Each release pushes three tags, such as these for 1.4.2:
 
 | Tag | Follows |
 | --- | --- |

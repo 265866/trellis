@@ -560,6 +560,29 @@ template kind recipes="ci" publish="false" web="false" target="":
       fi
     fi
 
+# A generated service's CI builds the image for every architecture on an x86-64 runner, as its
+# release does, cross-compiling for the others. CI's `Service image` jobs build the arm64 one here
+# and run it on an ARM64 runner. `archive` is an absolute path.
+#
+# Generates a service and writes its image for one platform, such as `linux/arm64`, to `archive`.
+service-image platform archive:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    trellis="{{ justfile_directory() }}"
+    out=$(mktemp -d)
+    trap 'rm -rf "$out"' EXIT
+    project="$out/demo-service"
+    uv tool run copier@9.19.1 copy --quiet --defaults --vcs-ref HEAD \
+      --data project_name=demo-service \
+      --data "description=A demo service that trellis generates for its tests." \
+      --data kind=service \
+      --data trellis_path="$trellis" \
+      "$trellis" "$project"
+    cd "$project"
+    just notices
+    docker buildx build --file Containerfile --platform "{{ platform }}" --tag demo-service:ci \
+      --output "type=docker,dest={{ archive }}" .
+
 # tests/dependencies/setup.sh adds the dependencies most projects use (serde, serde_json,
 # thiserror, anyhow, clap, tokio, tracing and futures) with code that uses them in trellis's
 # idioms, and the checks that read that code run. Then tests/dependencies/violations.sh adds, one
@@ -631,8 +654,8 @@ shape answers:
       || fail "Copier didn't print the next steps"
     has "$copied" 'cargo binstall just@' || fail "Copier's next steps don't install just"
     cd "$project"
-    # A binary's Linux archives use musl. A public binary builds for ARM64 by default, and a private
-    # one doesn't, since ARM64 runners draw on its account's Actions usage.
+    # A binary's Linux archives use musl. A public binary or service builds for ARM64 by default, and
+    # a private one doesn't, since ARM64 runners draw on its account's Actions usage.
     case "{{ answers }}" in
       binary)
         for target in x86_64-unknown-linux-musl aarch64-unknown-linux-musl aarch64-pc-windows-msvc; do
@@ -643,6 +666,16 @@ shape answers:
       binary-private)
         ! grep --quiet aarch64-unknown-linux .github/workflows/ci.yml \
           || fail "a private binary builds for ARM64 by default"
+        ;;
+      service-unlicensed)
+        grep --quiet '^          platforms: linux/amd64,linux/arm64$' .github/workflows/release.yml \
+          || fail "the release doesn't build the image for amd64 and arm64"
+        ;;
+      service-private)
+        grep --quiet '^          platforms: linux/amd64$' .github/workflows/release.yml \
+          || fail "a private service's release doesn't build the image for amd64 only"
+        ! grep --quiet ubuntu-24.04-arm .github/workflows/ci.yml \
+          || fail "a private service runs on ARM64 by default"
         ;;
     esac
     git init --quiet --initial-branch main

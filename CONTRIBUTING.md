@@ -16,8 +16,11 @@ and the template entries CI runs for a generated binary's other targets and on W
 `binary for Linux on x86-64` (musl), `binary on Linux on ARM64`, `binary on macOS`,
 `binary on Windows`, `binary on Windows on ARM64` and `published library on Windows`. To run one
 of them where its runner's system matches yours, pass its target to `just template`, such as
-`just template binary "test build-release" false false x86_64-unknown-linux-musl`. Besides the
-checks a generated project has, it runs:
+`just template binary "test build-release" false false x86_64-unknown-linux-musl`. Nor does it
+run the `C code for musl` jobs, `Service image for ARM64` or `Run the service image on ARM64`. The
+second cross-compiles a generated service's arm64 image, as `just service-image linux/arm64
+<absolute path>` does, and the third starts it on ARM64. Besides the checks a generated project
+has, it runs:
 
 | Recipe | Checks |
 | --- | --- |

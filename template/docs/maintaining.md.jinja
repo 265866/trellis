@@ -168,6 +168,12 @@ To change an answer, keep the trellis version and pass the new value, such as
 ```sh
 uvx copier update --defaults --vcs-ref=:current: --data 'license=MIT OR Apache-2.0'
 ```
+
+or the processors the image runs on, `x86_64` and `aarch64` (ARM64):
+
+```sh
+uvx copier update --defaults --vcs-ref=:current: --data 'architectures=[x86_64]'
+```
 {%- else %} the platforms:
 
 ```sh
@@ -185,7 +191,10 @@ uvx copier update --defaults --vcs-ref=:current: --data 'architectures=[x86_64]'
 
 The change is a rule change, so it can't also change code. Once it merges, run
 `just check-github` on `main`, and `just setup-github` if it reports a wrong setting.
-{%- if kind != 'service' %}
+{%- if kind == 'service' %}
+Changing the architectures needs nothing on GitHub, since `CI passed` covers whatever platforms CI
+runs.
+{%- else %}
 Changing the platforms{{ ' or architectures' if 'linux' in platforms or 'windows' in platforms else '' }} needs nothing on GitHub, since `CI passed` covers
 whatever platforms CI runs.
 {%- endif %}
@@ -234,7 +243,7 @@ Some answers also change what GitHub needs:
   `uvx copier update --defaults --vcs-ref=:current: --data visibility=private` makes, then make
   the repository private on GitHub and run `just check-github` on `main`. The Actions policy for
   the rule-change check then no longer matters.
-{%- if kind != 'service' and 'aarch64' in architectures and ('linux' in platforms or 'windows' in platforms) %}
+{%- if 'aarch64' in architectures and (kind == 'service' or 'linux' in platforms or 'windows' in platforms) %}
   The update keeps building for ARM64, whose runners draw on a private repository's Actions usage.
   To stop, add `--data 'architectures=[x86_64]'` to it.
 {%- endif %}
