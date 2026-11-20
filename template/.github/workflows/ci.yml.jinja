@@ -208,9 +208,48 @@ jobs:
       - name: Write the license notices the image carries
         run: just notices
 
-      - name: Build the image and run it
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      # The release builds every architecture's image on this runner, cross-compiling the others.
+      # `image-run` starts each one on its own architecture.
+      - name: Build the image for each architecture
         run: |
-          docker build --file Containerfile --tag {{ project_name }}:ci .
+{%- for target in targets %}
+          docker buildx build --file Containerfile --platform linux/{{ {'x86_64': 'amd64', 'aarch64': 'arm64'}[target.arch] }} \
+            --tag {{ project_name }}:ci --output type=docker,dest=image-{{ target.arch }}.tar .
+{%- endfor %}
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: images
+          path: image-*.tar
+          retention-days: 1
+          if-no-files-found: error
+
+  image-run:
+    name: {% raw %}Run the image (${{ matrix.name }}){% endraw %}
+    needs: image
+    runs-on: {% raw %}${{ matrix.os }}{% endraw %}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+{%- for target in targets %}
+          - name: {{ target.name }}
+            os: {{ target.runner }}
+            arch: {{ target.arch }}
+{%- endfor %}
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: images
+
+      - name: Run the image
+        env:
+          ARCH: {% raw %}${{ matrix.arch }}{% endraw %}
+        run: |
+          docker load --input "image-$ARCH.tar"
           docker run --rm {{ project_name }}:ci --version
 {%- endif %}
 
@@ -221,7 +260,7 @@ jobs:
   passed:
     name: CI passed
 {%- if kind == 'service' %}
-    needs: [quick, build, image]
+    needs: [quick, build, image, image-run]
 {%- else %}
     needs: [quick, build]
 {%- endif %}

@@ -6,6 +6,35 @@ part lists what a project's owner must do around the update: a rule that can fla
 a setting to change, or a step to do by hand. [CONTRIBUTING.md](CONTRIBUTING.md#release-trellis)
 has the versioning rule.
 
+## v0.7.0
+
+### Action required in projects
+
+- **Choose the processors a service's image runs on.** Services now get the `architectures`
+  question too, with the same defaults: x86-64 and ARM64 for a public repository, x86-64 for a
+  private one. So the update makes a public service's release publish one image for
+  `linux/amd64` and `linux/arm64`, and its CI test and run the image on ARM64. To keep amd64 only,
+  update with `--data 'architectures=[x86_64]'`. To add ARM64 to a private service, such as one
+  that runs on a Raspberry Pi, update with `--data 'architectures=[x86_64, aarch64]'`.
+- **Build another architecture's libraries in the `Containerfile`.** The build stage now runs on
+  the builder's own platform and cross-compiles for each other architecture with Debian's cross
+  gcc, so no architecture builds under emulation. If you added a build-stage step that installs a
+  C library, such as `libssl-dev`, Copier can leave conflict markers there; install the target
+  architecture's version instead, such as `libssl-dev:$TARGETARCH` after
+  `dpkg --add-architecture $TARGETARCH`. A crate that finds the library with pkg-config also needs
+  `PKG_CONFIG_ALLOW_CROSS=1` and `PKG_CONFIG_PATH` set to the target's Debian directory, such as
+  `/usr/lib/aarch64-linux-gnu/pkgconfig`, when it cross-compiles.
+
+### Changed
+
+- The `Containerfile` cross-compiles: its build and web stages run on the builder's platform, and
+  the final stage only copies files, so one x86-64 runner builds every architecture's image.
+  `just image` still builds for your own machine.
+- CI's `Container image` job builds every architecture's image the way the release does and
+  uploads them, and a new `Run the image` job starts each one on a runner of its architecture.
+- `docs/install.md` names the architectures the image runs on, and `docs/maintaining.md` shows how
+  to change a service's architectures.
+
 ## v0.6.0
 
 ### Action required in projects
