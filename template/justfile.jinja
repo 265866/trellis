@@ -49,7 +49,7 @@ install-toolchains:
 # Installs the check tools at the versions CI pins in `.github/workflows/`.
 install-tools:
     cargo binstall --no-confirm cargo-deny@0.20.2 cargo-shear@1.14.0 cargo-nextest@0.9.150 lychee@0.24.2
-    cargo binstall --no-confirm cargo-dylint@6.3.0 dylint-link@6.3.0 typos-cli@1.51.1 taplo-cli@0.10.0
+    cargo binstall --no-confirm cargo-dylint@6.4.0 dylint-link@6.4.0 typos-cli@1.51.1 taplo-cli@0.10.0
 {%- endraw %}
 {%- if kind != 'library' %}
     cargo binstall --no-confirm cargo-about@0.9.3

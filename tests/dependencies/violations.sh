@@ -129,6 +129,46 @@ pub const fn two() -> u8 {
 RUST
 check "a block comment" 'code comment'
 
+# cargo-dylint before 6.4.0 hid the recipe's `-D warnings` from cargo, so after a run without it
+# cargo kept that run's checks, and `just dylint` replayed their warnings and passed. The other two
+# cases also fail if the levels move to `RUSTFLAGS`, which cargo ignores when
+# `CARGO_ENCODED_RUSTFLAGS` is set and doesn't pass to a build script when a target is named.
+#
+# `warn_only <name>`: runs the lints without `-D warnings`, as a plain `cargo dylint` does, which
+# must pass.
+warn_only() {
+    if ! cargo dylint --all --fail-on-no-libraries -- --locked --workspace --all-targets --all-features \
+        >/dev/null 2>&1; then
+        echo "FAIL $1: \`cargo dylint\` failed" >&2
+        failures=$((failures + 1))
+    fi
+}
+commented='/// Two.
+#[must_use]
+pub const fn two() -> u8 {
+    // Two is one more than one.
+    1 + 1
+}'
+
+add_core <<<"$commented"
+warn_only "a code comment after a run that only warned"
+check "a code comment after a run that only warned" 'code comment'
+
+add_core <<<"$commented"
+CARGO_ENCODED_RUSTFLAGS='' warn_only "a code comment, with CARGO_ENCODED_RUSTFLAGS set"
+CARGO_ENCODED_RUSTFLAGS='' check "a code comment, with CARGO_ENCODED_RUSTFLAGS set" 'code comment'
+
+host=$(rustc --version --verbose | sed -n 's/^host: //p')
+cat >crates/demo_binary_core/build.rs <<'RUST'
+//! Builds nothing.
+
+fn main() {
+    // Nothing to build.
+}
+RUST
+CARGO_BUILD_TARGET=$host warn_only "a code comment in a build script, with a target named"
+CARGO_BUILD_TARGET=$host check "a code comment in a build script, with a target named" 'code comment'
+
 # Raw identifiers once hid code from the lints that compare a node with its source text.
 add_core <<'RUST'
 use std::sync::Arc;
