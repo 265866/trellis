@@ -5,7 +5,9 @@ members = ["crates/*"]
 # The custom lints from trellis, at the commit this project was last generated or updated from.
 [workspace.metadata.dylint]
 {% if trellis_path -%}
-libraries = [{ path = {{ (trellis_path ~ "/lints") | tojson }} }]
+libraries = [
+    { path = {{ (trellis_path ~ "/lints") | tojson }} },
+]
 {%- else -%}
 libraries = [
     { git = "https://github.com/265866/trellis", rev = "{{ trellis_rev }}", pattern = "lints" },
