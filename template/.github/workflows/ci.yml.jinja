@@ -121,8 +121,8 @@ jobs:
         with:
           persist-credentials: false
 
-      # cargo-dylint has no download for Windows, so install-action builds it there, and the cache
-      # keeps the build.
+      # cargo-dylint has no download for Windows, so install-action builds it there on every run.
+      # The cache restores the last build, but install-action reinstalls over it with `--force`.
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}

@@ -8,7 +8,7 @@ lowercase_doc_words = ["trellis", "e.g.", "i.e."]
 macro_crates = []
 # `core`, `alloc` and `std` are the standard library.
 trusted_macro_crates = ["alloc", "core", "std"]
-# CI builds and lints `policy/` on Linux only.
+# CI builds and lints `policy/` on Linux. It runs the tests on macOS too, but lints nothing there.
 ci_targets = ["linux"]
 
 # The lints trusted macros may set the level of over code written in the source.
