@@ -8,18 +8,25 @@ trellis is a [Copier](https://copier.readthedocs.io/) template for new Rust proj
 generates starts with:
 
 - **Strict lints.** All of clippy's pedantic group, about 40 more rustc and clippy lints, and the
-  custom lints in [`lints/`](lints) for the
-  [Google Rust Style Guide](https://google.github.io/styleguide/rustguide.html) rules clippy doesn't
-  check. Every exception is an `expect` with a reason.
+  custom lints in [`lints/`](lints). The custom lints check the
+  [Google Rust Style Guide](https://google.github.io/styleguide/rustguide.html) rules clippy
+  doesn't, and trellis's own rules, which [docs/style.md](docs/style.md#checked-by-tools) lists
+  under "Beyond the Google guide". Every exception is an `expect` with a reason.
 - **A structure checker.** [`trellis-policy`](policy) checks crate manifests, the dependencies
   between crates, where config files live, and the docs layout: the files and README sections
   each project keeps, the README's docs index, and how each page opens.
-- **Rules apart from code.** A pull request changes the rules or the code, never both.
+- **Rules apart from code.** A pull request changes the rules or the code, never both, so review
+  sees each loosened rule apart from the code that might have needed it.
 - **CI and releases.** Checks on Linux, macOS and Windows; release-plz versions and changelogs;
   release archives or a container image, attested and signed when the repository is public;
   Renovate for updates.
 - **The same docs layout.** A short README with a docs index, task pages under `docs/`,
   `CONTRIBUTING.md`, `SECURITY.md`, and one `AGENTS.md` for coding agents.
+
+The rules are written for code that coding agents write and that nobody reads line by line. So a
+rule lives in the types or in a check wherever one can hold it, and review is the last resort. An
+agent copies whatever pattern it finds in the repository, a workaround included. So every exception
+carries a written reason where review sees it.
 
 [docs/style.md](docs/style.md) is the generated projects' style guide. It lists every rule and
 what checks it.
@@ -66,7 +73,8 @@ uvx copier update --defaults
 ```
 
 Copier merges the newer template into the project and keeps your changes. Conflicts show as merge
-markers. Renovate opens the same update as a pull request when trellis tags a release.
+markers. Renovate opens the same update as a pull request in its weekly run after trellis tags a
+release.
 [CHANGELOG.md](CHANGELOG.md) says what each release changes and what it asks of a project's owner.
 
 ## What's here
