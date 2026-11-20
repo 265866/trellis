@@ -20,6 +20,10 @@ has the versioning rule.
   `x86_64-unknown-linux-gnu`. The glibc build needed the glibc of the Ubuntu runner that built it,
   so it didn't start on Alpine or on older distributions such as Debian 11; the musl build runs on
   any Linux. Change any script, package manifest or doc that downloads the Linux archive by name.
+  If the binary has released before, the new name breaks a name `docs/stability.md` says no
+  release changes, so release the update as a breaking change: give its pull request's title a
+  `!`, such as `build(deps)!: update trellis to v0.6.0`, and say in the release notes that the
+  Linux archive is now `<name>-<version>-x86_64-unknown-linux-musl.tar.gz`.
 - **Build C code for musl.** A binary's CI now runs its tests and release build for musl on Linux,
   and installs `musl-gcc` for crates that compile C code. If such a crate needs more, such as a
   system library, add it to the musl build.
