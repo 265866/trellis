@@ -197,12 +197,19 @@ new proc macro.
 
 ## Platforms
 
-{%- set os_list = ['linux'] if kind == 'service' else platforms %}
-{%- set names = {'linux': 'Linux', 'macos': 'macOS', 'windows': 'Windows'} %}
-
 `just ci` checks the platform you run it on, and CI checks every platform the project ships for:
-{{ os_list | map('extract', names) | join(', ') }}. Code for any other platform fails `just dylint`.
-A change to platform-specific code needs a run on that platform before it's done.
+{% for target in targets %}
+- {{ target.name }}, as `{{ target.triple }}`
+{%- endfor %}
+
+Code for any other operating system fails `just dylint`, and so does code that only some
+processors or C libraries build. A change to platform-specific code needs a run on that platform
+before it's done.
+{%- if kind == 'binary' and 'linux' in platforms %}
+
+Linux releases use musl, which links statically, so they run on any distribution. CI tests that
+build, and installs `musl-gcc` (Debian and Ubuntu's `musl-tools`) for crates that compile C code.
+{%- endif %}
 
 ## Send a change
 

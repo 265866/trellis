@@ -1,5 +1,6 @@
 /target
 /lints/target
+/tests/musl-c/target
 
 # Local agent and editor state.
 /.claude/

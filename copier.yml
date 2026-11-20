@@ -99,6 +99,20 @@ platforms:
   when: "{{ kind != 'service' }}"
   validator: "{% if not platforms %}Pick at least one platform.{% endif %}"
 
+architectures:
+  type: str
+  help: >-
+    The processors CI tests on and releases for on Linux and Windows; macOS is always Apple
+    silicon. ARM64 runners are free for a public repository and draw on a private one's included
+    Actions usage.
+  multiselect: true
+  choices:
+    x86-64: x86_64
+    ARM64: aarch64
+  default: "{{ ['x86_64', 'aarch64'] if visibility == 'public' else ['x86_64'] }}"
+  when: "{{ kind != 'service' and ('linux' in platforms or 'windows' in platforms) }}"
+  validator: "{% if not architectures %}Pick at least one architecture.{% endif %}"
+
 web_ui:
   type: bool
   help: >-
@@ -146,6 +160,38 @@ github_owner:
 crate_name:
   type: str
   default: "{{ project_name | replace('-', '_') }}"
+  when: false
+
+# What CI tests on and a binary's release builds, one entry per target, in the order the docs list
+# them. A binary's Linux builds use musl, which links statically, so its archives run on any
+# Linux; a library's consumers and a service's image use glibc.
+targets:
+  type: yaml
+  default: >-
+    {%- set os_list = ['linux'] if kind == 'service' else platforms -%}
+    {%- set arches = ['x86_64'] if kind == 'service' else architectures -%}
+    {%- set libc = 'musl' if kind == 'binary' else 'gnu' -%}
+    {%- set names = {'x86_64': 'x86-64', 'aarch64': 'ARM64'} -%}
+    {%- set ns = namespace(targets=[]) -%}
+    {%- if 'linux' in os_list -%}
+    {%- for arch in ['x86_64', 'aarch64'] if arch in arches -%}
+    {%- set ns.targets = ns.targets + [{'os': 'linux', 'name': 'Linux on ' ~ names[arch],
+      'runner': 'ubuntu-24.04' if arch == 'x86_64' else 'ubuntu-24.04-arm',
+      'triple': arch ~ '-unknown-linux-' ~ libc}] -%}
+    {%- endfor -%}
+    {%- endif -%}
+    {%- if 'macos' in os_list -%}
+    {%- set ns.targets = ns.targets + [{'os': 'macos', 'name': 'macOS on Apple silicon',
+      'runner': 'macos-26', 'triple': 'aarch64-apple-darwin'}] -%}
+    {%- endif -%}
+    {%- if 'windows' in os_list -%}
+    {%- for arch in ['x86_64', 'aarch64'] if arch in arches -%}
+    {%- set ns.targets = ns.targets + [{'os': 'windows', 'name': 'Windows on ' ~ names[arch],
+      'runner': 'windows-2025' if arch == 'x86_64' else 'windows-11-arm',
+      'triple': arch ~ '-pc-windows-msvc'}] -%}
+    {%- endfor -%}
+    {%- endif -%}
+    {{ ns.targets | tojson }}
   when: false
 
 trellis_rev:

@@ -1,18 +1,11 @@
-{%- set os_list = ['linux'] if kind == 'service' else platforms -%}
 # `just notices` writes target/THIRD-PARTY-LICENSES.html from about.hbs, the third-party license
 # notices that every release ships. A dependency under a license missing here fails it. Keep this
 # list in step with `[licenses]` in deny.toml.
 accepted = ["Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "ISC", "MIT", "Unicode-3.0", "Zlib"]
 targets = [
-{%- if 'linux' in os_list %}
-    "x86_64-unknown-linux-gnu",
-{%- endif %}
-{%- if 'macos' in os_list %}
-    "aarch64-apple-darwin",
-{%- endif %}
-{%- if 'windows' in os_list %}
-    "x86_64-pc-windows-msvc",
-{%- endif %}
+{%- for target in targets %}
+    "{{ target.triple }}",
+{%- endfor %}
 ]
 ignore-build-dependencies = true
 ignore-dev-dependencies = true

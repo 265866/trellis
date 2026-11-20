@@ -13,7 +13,7 @@ warning: `cfg` predicate on `target_os = "windows"`, a target CI doesn't build
 LL | #[cfg(target_os = "windows")]
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    |
-   = help: CI builds one target for each system `ci_targets` in `dylint.toml` lists (`linux`, `macos`), so no check compiles code that only other targets or architectures build: name only the `target_os` of a listed system, or `unix` or `windows` when it covers one
+   = help: `ci_targets` in `dylint.toml` lists the systems CI builds for (`linux`, `macos`) and nothing finer, so no check is known to compile code that only other targets or architectures build: name only the `target_os` of a listed system, or `unix` or `windows` when it covers one
 
 warning: 2 warnings emitted
 

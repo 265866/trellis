@@ -1,16 +1,9 @@
-{%- set os_list = ['linux'] if kind == 'service' else platforms -%}
 # `just deny` checks dependencies for advisories, licenses, banned crates and sources.
 [graph]
 targets = [
-{%- if 'linux' in os_list %}
-    "x86_64-unknown-linux-gnu",
-{%- endif %}
-{%- if 'macos' in os_list %}
-    "aarch64-apple-darwin",
-{%- endif %}
-{%- if 'windows' in os_list %}
-    "x86_64-pc-windows-msvc",
-{%- endif %}
+{%- for target in targets %}
+    "{{ target.triple }}",
+{%- endfor %}
 ]
 all-features = true
 

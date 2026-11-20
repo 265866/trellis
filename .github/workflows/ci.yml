@@ -119,16 +119,36 @@ jobs:
             kind: library
             recipes: ci
             tools: just@1.59.0,cargo-deny@0.20.2,cargo-shear@1.14.0,typos@1.51.1,taplo@0.10.0,shellcheck@0.11.0,zizmor@1.31.1,lychee@0.24.2,cargo-nextest@0.9.150,cargo-dylint@6.3.0,dylint-link@6.3.0,uv@0.13.8
-          # A generated project's CI runs these recipes on macOS and Windows, and its release build
-          # runs `notices` there.
+          # A generated binary's CI runs `test` and `build-release` for each target, and these
+          # recipes on each runner but Linux on x86-64's; its release build runs `notices` there.
+          - name: binary for Linux on x86-64
+            os: ubuntu-24.04
+            kind: binary
+            target: x86_64-unknown-linux-musl
+            recipes: test build-release
+            tools: just@1.59.0,cargo-nextest@0.9.150,uv@0.13.8
+          - name: binary on Linux on ARM64
+            os: ubuntu-24.04-arm
+            kind: binary
+            target: aarch64-unknown-linux-musl
+            recipes: lint dylint test docs build-release notices
+            tools: just@1.59.0,cargo-nextest@0.9.150,cargo-dylint@6.3.0,dylint-link@6.3.0,uv@0.13.8,cargo-about@0.9.3
           - name: binary on macOS
             os: macos-26
             kind: binary
+            target: aarch64-apple-darwin
             recipes: lint dylint test docs build-release notices
             tools: just@1.59.0,cargo-nextest@0.9.150,cargo-dylint@6.3.0,dylint-link@6.3.0,uv@0.13.8,cargo-about@0.9.3
           - name: binary on Windows
             os: windows-2025
             kind: binary
+            target: x86_64-pc-windows-msvc
+            recipes: lint dylint test docs build-release notices
+            tools: just@1.59.0,cargo-nextest@0.9.150,cargo-dylint@6.3.0,dylint-link@6.3.0,uv@0.13.8,cargo-about@0.9.3
+          - name: binary on Windows on ARM64
+            os: windows-11-arm
+            kind: binary
+            target: aarch64-pc-windows-msvc
             recipes: lint dylint test docs build-release notices
             tools: just@1.59.0,cargo-nextest@0.9.150,cargo-dylint@6.3.0,dylint-link@6.3.0,uv@0.13.8,cargo-about@0.9.3
           # The published library's `package` recipe has a PowerShell variant only Windows runs.
@@ -160,7 +180,7 @@ jobs:
           bun-version: 1.4.4
 
       - name: Install actionlint
-        if: runner.os == 'Linux'
+        if: matrix.recipes == 'ci'
         run: |
           go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
@@ -172,7 +192,8 @@ jobs:
           RECIPES: ${{ matrix.recipes }}
           PUBLISH: ${{ matrix.publish || 'false' }}
           WEB: ${{ matrix.web || 'false' }}
-        run: just template "$KIND" "$RECIPES" "$PUBLISH" "$WEB"
+          TARGET: ${{ matrix.target }}
+        run: just template "$KIND" "$RECIPES" "$PUBLISH" "$WEB" "$TARGET"
 
   dependencies:
     name: Template with common dependencies
@@ -221,13 +242,53 @@ jobs:
       - run: just shapes
       - run: just update
 
+  # A generated binary's workflows build C code for musl after the musl-gcc step this job copies.
+  # `just pins` keeps the two the same.
+  musl-c:
+    name: C code for musl (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            target: x86_64-unknown-linux-musl
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-musl
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install the pinned toolchain
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          rustup toolchain install
+          rustup target add "$TARGET"
+
+      - name: Install musl-gcc
+        if: runner.os == 'Linux'
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends musl-tools
+          echo "CC_${TARGET//-/_}=musl-gcc" >> "$GITHUB_ENV"
+
+      - name: Build C code for musl and run it
+        env:
+          TARGET: ${{ matrix.target }}
+        run: cargo run --locked --release --manifest-path tests/musl-c/Cargo.toml --target "$TARGET"
+
   # Branch protection requires this job instead of each job by name, so `needs` lists every other
   # job but `release`, which runs after it, and a new job goes there rather than into branch
   # protection. It runs with `always()` because a job whose needs fail is skipped, and GitHub
   # counts a skipped required check as passing.
   passed:
     name: CI passed
-    needs: [quick, policy, template, dependencies, shapes]
+    needs: [quick, policy, template, dependencies, shapes, musl-c]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5
