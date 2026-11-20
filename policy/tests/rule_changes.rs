@@ -271,7 +271,8 @@ fn the_working_tree_counts_staged_unstaged_and_untracked_files() {
         changed.rules(),
         [
             ".github/workflows/check.yml",
-            ".gitignore",
+            ".gitignore (untracked; commit it in a rules pull request, or ignore it in \
+             .git/info/exclude)",
             "clippy.toml",
             "deny.toml"
         ],
@@ -285,6 +286,116 @@ fn the_working_tree_counts_staged_unstaged_and_untracked_files() {
     assert!(
         repository.changed_files().rules().is_empty(),
         "comparing the commits alone sees no rule change"
+    );
+}
+
+#[test]
+fn an_untracked_file_no_list_knows_is_named_with_its_remedy() {
+    let repository = Repository::new();
+    repository.write(".tool-versions", "just 1\n");
+    repository.commit("add a tool versions file");
+    repository.write(".tool-versions", "just 2\n");
+    repository.write(".envrc", "export A=1\n");
+    repository.write("crates/app/src/lib.rs", "//! The app, changed.\n");
+
+    let changed = repository.changed_files_to(&Head::WorkingTree);
+    assert_eq!(
+        changed.rules(),
+        [
+            ".envrc (untracked; commit it in a rules pull request, or ignore it in \
+             .git/info/exclude)",
+            ".tool-versions",
+        ],
+        "an untracked file is still a rule, and the listing says how to get it out of the way"
+    );
+    assert!(
+        changed.mixes_rules_and_code(),
+        "the untracked file still counts"
+    );
+}
+
+#[test]
+fn an_untracked_file_whose_deletion_is_staged_has_no_remedy() {
+    let repository = Repository::new();
+    repository.write(".envrc", "export A=1\n");
+    repository.commit("add an environment file");
+    repository.git(&["branch", "--force", "base"]);
+    repository.git(&["rm", "--cached", "--quiet", ".envrc"]);
+    repository.write("crates/app/src/lib.rs", "//! The app, changed.\n");
+
+    let changed = repository.changed_files_to(&Head::WorkingTree);
+    assert_eq!(
+        changed.rules(),
+        [".envrc"],
+        "ignoring the file leaves its staged deletion, so the listing names no remedy"
+    );
+    assert!(
+        changed.mixes_rules_and_code(),
+        "the staged deletion still counts"
+    );
+}
+
+#[test]
+fn a_build_script_of_a_member_outside_crates_is_a_rule() {
+    let repository = Repository::new();
+    repository.write(
+        "Cargo.toml",
+        &ROOT_MANIFEST.replace("[\"crates/*\"]", "[\"crates/*\", \"tools/gen\"]"),
+    );
+    repository.write(
+        "tools/gen/Cargo.toml",
+        "[package]\nname = \"gen\"\n\n[lints]\nworkspace = true\n",
+    );
+    repository.write("tools/gen/build.rs", "fn main() {}\n");
+    repository.write("tools/gen/src/lib.rs", "//! Generates.\n");
+    repository.commit("add a member outside crates");
+    repository.git(&["branch", "--force", "base"]);
+    repository.write(
+        "tools/gen/build.rs",
+        "fn main() {\n    println!(\"cargo::rustc-cfg=loose\");\n}\n",
+    );
+    repository.write("tools/gen/src/lib.rs", "//! Generates, changed.\n");
+    repository.commit("change the build script and the code");
+
+    let changed = repository.changed_files();
+    assert_eq!(
+        changed.rules(),
+        ["tools/gen/build.rs"],
+        "Cargo runs the build script of a member wherever the member lives"
+    );
+    assert_eq!(
+        changed.code(),
+        ["tools/gen/src/lib.rs"],
+        "the member's source is code"
+    );
+    assert!(
+        changed.mixes_rules_and_code(),
+        "a build script change beside code fails"
+    );
+}
+
+#[test]
+fn a_module_named_build_is_code() {
+    let repository = Repository::new();
+    repository.write("crates/app/src/lib.rs", "//! The app.\n\nmod build;\n");
+    repository.write("crates/app/src/build.rs", "//! Builds things.\n");
+    repository.write("crates/app/tests/build.rs", "//! Tests the build.\n");
+    repository.commit("add a build module");
+
+    let changed = repository.changed_files();
+    assert!(
+        changed.rules().is_empty(),
+        "only a crate's own `build.rs` is its build script: {:?}",
+        changed.rules()
+    );
+    assert_eq!(
+        changed.code(),
+        [
+            "crates/app/src/build.rs",
+            "crates/app/src/lib.rs",
+            "crates/app/tests/build.rs"
+        ],
+        "the module, its parent and the test are code"
     );
 }
 
@@ -357,6 +468,8 @@ fn docs_and_release_notes_land_with_code() {
         ".editorconfig",
         "docs/install.md",
         "docs/guides/setup.md",
+        "docs/img/arch.png",
+        "docs/img/arch.svg",
     ] {
         repository.write(path, "Text.\n");
     }
@@ -366,8 +479,8 @@ fn docs_and_release_notes_land_with_code() {
     let changed = repository.changed_files();
     assert!(
         changed.rules().is_empty(),
-        "the readme, release notes, licenses, lockfile, `.editorconfig` and docs aren't rules: \
-         {:?}",
+        "the readme, release notes, licenses, lockfile, `.editorconfig`, docs and their images \
+         aren't rules: {:?}",
         changed.rules()
     );
     assert_eq!(

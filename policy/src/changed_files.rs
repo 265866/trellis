@@ -14,9 +14,17 @@ use crate::{agent_files, case_insensitive, git, lint_expectations, source_path, 
 /// Directories whose every file is a rule: the workflows.
 const RULE_DIRECTORIES: [&str; 1] = [".github/"];
 
-/// File names that are rules in any directory: a crate's build script, which can hide code from
-/// the lints, and the check recipes.
-const RULE_NAMES: [&str; 3] = ["build.rs", "justfile", ".justfile"];
+/// File names that are rules in any directory: the check recipes.
+const RULE_NAMES: [&str; 2] = ["justfile", ".justfile"];
+
+/// The extensions of the images that the pages under `docs/` show, which are neither rules nor
+/// code, like the pages.
+const DOCS_IMAGE_EXTENSIONS: [&str; 6] = ["png", "svg", "jpg", "jpeg", "gif", "webp"];
+
+/// What the listing adds to an untracked file that is a rule only because no list knows it, and
+/// that no diff lists, so ignoring it takes it out of the change.
+const UNTRACKED_REMEDY: &str =
+    "(untracked; commit it in a rules pull request, or ignore it in .git/info/exclude)";
 
 /// Rule files that aren't tool configuration or agent instruction files: the documents that hold
 /// the rules no check decides and the review checklist, and the template answers that
@@ -40,11 +48,11 @@ const OTHER_FILES: [&str; 5] = [
 /// files, such as the lint, format and dependency settings, the build scripts, the check recipes,
 /// the workflows, `CONTRIBUTING.md`, the template answers, every agent instruction file, the root
 /// `Cargo.toml` outside its dependency tables, the part of a member `Cargo.toml` that holds the
-/// build script's settings, and any file the lists here don't know; the code is every other
-/// change under `crates/` and every Rust file elsewhere, except a Rust file whose change only
-/// adds, removes, moves or changes lint expectations, which is neither. A pull request changes
-/// one or the other, so review sees every loosened rule apart from the code that might have
-/// needed it.
+/// build script's settings, and any file the lists here don't know, which the listing marks when
+/// it is only untracked; the code is every other change under `crates/` and every Rust file
+/// elsewhere, except a Rust file whose change only adds, removes, moves or changes lint
+/// expectations, which is neither. A pull request changes one or the other, so review sees every
+/// loosened rule apart from the code that might have needed it.
 #[derive(Debug, Default)]
 pub struct ChangedFiles {
     /// The changed rule files.
@@ -70,19 +78,25 @@ impl ChangedFiles {
         let merge_base = git::run(&top, &["merge-base", base, head_revision])?;
         let merge_base = merge_base.trim();
         let mut paths = BTreeSet::new();
+        let mut untracked = BTreeSet::new();
         let diff = ["diff", "--name-only", "--no-renames", "-z"];
         let listings: Vec<Vec<&str>> = match head {
             Head::Commit(revision) => vec![[&diff[..], &[merge_base, revision.as_str()]].concat()],
-            Head::WorkingTree => vec![
-                [&diff[..], &["--cached", merge_base]].concat(),
-                [&diff[..], &[merge_base]].concat(),
-                vec!["ls-files", "-z", "--others", "--exclude-standard"],
-            ],
+            Head::WorkingTree => {
+                let output = git::run(&top, &["ls-files", "-z", "--others", "--exclude-standard"])?;
+                untracked.extend(git::paths(&output).map(str::to_owned));
+                vec![
+                    [&diff[..], &["--cached", merge_base]].concat(),
+                    [&diff[..], &[merge_base]].concat(),
+                ]
+            }
         };
         for arguments in listings {
             let output = git::run(&top, &arguments)?;
             paths.extend(git::paths(&output).map(str::to_owned));
         }
+        untracked.retain(|path| !paths.contains(path));
+        paths.extend(untracked.iter().cloned());
         let mut changed = Self::default();
         let versions = |path: &str| {
             let before = show(&top, merge_base, path);
@@ -94,7 +108,10 @@ impl ChangedFiles {
         };
         for path in paths {
             match role(&path) {
-                Role::Rule => changed.rules.push(path),
+                Role::Unlisted if untracked.contains(&path) => {
+                    changed.rules.push(format!("{path} {UNTRACKED_REMEDY}"));
+                }
+                Role::Rule | Role::Unlisted => changed.rules.push(path),
                 Role::Code if source_path::is_rust(&path) => {
                     let (before, after) = versions(&path);
                     if !lint_expectations::only_expectations_changed(
@@ -155,6 +172,9 @@ impl ChangedFiles {
 enum Role {
     /// A rule file.
     Rule,
+    /// A file none of the lists know, which is a rule, so a new tool's configuration file can't
+    /// land beside code.
+    Unlisted,
     /// Code that the rules check.
     Code,
     /// The root `Cargo.toml`, which holds rules and the workspace's dependency versions.
@@ -167,10 +187,9 @@ enum Role {
     Other,
 }
 
-/// What the file at `path`, relative to the repository root, is. A file none of the lists know
-/// is a rule, so a new tool's configuration file can't land beside code. Rule names match in any
-/// case, since a case-insensitive file system finds `Clippy.toml` or `Build.rs` for the name a
-/// tool looks for; the names that make a file code or neither match exactly.
+/// What the file at `path`, relative to the repository root, is. Rule names match in any case,
+/// since a case-insensitive file system finds `Clippy.toml` or `Build.rs` for the name a tool
+/// looks for; the names that make a file code or neither match exactly.
 fn role(path: &str) -> Role {
     if path == "Cargo.toml" {
         return Role::RootManifest;
@@ -184,6 +203,7 @@ fn role(path: &str) -> Role {
     }
     let is_rule = ToolConfig::of(path).is_some()
         || agent_files::is_agent_file(path)
+        || is_build_script(path)
         || RULE_NAMES
             .iter()
             .any(|rule| case_insensitive::eq(name, rule))
@@ -198,12 +218,14 @@ fn role(path: &str) -> Role {
             .strip_prefix("crates/")
             .and_then(|rest| rest.split_once('/'))
             .is_some_and(|(_, file)| !file.contains('/') && file.starts_with("LICENSE"));
-    let is_other = path.starts_with("LICENSE")
-        || is_crate_license
-        || (path.starts_with("docs/")
-            && Path::new(path)
-                .extension()
-                .is_some_and(|extension| extension.eq_ignore_ascii_case("md")));
+    let is_docs_file = path.starts_with("docs/")
+        && Path::new(path).extension().is_some_and(|extension| {
+            extension.eq_ignore_ascii_case("md")
+                || DOCS_IMAGE_EXTENSIONS
+                    .iter()
+                    .any(|image| extension.eq_ignore_ascii_case(image))
+        });
+    let is_other = path.starts_with("LICENSE") || is_crate_license || is_docs_file;
     if is_rule {
         Role::Rule
     } else if is_crate_license {
@@ -213,8 +235,24 @@ fn role(path: &str) -> Role {
     } else if is_other {
         Role::Other
     } else {
-        Role::Rule
+        Role::Unlisted
     }
+}
+
+/// Whether `path` could be a package's build script: `build.rs` in any case and any directory,
+/// since Cargo runs the `build.rs` beside any package's `Cargo.toml` and no rule pins where
+/// members live. The one exception is a file below a crate's `src/`, `tests/`, `benches/` or
+/// `examples/` directory, `crates/<crate>/src/build.rs` for one, which Cargo's default layout
+/// reads as a module, a test, a benchmark or an example.
+fn is_build_script(path: &str) -> bool {
+    let (directory, name) = path.rsplit_once('/').unwrap_or(("", path));
+    let mut segments = directory.split('/');
+    let in_target_directory = segments.next() == Some("crates")
+        && segments.next().is_some_and(|member| !member.is_empty())
+        && segments
+            .next()
+            .is_some_and(|top| ["src", "tests", "benches", "examples"].contains(&top));
+    case_insensitive::eq(name, "build.rs") && !in_target_directory
 }
 
 /// Whether the root `Cargo.toml` changed anywhere but in `[workspace.dependencies]` and `[patch]`,
@@ -333,11 +371,18 @@ mod tests {
     #[test]
     fn rule_files_are_rules_at_any_depth() {
         for path in [
+            "build.rs",
             "clippy.toml",
             "crates/app/clippy.toml",
             "crates/app/src/.rustfmt.toml",
             "crates/app/.cargo/config",
             "crates/app/build.rs",
+            "crates/a/b/build.rs",
+            "crates/build.rs",
+            "tools/x/build.rs",
+            "lints/build.rs",
+            "docs/build.rs",
+            "crates/app/SRC/build.rs",
             ".github/workflows/ci.yml",
             ".github/dependabot.yml",
             "justfile",
@@ -367,7 +412,7 @@ mod tests {
             "crates/app/Clippy.toml",
             "crates/app/.Cargo/Config.toml",
             "crates/app/Build.rs",
-            "crates/app/src/BUILD.RS",
+            "BUILD.RS",
             "crates/app/JUSTFILE",
             ".GitHub/workflows/ci.yml",
             ".Config/Nextest.toml",
@@ -405,6 +450,13 @@ mod tests {
             "crates/app/tests/app.rs",
             "crates/app/cargo.toml",
             "crates/app_core/src/lib.rs",
+            "crates/app/src/build.rs",
+            "crates/app/src/BUILD.RS",
+            "crates/app/src/image/build.rs",
+            "crates/app/tests/build.rs",
+            "crates/a/benches/build.rs",
+            "crates/a/examples/build.rs",
+            "crates/a/src/bin/build.rs",
             "crates/app/README.md",
             "docs/notes.rs",
             "src/main.rs",
@@ -540,6 +592,12 @@ mod tests {
             "docs/guides/setup.md",
             "docs/agents-overview.md",
             "docs/claude-setup.md",
+            "docs/img/arch.png",
+            "docs/arch.SVG",
+            "docs/img/photo.jpg",
+            "docs/img/photo.jpeg",
+            "docs/img/demo.gif",
+            "docs/img/demo.webp",
         ] {
             assert_eq!(role(path), Role::Other, "{path} should be neither");
         }
@@ -573,18 +631,21 @@ mod tests {
     }
 
     #[test]
-    fn files_no_list_knows_are_rules() {
+    fn files_no_list_knows_are_unlisted_rules() {
         for path in [
             ".gitignore",
             ".pre-commit-config.yaml",
             "cliff.toml",
             "docs/notes.txt",
+            "docs/img/arch.bmp",
+            "arch.png",
+            "img/arch.svg",
             "tools/check.sh",
             "lints/Cargo.toml",
             "readme.md",
             "notes.md",
         ] {
-            assert_eq!(role(path), Role::Rule, "{path} should be a rule");
+            assert_eq!(role(path), Role::Unlisted, "{path} should be a rule");
         }
     }
 

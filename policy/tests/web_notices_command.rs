@@ -878,7 +878,7 @@ fn a_read_error_exits_with_2() {
     );
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 #[test]
 fn a_directory_name_that_isnt_utf8_is_a_read_error() {
     let install = Install::new();
