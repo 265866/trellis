@@ -99,8 +99,9 @@ fn lint(cx: &EarlyContext<'_>, span: Span, misplaced_safety: bool) {
     } else {
         (
             "code comment",
-            "move the explanation into a doc comment, a name, an assertion message or an \
-             `#[expect(..., reason = \"...\")]`, or delete it",
+            "a code comment drifts from the code, and it is where a workaround gets justified \
+             instead of fixed: move the explanation into a doc comment, a name, an assertion \
+             message or an `#[expect(..., reason = \"...\")]`, or delete it",
         )
     };
     span_lint_and_help(cx, CODE_COMMENT, span, message, None, help);

@@ -95,7 +95,7 @@ fn ui() {
     crate::ui_harness::ui_test(DOC_STARTS_LOWERCASE);
 }
 
-/// Runs a fixture with `lowercase_doc_words` set, which replaces the default words.
+/// Runs a fixture with `lowercase_doc_words` set to other words than trellis's `dylint.toml` sets.
 #[test]
 fn ui_configured_words() {
     crate::ui_harness::ui_test_of(DOC_STARTS_LOWERCASE, "ui/doc_starts_lowercase_configured")

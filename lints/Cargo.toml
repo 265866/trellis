@@ -1,6 +1,6 @@
 [package]
 name = "trellis_lints"
-description = "Lints that check the Google Rust Style Guide rules clippy doesn't"
+description = "Lints that check the Google Rust Style Guide rules clippy doesn't, and trellis's own rules"
 version = "0.1.0"
 edition = "2024"
 publish = false

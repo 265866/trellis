@@ -13,7 +13,7 @@ warning: ignored test
 LL | #[ignore]
    | ^^^^^^^^^
    |
-   = help: an ignored test is a failing check nobody runs: fix the test, or delete it
+   = help: a plain `cargo test`, and an editor running a module's tests, skip an ignored test, so its failure shows in `just test` and CI rather than where it is being worked on: fix the test, or delete it
 
 warning: ignored test
   --> $DIR/disabled_code.rs:13:1
@@ -21,7 +21,7 @@ warning: ignored test
 LL | #[ignore = "flaky on CI"]
    | ^^^^^^^^^^^^^^^^^^^^^^^^^
    |
-   = help: an ignored test is a failing check nobody runs: fix the test, or delete it
+   = help: a plain `cargo test`, and an editor running a module's tests, skip an ignored test, so its failure shows in `just test` and CI rather than where it is being worked on: fix the test, or delete it
 
 warning: ignored test
   --> $DIR/disabled_code.rs:17:1
@@ -29,7 +29,7 @@ warning: ignored test
 LL | #[cfg_attr(windows, ignore)]
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    |
-   = help: an ignored test is a failing check nobody runs: fix the test, or delete it
+   = help: a plain `cargo test`, and an editor running a module's tests, skip an ignored test, so its failure shows in `just test` and CI rather than where it is being worked on: fix the test, or delete it
 
 warning: `cfg` predicate that is false in every build
   --> $DIR/disabled_code.rs:21:1
@@ -383,7 +383,7 @@ warning: ignored test
 LL |         #[ignore]
    |         ^^^^^^^^^
    |
-   = help: an ignored test is a failing check nobody runs: fix the test, or delete it
+   = help: a plain `cargo test`, and an editor running a module's tests, skip an ignored test, so its failure shows in `just test` and CI rather than where it is being worked on: fix the test, or delete it
 
 warning: ignored test
   --> $DIR/disabled_code.rs:238:10
@@ -391,7 +391,7 @@ warning: ignored test
 LL | written!(#[ignore] forwarded);
    |          ^^^^^^^^^
    |
-   = help: an ignored test is a failing check nobody runs: fix the test, or delete it
+   = help: a plain `cargo test`, and an editor running a module's tests, skip an ignored test, so its failure shows in `just test` and CI rather than where it is being worked on: fix the test, or delete it
 
 warning: `cfg` predicate written as a macro variable
   --> $DIR/disabled_code.rs:243:9
@@ -543,7 +543,7 @@ warning: ignored test
 LL | #[ignore]
    | ^^^^^^^^^
    |
-   = help: an ignored test is a failing check nobody runs: fix the test, or delete it
+   = help: a plain `cargo test`, and an editor running a module's tests, skip an ignored test, so its failure shows in `just test` and CI rather than where it is being worked on: fix the test, or delete it
 
 warning: ignored test
   --> $DIR/modules/never.rs:4:1
@@ -551,7 +551,7 @@ warning: ignored test
 LL | #[ignore]
    | ^^^^^^^^^
    |
-   = help: an ignored test is a failing check nobody runs: fix the test, or delete it
+   = help: a plain `cargo test`, and an editor running a module's tests, skip an ignored test, so its failure shows in `just test` and CI rather than where it is being worked on: fix the test, or delete it
 
 warning: `cfg!` predicate written as a macro variable
   --> $DIR/disabled_code.rs:252:9
@@ -706,7 +706,7 @@ LL |         $pound [ignore = "flaky on CI"]
 LL | ignored! { # fn flaky() {} }
    | ---------------------------- in this macro invocation
    |
-   = help: an ignored test is a failing check nobody runs: fix the test, or delete it
+   = help: a plain `cargo test`, and an editor running a module's tests, skip an ignored test, so its failure shows in `just test` and CI rather than where it is being worked on: fix the test, or delete it
 
 warning: `use` of `cfg_select!`
   --> $DIR/disabled_code.rs:400:1

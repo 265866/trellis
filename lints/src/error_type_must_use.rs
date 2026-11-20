@@ -49,7 +49,7 @@ impl<'tcx> LateLintPass<'tcx> for ErrorTypeMustUse {
             .tcx
             .type_of(item.owner_id)
             .instantiate_identity()
-            .skip_norm_wip();
+            .skip_normalization();
         if !crate::trait_impls::implements_error(cx.tcx, ty)
             || find_attr!(cx.tcx, item.owner_id.to_def_id(), MustUse { .. })
         {
