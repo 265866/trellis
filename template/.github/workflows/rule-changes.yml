@@ -1,18 +1,21 @@
 name: Rule changes
 
 # A pull request changes either the rules or the code they check, never both (see CONTRIBUTING.md).
-# This check must not be something the pull request itself can change, so it runs on
-# `pull_request_target`: GitHub takes this file from the base branch, never from the pull request,
-# and the `check` job checks out the base commit and runs the `trellis-policy` it pins. The pull
-# request's commits are fetched as git objects, which `trellis-policy rule-changes` reads with
-# `git merge-base`, `git diff` and `git show`; nothing from the pull request is checked out, built
-# or run.
+# It runs on `pull_request_target`, so a pull request can't change how it is judged: GitHub takes
+# this file from the base branch, never from the pull request, and the `check` job checks out the
+# base commit and runs the `trellis-policy` it pins. The pull request's commits are fetched as git
+# objects, which `trellis-policy rule-changes` reads with `git merge-base`, `git diff` and
+# `git show`; nothing from the pull request is checked out, built or run.
 #
 # Check runs from `pull_request_target` can attach to the base branch's commit, where they don't
 # satisfy a required check on the pull request's head. So the verdict is also a commit status,
-# "Rule changes stand alone", on the head commit, and that status is the one to require. The
-# `pending` and `report` jobs set it. They alone may write statuses, and they run no repository
-# code; the `check` job, which builds and runs the base commit's code, can only read.
+# "Rule changes stand alone", on the head commit, and that status is the one to require. In this
+# file, only the `pending` and `report` jobs may write statuses, and they run no repository code;
+# the `check` job, which builds and runs the base commit's code, can only read. The required status
+# names GitHub Actions as its source, not this workflow, so any workflow run in this repository
+# with `statuses: write` can set it. A pull request from a branch of this repository that adds or
+# edits a workflow to set it would defeat the check, and that workflow is a change under
+# `.github/` in the same diff.
 #
 # The status is pending until a run that wasn't cancelled reports. A newer event for the same
 # pull request cancels an older run, which then leaves the status for the newer run to set. Every
