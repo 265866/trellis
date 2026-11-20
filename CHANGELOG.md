@@ -21,9 +21,12 @@ has the versioning rule.
   so it didn't start on Alpine or on older distributions such as Debian 11; the musl build runs on
   any Linux. Change any script, package manifest or doc that downloads the Linux archive by name.
   If the binary has released before, the new name breaks a name `docs/stability.md` says no
-  release changes, so release the update as a breaking change: give its pull request's title a
-  `!`, such as `build(deps)!: update trellis to v0.6.0`, and say in the release notes that the
-  Linux archive is now `<name>-<version>-x86_64-unknown-linux-musl.tar.gz`.
+  release changes, so make its next release a breaking one. release-plz counts only commits under
+  `crates/`, which an update never touches, so a `!` on the update's pull request doesn't do it.
+  Instead, on the next release pull request's branch, set the next minor version (major from 1.0)
+  in the root `Cargo.toml`, `Cargo.lock` and the `CHANGELOG.md` heading, and add an entry that
+  says the Linux archive is now `<name>-<version>-x86_64-unknown-linux-musl.tar.gz`, as steps 1
+  and 2 of "Each release" in `docs/maintaining.md` describe.
 - **Build C code for musl.** A binary's CI now runs its tests and release build for musl on Linux,
   and installs `musl-gcc` for crates that compile C code. If such a crate needs more, such as a
   system library, add it to the musl build.
