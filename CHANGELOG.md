@@ -6,6 +6,43 @@ part lists what a project's owner must do around the update: a rule that can fla
 a setting to change, or a step to do by hand. [CONTRIBUTING.md](CONTRIBUTING.md#release-trellis)
 has the versioning rule.
 
+## v0.6.0
+
+### Action required in projects
+
+- **Choose the processors, or keep ARM64.** A new question, `architectures`, picks x86-64, ARM64
+  or both for Linux and Windows; macOS stays Apple silicon only. It defaults to both for a public
+  repository and to x86-64 for a private one, whose ARM64 runners draw on the account's Actions
+  usage. So the update adds Linux and Windows on ARM64 to a public project's CI and releases. To
+  keep x86-64 only, update with `--data 'architectures=[x86_64]'`.
+- **Point Linux downloads at the musl archives.** A binary's Linux releases are now built for
+  musl and linked statically, as `<name>-<version>-x86_64-unknown-linux-musl.tar.gz`, instead of
+  `x86_64-unknown-linux-gnu`. The glibc build needed the glibc of the Ubuntu runner that built it,
+  so it didn't start on Alpine or on older distributions such as Debian 11; the musl build runs on
+  any Linux. Change any script, package manifest or doc that downloads the Linux archive by name.
+  If the binary has released before, the new name breaks a name `docs/stability.md` says no
+  release changes, so make its next release a breaking one. release-plz counts only commits under
+  `crates/`, which an update never touches, so a `!` on the update's pull request doesn't do it.
+  Instead, on the next release pull request's branch, set the next minor version (major from 1.0)
+  in the root `Cargo.toml`, `Cargo.lock` and the `CHANGELOG.md` heading, and add an entry that
+  says the Linux archive is now `<name>-<version>-x86_64-unknown-linux-musl.tar.gz`, as steps 1
+  and 2 of "Each release" in `docs/maintaining.md` describe.
+- **Build C code for musl.** A binary's CI now runs its tests and release build for musl on Linux,
+  and installs `musl-gcc` for crates that compile C code. If such a crate needs more, such as a
+  system library, add it to the musl build.
+
+### Changed
+
+- CI's build jobs are named for their target, such as `Linux on x86-64`, instead of `Ubuntu`,
+  `macOS` and `Windows`. `CI passed`, the check `main` requires, is unchanged.
+- The build jobs run the tests and the release build for the target a release ships, and the
+  `targets` lists in `deny.toml` and `about.toml` follow it.
+- `docs/install.md` lists one archive per target, and `CONTRIBUTING.md`'s Platforms section names
+  each target.
+- The `disabled_code` help no longer says CI builds one target per operating system. It says
+  `ci_targets` lists only operating systems, which is why `target_arch` and `target_env` stay
+  rejected.
+
 ## v0.5.0
 
 ### Action required in projects

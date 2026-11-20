@@ -1,4 +1,3 @@
-{%- set os_list = ['linux'] if kind == 'service' else platforms -%}
 {% raw -%}
 name: CI
 
@@ -109,18 +108,11 @@ jobs:
       matrix:
         include:
 {%- endraw %}
-{%- if 'linux' in os_list %}
-          - name: Ubuntu
-            os: ubuntu-24.04
-{%- endif %}
-{%- if 'macos' in os_list %}
-          - name: macOS
-            os: macos-26
-{%- endif %}
-{%- if 'windows' in os_list %}
-          - name: Windows
-            os: windows-2025
-{%- endif %}
+{%- for target in targets %}
+          - name: {{ target.name }}
+            os: {{ target.runner }}
+            target: {{ target.triple }}
+{%- endfor %}
 {%- raw %}
     env:
       NEXTEST_PROFILE: ci
@@ -141,13 +133,45 @@ jobs:
 
       # The custom lints run on every platform, so they also check platform-gated code.
       - name: Install the pinned toolchains
-        run: just install-toolchains
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          just install-toolchains
+          rustup target add "$TARGET"
+{%- endraw %}
+{%- if kind == 'binary' and 'linux' in platforms %}
+
+      # cc, which builds the C code some crates have, needs musl-gcc to build for musl, and finds it
+      # on its own only for x86-64, so `CC_<target>` names it.
+      - name: Install musl-gcc
+        if: runner.os == 'Linux'
+        env:
+          TARGET: {% raw %}${{ matrix.target }}{% endraw %}
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends musl-tools
+          echo "CC_${TARGET//-/_}=musl-gcc" >> "$GITHUB_ENV"
+{%- endif %}
+{%- raw %}
 
       - run: just lint
       - run: just dylint
-      - run: just test
+
+      # The tests and the release build use the target a release ships. The lints don't: the
+      # library cargo-dylint loads can't be built for musl, and code can't branch on what differs
+      # between the target and the runner's own.
+      - name: Test
+        env:
+          CARGO_BUILD_TARGET: ${{ matrix.target }}
+        run: just test
+
       - run: just docs
-      - run: just build-release
+
+      - name: Build the release binaries
+        env:
+          CARGO_BUILD_TARGET: ${{ matrix.target }}
+        run: just build-release
 
       - name: Upload the test results
         if: always()

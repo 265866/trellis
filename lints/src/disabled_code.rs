@@ -47,11 +47,12 @@ declare_lint! {
     ///   is a `cfg_attr` whose only attribute is `windows_subsystem`, which sets how Windows starts
     ///   the binary rather than which code it holds.
     /// - A `cfg` predicate that names a target CI doesn't build, so no check compiles the code
-    ///   behind it. CI builds one target for each operating system `ci_targets` in `dylint.toml`
-    ///   lists, `linux`, `macos` or `windows`, so a predicate may name `target_os` of a listed
-    ///   system, `windows` or `target_family = "windows"` if `windows` is listed, and `unix` or
-    ///   `target_family = "unix"` if `linux` or `macos` is, and nothing else about the target: no
-    ///   other `target_os` or `target_family`, and no `target_arch`, `target_env`, `target_abi`,
+    ///   behind it. `ci_targets` in `dylint.toml` lists the operating systems CI builds for,
+    ///   `linux`, `macos` or `windows`, and nothing finer, such as which processors or C libraries,
+    ///   so a predicate may name `target_os` of a listed system, `windows` or
+    ///   `target_family = "windows"` if `windows` is listed, and `unix` or `target_family = "unix"`
+    ///   if `linux` or `macos` is, and nothing else about the target: no other `target_os` or
+    ///   `target_family`, and no `target_arch`, `target_env`, `target_abi`,
     ///   `target_pointer_width`, `target_vendor`, `target_feature`, `target_endian` or
     ///   `target_has_atomic`, which leave code out of some of those builds, or put it only in
     ///   builds for targets CI never builds. A predicate on those names that is false on every
@@ -757,8 +758,8 @@ fn check_target(cx: &EarlyContext<'_>, predicate: &Meta, span: Span, construct: 
             },
             None,
             format!(
-                "CI builds one target for each system `ci_targets` in `dylint.toml` lists \
-                 ({listed}), so no check compiles code that only other targets or \
+                "`ci_targets` in `dylint.toml` lists the systems CI builds for ({listed}) and \
+                 nothing finer, so no check is known to compile code that only other targets or \
                  architectures build: name only the `target_os` of a listed system, or `unix` or \
                  `windows` when it covers one"
             ),

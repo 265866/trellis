@@ -5,14 +5,12 @@ build from source, and how to update.
 
 Each [release](https://github.com/{{ github_owner }}/{{ project_name }}/releases) has one archive per
 platform:
-{% if 'linux' in platforms %}
-- Linux on x86-64: `{{ project_name }}-<version>-x86_64-unknown-linux-gnu.tar.gz`
-{%- endif %}
-{%- if 'macos' in platforms %}
-- macOS on Apple silicon: `{{ project_name }}-<version>-aarch64-apple-darwin.tar.gz`
-{%- endif %}
-{%- if 'windows' in platforms %}
-- Windows on x86-64: `{{ project_name }}-<version>-x86_64-pc-windows-msvc.zip`
+{% for target in targets %}
+- {{ target.name }}: `{{ project_name }}-<version>-{{ target.triple }}.{{ 'zip' if target.os == 'windows' else 'tar.gz' }}`
+{%- endfor %}
+{%- if 'linux' in platforms %}
+
+The Linux programs are linked statically, so they run on any Linux distribution, Alpine included.
 {%- endif %}
 
 ## Install a release

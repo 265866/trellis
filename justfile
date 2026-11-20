@@ -30,12 +30,14 @@ install-nightly-rustfmt:
 fmt:
     cargo +{{ nightly }} fmt --all
     cargo +{{ nightly }} fmt --all --manifest-path lints/Cargo.toml
+    cargo +{{ nightly }} fmt --all --manifest-path tests/musl-c/Cargo.toml
     git ls-files -z --cached --others --exclude-standard -- '*.toml' | xargs -0 taplo fmt
 
 # Checks the Rust and TOML files are formatted.
 fmt-check:
     cargo +{{ nightly }} fmt --all -- --check
     cargo +{{ nightly }} fmt --all --manifest-path lints/Cargo.toml -- --check
+    cargo +{{ nightly }} fmt --all --manifest-path tests/musl-c/Cargo.toml -- --check
     git ls-files -z --cached --others --exclude-standard -- '*.toml' | xargs -0 taplo fmt --check
 
 # Checks spelling in code and docs.
@@ -219,6 +221,19 @@ pins:
       echo "error: .github/workflows/deny.yml differs from template/.github/workflows/deny.yml.jinja" >&2
       status=1
     fi
+    # CI's `C code for musl` job checks the step that installs musl-gcc in a generated binary's
+    # workflows, so its copy must match theirs.
+    musl_step() {
+      awk '/^      - name: Install musl-gcc$/ { inside = 1; print; next }
+        inside && /^        / { print; next } { inside = 0 }' "$1" \
+        | sed 's/{% raw %}//; s/{% endraw %}//'
+    }
+    for file in template/.github/workflows/ci.yml.jinja template/.github/workflows/build-release.yml.jinja; do
+      if [ -z "$(musl_step "$file")" ] || ! diff <(musl_step .github/workflows/ci.yml) <(musl_step "$file") >&2; then
+        echo "error: the musl-gcc step in .github/workflows/ci.yml differs from $file's" >&2
+        status=1
+      fi
+    done
     # The template's lints tables add a block only a library gets.
     lints_tables() {
       awk '/^\[/ { inside = ($0 ~ /^\[workspace\.lints\./) } inside' "$1" \
@@ -491,10 +506,11 @@ update:
 # the lints and checker from this checkout, and runs `recipes` in it, `ci` by default. `true` as
 # `publish` makes a library a published one, and `true` as `web` gives a service a web UI. After
 # `ci`, a service also builds and runs its image when Docker is installed, and a web UI's build and
-# license notices must be in it.
+# license notices must be in it. A `target` runs `test` and `build-release` for that target, as a
+# project's CI does for the target a release ships.
 #
 # Generates a project of one kind and runs its checks.
-template kind recipes="ci" publish="false" web="false":
+template kind recipes="ci" publish="false" web="false" target="":
     #!/usr/bin/env bash
     set -euo pipefail
     trellis="{{ replace(justfile_directory(), '\', '/') }}"
@@ -518,8 +534,15 @@ template kind recipes="ci" publish="false" web="false":
     git add --all
     git -c user.name=trellis -c user.email=trellis@localhost commit --quiet --message "chore: generate from trellis"
     git update-ref refs/remotes/origin/main HEAD
+    if [ -n "{{ target }}" ]; then
+      rustup target add "{{ target }}"
+    fi
     for recipe in {{ recipes }}; do
-      just "$recipe"
+      if [ -n "{{ target }}" ] && { [ "$recipe" = test ] || [ "$recipe" = build-release ]; }; then
+        CARGO_BUILD_TARGET="{{ target }}" just "$recipe"
+      else
+        just "$recipe"
+      fi
     done
     if [ "{{ recipes }}" = ci ] && [ "{{ kind }}" = service ] && command -v docker > /dev/null; then
       just image
@@ -608,6 +631,20 @@ shape answers:
       || fail "Copier didn't print the next steps"
     has "$copied" 'cargo binstall just@' || fail "Copier's next steps don't install just"
     cd "$project"
+    # A binary's Linux archives use musl. A public binary builds for ARM64 by default, and a private
+    # one doesn't, since ARM64 runners draw on its account's Actions usage.
+    case "{{ answers }}" in
+      binary)
+        for target in x86_64-unknown-linux-musl aarch64-unknown-linux-musl aarch64-pc-windows-msvc; do
+          grep --quiet "target: $target\$" .github/workflows/build-release.yml \
+            || fail "the release build lacks $target"
+        done
+        ;;
+      binary-private)
+        ! grep --quiet aarch64-unknown-linux .github/workflows/ci.yml \
+          || fail "a private binary builds for ARM64 by default"
+        ;;
+    esac
     git init --quiet --initial-branch main
     for recipe in fmt-check typos actionlint zizmor shear deny links; do
       just "$recipe"

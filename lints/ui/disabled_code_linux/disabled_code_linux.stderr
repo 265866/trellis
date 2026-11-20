@@ -4,7 +4,7 @@ warning: `cfg` predicate on `windows`, a target CI doesn't build
 LL | #[cfg(windows)]
    | ^^^^^^^^^^^^^^^
    |
-   = help: CI builds one target for each system `ci_targets` in `dylint.toml` lists (`linux`), so no check compiles code that only other targets or architectures build: name only the `target_os` of a listed system, or `unix` or `windows` when it covers one
+   = help: `ci_targets` in `dylint.toml` lists the systems CI builds for (`linux`) and nothing finer, so no check is known to compile code that only other targets or architectures build: name only the `target_os` of a listed system, or `unix` or `windows` when it covers one
    = note: `#[warn(disabled_code)]` on by default
 
 warning: `cfg` predicate on `target_os = "macos"`, a target CI doesn't build
@@ -13,7 +13,7 @@ warning: `cfg` predicate on `target_os = "macos"`, a target CI doesn't build
 LL | #[cfg(target_os = "macos")]
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^
    |
-   = help: CI builds one target for each system `ci_targets` in `dylint.toml` lists (`linux`), so no check compiles code that only other targets or architectures build: name only the `target_os` of a listed system, or `unix` or `windows` when it covers one
+   = help: `ci_targets` in `dylint.toml` lists the systems CI builds for (`linux`) and nothing finer, so no check is known to compile code that only other targets or architectures build: name only the `target_os` of a listed system, or `unix` or `windows` when it covers one
 
 warning: `cfg` predicate on `target_family = "windows"`, a target CI doesn't build
   --> $DIR/disabled_code_linux.rs:16:1
@@ -21,7 +21,7 @@ warning: `cfg` predicate on `target_family = "windows"`, a target CI doesn't bui
 LL | #[cfg(target_family = "windows")]
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    |
-   = help: CI builds one target for each system `ci_targets` in `dylint.toml` lists (`linux`), so no check compiles code that only other targets or architectures build: name only the `target_os` of a listed system, or `unix` or `windows` when it covers one
+   = help: `ci_targets` in `dylint.toml` lists the systems CI builds for (`linux`) and nothing finer, so no check is known to compile code that only other targets or architectures build: name only the `target_os` of a listed system, or `unix` or `windows` when it covers one
 
 warning: `cfg_attr` predicate on `target_os = "macos"`, a target CI doesn't build
   --> $DIR/disabled_code_linux.rs:18:1
@@ -29,7 +29,7 @@ warning: `cfg_attr` predicate on `target_os = "macos"`, a target CI doesn't buil
 LL | #[cfg_attr(target_os = "macos", must_use)]
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    |
-   = help: CI builds one target for each system `ci_targets` in `dylint.toml` lists (`linux`), so no check compiles code that only other targets or architectures build: name only the `target_os` of a listed system, or `unix` or `windows` when it covers one
+   = help: `ci_targets` in `dylint.toml` lists the systems CI builds for (`linux`) and nothing finer, so no check is known to compile code that only other targets or architectures build: name only the `target_os` of a listed system, or `unix` or `windows` when it covers one
 
 warning: `cfg` predicate on `windows`, a target CI doesn't build
   --> $DIR/disabled_code_linux.rs:24:1
@@ -37,7 +37,7 @@ warning: `cfg` predicate on `windows`, a target CI doesn't build
 LL | #[cfg(not(windows))]
    | ^^^^^^^^^^^^^^^^^^^^
    |
-   = help: CI builds one target for each system `ci_targets` in `dylint.toml` lists (`linux`), so no check compiles code that only other targets or architectures build: name only the `target_os` of a listed system, or `unix` or `windows` when it covers one
+   = help: `ci_targets` in `dylint.toml` lists the systems CI builds for (`linux`) and nothing finer, so no check is known to compile code that only other targets or architectures build: name only the `target_os` of a listed system, or `unix` or `windows` when it covers one
 
 warning: `cfg` predicate that holds on no target CI builds
   --> $DIR/disabled_code_linux.rs:28:1
@@ -61,7 +61,7 @@ warning: `cfg!` predicate on `target_os = "macos"`, a target CI doesn't build
 LL |     if cfg!(target_os = "macos") {
    |        ^^^^^^^^^^^^^^^^^^^^^^^^^
    |
-   = help: CI builds one target for each system `ci_targets` in `dylint.toml` lists (`linux`), so no check compiles code that only other targets or architectures build: name only the `target_os` of a listed system, or `unix` or `windows` when it covers one
+   = help: `ci_targets` in `dylint.toml` lists the systems CI builds for (`linux`) and nothing finer, so no check is known to compile code that only other targets or architectures build: name only the `target_os` of a listed system, or `unix` or `windows` when it covers one
 
 warning: `cfg_select!` predicate on `windows`, a target CI doesn't build
   --> $DIR/disabled_code_linux.rs:36:5
@@ -71,7 +71,7 @@ LL | |         fn shell() -> &'static str { "cmd" }
 LL | |     }
    | |_____^
    |
-   = help: CI builds one target for each system `ci_targets` in `dylint.toml` lists (`linux`), so no check compiles code that only other targets or architectures build: name only the `target_os` of a listed system, or `unix` or `windows` when it covers one
+   = help: `ci_targets` in `dylint.toml` lists the systems CI builds for (`linux`) and nothing finer, so no check is known to compile code that only other targets or architectures build: name only the `target_os` of a listed system, or `unix` or `windows` when it covers one
 
 warning: `cfg_select!` arm that no target CI builds selects
   --> $DIR/disabled_code_linux.rs:48:5

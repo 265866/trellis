@@ -1,0 +1,12 @@
+# Built for musl by CI's `C code for musl` job, which runs the step a generated binary's workflows
+# use to install musl-gcc. Its own workspace, so the root's checks and lockfile leave it alone.
+[package]
+name = "musl-c"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[build-dependencies]
+cc = "1"
+
+[workspace]

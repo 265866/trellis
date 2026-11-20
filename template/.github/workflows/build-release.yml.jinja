@@ -1,11 +1,7 @@
-{%- set targets = [] -%}
-{%- if 'linux' in platforms %}{% set _ = targets.append(('ubuntu-24.04', 'x86_64-unknown-linux-gnu')) %}{% endif -%}
-{%- if 'macos' in platforms %}{% set _ = targets.append(('macos-26', 'aarch64-apple-darwin')) %}{% endif -%}
-{%- if 'windows' in platforms %}{% set _ = targets.append(('windows-2025', 'x86_64-pc-windows-msvc')) %}{% endif -%}
 {% raw -%}
 name: Release build
 
-# Builds the archives a release attaches, one per platform. The release workflow calls it. It also
+# Builds the archives a release attaches, one per target. The release workflow calls it. It also
 # runs on pull requests that change what goes into the build, and by hand from the Actions tab.
 on:
   workflow_call:
@@ -45,9 +41,9 @@ jobs:
       matrix:
         include:
 {%- endraw %}
-{%- for os, target in targets %}
-          - os: {{ os }}
-            target: {{ target }}
+{%- for target in targets %}
+          - os: {{ target.runner }}
+            target: {{ target.triple }}
 {%- endfor %}
 {%- raw %}
     defaults:
@@ -60,7 +56,26 @@ jobs:
           persist-credentials: false
 
       - name: Install the pinned toolchain
-        run: rustup toolchain install
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          rustup toolchain install
+          rustup target add "$TARGET"
+{%- endraw %}
+{%- if 'linux' in platforms %}
+
+      # cc, which builds the C code some crates have, needs musl-gcc to build for musl, and finds it
+      # on its own only for x86-64, so `CC_<target>` names it.
+      - name: Install musl-gcc
+        if: runner.os == 'Linux'
+        env:
+          TARGET: {% raw %}${{ matrix.target }}{% endraw %}
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends musl-tools
+          echo "CC_${TARGET//-/_}=musl-gcc" >> "$GITHUB_ENV"
+{%- endif %}
+{%- raw %}
 
       - uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2.90.5
         with:

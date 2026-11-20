@@ -173,13 +173,21 @@ uvx copier update --defaults --vcs-ref=:current: --data 'license=MIT OR Apache-2
 ```sh
 uvx copier update --defaults --vcs-ref=:current: --data 'platforms=[linux, macos]'
 ```
+{%- if 'linux' in platforms or 'windows' in platforms %}
+
+or the processors Linux and Windows build for, `x86_64` and `aarch64` (ARM64):
+
+```sh
+uvx copier update --defaults --vcs-ref=:current: --data 'architectures=[x86_64]'
+```
+{%- endif %}
 {%- endif %}
 
 The change is a rule change, so it can't also change code. Once it merges, run
 `just check-github` on `main`, and `just setup-github` if it reports a wrong setting.
 {%- if kind != 'service' %}
-Changing the platforms needs nothing on GitHub, since `CI passed` covers whatever platforms CI
-runs.
+Changing the platforms{{ ' or architectures' if 'linux' in platforms or 'windows' in platforms else '' }} needs nothing on GitHub, since `CI passed` covers
+whatever platforms CI runs.
 {%- endif %}
 Some answers also change what GitHub needs:
 {% if published %}
@@ -226,6 +234,10 @@ Some answers also change what GitHub needs:
   `uvx copier update --defaults --vcs-ref=:current: --data visibility=private` makes, then make
   the repository private on GitHub and run `just check-github` on `main`. The Actions policy for
   the rule-change check then no longer matters.
+{%- if kind != 'service' and 'aarch64' in architectures and ('linux' in platforms or 'windows' in platforms) %}
+  The update keeps building for ARM64, whose runners draw on a private repository's Actions usage.
+  To stop, add `--data 'architectures=[x86_64]'` to it.
+{%- endif %}
 {%- if kind == 'service' %}
   The image's package stays public, because GitHub can't make a public package private again.
   Delete it in its package settings before the next release, which then publishes a new, private
