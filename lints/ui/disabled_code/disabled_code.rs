@@ -155,6 +155,26 @@ impl Wallet {
     }
 }
 
+// Flagged: the exception to `dead_code` nested with a lint run's predicate, either way round,
+// since the outer `cfg_attr` holds a `cfg_attr` rather than only lint levels.
+#[cfg_attr(
+    not(test),
+    cfg_attr(
+        dylint_lib = "trellis_lints",
+        expect(dead_code, reason = "the device manager in the next change calls it")
+    )
+)]
+fn nested_exception() {}
+
+#[cfg_attr(
+    dylint_lib = "trellis_lints",
+    cfg_attr(
+        not(test),
+        expect(dead_code, reason = "the device manager in the next change calls it")
+    )
+)]
+fn nested_the_other_way() {}
+
 // Not flagged: test modules, and code inside them or a test function under `cfg(test)`.
 #[cfg(test)]
 mod unit_tests {
@@ -251,8 +271,8 @@ mod hidden;
 #[path = "modules/never.rs"]
 mod never;
 
-// Not flagged: ordinary predicates, and the documented exception to a custom lint, which
-// `suppression_policy` checks.
+// Not flagged: ordinary predicates, and the documented exceptions to a custom lint and to
+// `dead_code`, which `suppression_policy` checks.
 #[cfg(any(unix, windows))]
 fn desktop() {}
 
@@ -270,6 +290,12 @@ mod tests {}
     expect(non_snake_case, reason = "mirrors the vendor's own field name")
 )]
 fn Exception() {}
+
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "the device manager in the next change calls it")
+)]
+fn connect() {}
 
 /// Flagged: doctests marked `ignore`, however written.
 ///

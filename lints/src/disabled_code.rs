@@ -37,9 +37,9 @@ declare_lint! {
     /// - A `cfg` predicate that names `clippy` or `dylint_lib`, which set apart the clippy run and
     ///   the run of `trellis_lints`, or `doc`, `doctest`, `miri`, `proc_macro`, `rustfmt` or
     ///   `rust_analyzer`, which neither lint run sets, so code behind it escapes one of the runs
-    ///   or both. A `cfg_attr`
-    ///   around only lint-level attributes is left to `suppression_policy`, which allows
-    ///   `cfg_attr(dylint_lib = "trellis_lints", expect(..))`.
+    ///   or both. A `cfg_attr` around only lint-level attributes is left to
+    ///   `suppression_policy`, which allows `cfg_attr(dylint_lib = "trellis_lints", expect(..))`
+    ///   and `cfg_attr(not(test), expect(dead_code, ..))`.
     /// - A `cfg` predicate that names `debug_assertions`, `feature` or `panic`. The lints and tests
     ///   run debug builds with every feature on and `panic = "unwind"`, so code behind such a
     ///   predicate either ships in release builds unchecked or never ships. The workspace's
@@ -68,7 +68,8 @@ declare_lint! {
     ///   go on a `mod`, which makes it a test module, and code inside a test module or a
     ///   `#[test]` function may use `#[cfg(test)]` and `cfg_attr(test, ..)`. A predicate on
     ///   `test` that can hold outside tests, such as `not(test)` or `any(test, unix)`, is allowed
-    ///   nowhere.
+    ///   nowhere, except on a `cfg_attr` around only lint-level attributes, which
+    ///   `suppression_policy` checks.
     /// - A `cfg` predicate written as a macro variable, `cfg($predicate)`, which only the macro's
     ///   caller knows.
     /// - A `cfg_select!` arm that the rules above flag as a `cfg!`, or that no target CI builds

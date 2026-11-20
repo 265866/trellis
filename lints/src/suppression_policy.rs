@@ -22,7 +22,12 @@ declare_lint! {
     ///   `dylint_lib = "trellis_lints"`. clippy runs without `dylint_lib` and the custom lints
     ///   run with it, so an attribute active in only one run is never checked by the other: a
     ///   `cfg_attr(not(dylint_lib = "trellis_lints"), allow(..))` hides an `allow` from these
-    ///   lints, and `cfg_attr(test, ..)` silences a lint in only some builds.
+    ///   lints, and `cfg_attr(test, ..)` silences a lint in only some builds. The one other
+    ///   predicate allowed is exactly `not(test)` around an `expect` of `dead_code` alone, for
+    ///   private code that only its tests use until its first caller lands. A plain
+    ///   `expect(dead_code, ..)` goes unmet in the test build, where the tests use the code; this
+    ///   one checks `dead_code` fully in tests, and fails in the other builds once the caller
+    ///   lands, as any `expect` does.
     /// - `expect` without a non-empty `reason = "..."`, which review needs to judge the exception.
     /// - `expect` whose reason has fewer than 20 characters, or fewer than 4 different words
     ///   besides the words of the lints it names, so a reason can't be `"x"` or only the lint's
@@ -392,19 +397,23 @@ impl Checker<'_, '_> {
             );
         }
         self.check_target(meta, place, level);
-        if predicates
-            .iter()
-            .any(|predicate| !predicate.is_own_lint_run())
-        {
+        let only_dead_code = level == LintLevel::Expect && expects_only_dead_code(meta);
+        let allowed = |predicate: &&Meta| {
+            predicate.is_own_lint_run() || only_dead_code && predicate.is_not_test()
+        };
+        if !predicates.iter().all(allowed) {
             self.report(
                 place,
                 span,
                 &format!(
                     "`#{bang}[{name}(..)]` behind a `cfg_attr` that is on in only some builds"
                 ),
-                "clippy runs without `dylint_lib` and `trellis_lints` runs with it, so the \
-                 attribute escapes one of them; the only allowed form is `#[cfg_attr(dylint_lib \
-                 = \"trellis_lints\", expect(lint, reason = \"...\"))]`, for the lints in this library",
+                "clippy runs without `dylint_lib` and `trellis_lints` runs with it, and tests \
+                 build apart from the code that ships, so the attribute escapes some of them; the \
+                 only allowed forms are `#[cfg_attr(dylint_lib = \"trellis_lints\", expect(lint, \
+                 reason = \"...\"))]`, for the lints in this library, and \
+                 `#[cfg_attr(not(test), expect(dead_code, reason = \"...\"))]`, for code only \
+                 tests use until its caller lands",
             );
         }
         self.check_lints(meta, place, level);
@@ -606,6 +615,15 @@ fn explains(reason: &str, items: &[Meta]) -> bool {
 /// `clippy::msrv`.
 fn is_clippy_attribute(path: &str) -> bool {
     path.starts_with("clippy::")
+}
+
+/// Whether `meta`, an `expect`, names `dead_code` and no other lint.
+fn expects_only_dead_code(meta: &Meta) -> bool {
+    let mut lints = meta
+        .items()
+        .iter()
+        .filter(|item| matches!(item.kind, MetaKind::Word));
+    lints.clone().next().is_some() && lints.all(|lint| lint.path == "dead_code")
 }
 
 #[test]

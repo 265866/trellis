@@ -6,8 +6,9 @@ use proc_macro2::{Delimiter, Group, Spacing, TokenStream, TokenTree};
 
 /// Whether `after` differs from `before` only in lint expectation attributes and whitespace, with
 /// at least one expectation added, removed, changed or moved. A lint expectation is an outer
-/// `#[expect(<lint>, ..., reason = "...")]`, or the same `expect` inside
-/// `#[cfg_attr(dylint_lib = "trellis_lints", ...)]`, on one line or several. A missing side, a
+/// `#[expect(<lint>, ..., reason = "...")]`, the same `expect` inside
+/// `#[cfg_attr(dylint_lib = "trellis_lints", ...)]`, or an `expect` of `dead_code` alone inside
+/// `#[cfg_attr(not(test), ...)]`, on one line or several. A missing side, a
 /// side that doesn't lex, and any other change, comments included, make it false.
 pub(crate) fn only_expectations_changed(before: Option<&str>, after: Option<&str>) -> bool {
     let (Some(before), Some(after)) = (before.and_then(Stripped::of), after.and_then(Stripped::of))
@@ -164,9 +165,10 @@ fn is_code_group(before: &[TokenTree]) -> bool {
     }
 }
 
-/// Whether `pound` followed by `attribute` is an outer lint expectation: `#[expect(...)]`, or
-/// `#[cfg_attr(dylint_lib = "trellis_lints", expect(...))]`, whose `expect` names one or more
-/// lints and then a reason.
+/// Whether `pound` followed by `attribute` is an outer lint expectation: `#[expect(...)]`,
+/// `#[cfg_attr(dylint_lib = "trellis_lints", expect(...))]`, or
+/// `#[cfg_attr(not(test), expect(dead_code, ...))]`, whose `expect` names one or more lints and
+/// then a reason.
 fn is_expectation(pound: &TokenTree, attribute: &Group) -> bool {
     let is_pound = matches!(pound, TokenTree::Punct(punct) if punct.as_char() == '#');
     if !is_pound || attribute.delimiter() != Delimiter::Bracket {
@@ -175,7 +177,7 @@ fn is_expectation(pound: &TokenTree, attribute: &Group) -> bool {
     let contents: Vec<TokenTree> = attribute.stream().into_iter().collect();
     match contents.as_slice() {
         [TokenTree::Ident(name), TokenTree::Group(arguments)] if name == "expect" => {
-            is_expect_arguments(arguments)
+            expected_lints(arguments).is_some()
         }
         [TokenTree::Ident(name), TokenTree::Group(cfg_attr)]
             if name == "cfg_attr" && cfg_attr.delimiter() == Delimiter::Parenthesis =>
@@ -185,8 +187,7 @@ fn is_expectation(pound: &TokenTree, attribute: &Group) -> bool {
                 [rest @ .., TokenTree::Punct(comma)] if comma.as_char() == ',' => rest,
                 all => all,
             };
-            matches!(
-                inner,
+            match inner {
                 [
                     TokenTree::Ident(key),
                     TokenTree::Punct(equals),
@@ -194,23 +195,42 @@ fn is_expectation(pound: &TokenTree, attribute: &Group) -> bool {
                     TokenTree::Punct(comma),
                     TokenTree::Ident(expect),
                     TokenTree::Group(arguments),
-                ] if key == "dylint_lib"
-                    && equals.as_char() == '='
-                    && value.to_string() == "\"trellis_lints\""
-                    && comma.as_char() == ','
-                    && expect == "expect"
-                    && is_expect_arguments(arguments)
-            )
+                ] => {
+                    key == "dylint_lib"
+                        && equals.as_char() == '='
+                        && value.to_string() == "\"trellis_lints\""
+                        && comma.as_char() == ','
+                        && expect == "expect"
+                        && expected_lints(arguments).is_some()
+                }
+                [
+                    TokenTree::Ident(not),
+                    TokenTree::Group(predicate),
+                    TokenTree::Punct(comma),
+                    TokenTree::Ident(expect),
+                    TokenTree::Group(arguments),
+                ] => {
+                    not == "not"
+                        && predicate.delimiter() == Delimiter::Parenthesis
+                        && predicate.stream().to_string() == "test"
+                        && comma.as_char() == ','
+                        && expect == "expect"
+                        && expected_lints(arguments)
+                            .is_some_and(|lints| lints.iter().all(|lint| lint == "dead_code"))
+                }
+                _ => false,
+            }
         }
         _ => false,
     }
 }
 
-/// Whether `arguments` is the parenthesized argument list of an `expect`: one or more lint paths,
-/// then `reason = "..."`, with an optional trailing comma.
-fn is_expect_arguments(arguments: &Group) -> bool {
+/// The lints that `arguments` names, each as written without whitespace, if it is the
+/// parenthesized argument list of an `expect`: one or more lint paths, then `reason = "..."`,
+/// with an optional trailing comma.
+fn expected_lints(arguments: &Group) -> Option<Vec<String>> {
     if arguments.delimiter() != Delimiter::Parenthesis {
-        return false;
+        return None;
     }
     let trees: Vec<TokenTree> = arguments.stream().into_iter().collect();
     let mut parts: Vec<&[TokenTree]> = trees
@@ -219,15 +239,18 @@ fn is_expect_arguments(arguments: &Group) -> bool {
     if parts.last().is_some_and(|last| last.is_empty()) {
         parts.pop();
     }
-    let Some((reason, lints)) = parts.split_last() else {
-        return false;
-    };
+    let (reason, lints) = parts.split_last()?;
     let is_reason = matches!(
         reason,
         [TokenTree::Ident(key), TokenTree::Punct(equals), TokenTree::Literal(text)]
             if key == "reason" && equals.as_char() == '=' && is_string(&text.to_string())
     );
-    is_reason && !lints.is_empty() && lints.iter().all(|lint| is_path(lint))
+    (is_reason && !lints.is_empty() && lints.iter().all(|lint| is_path(lint))).then(|| {
+        lints
+            .iter()
+            .map(|lint| lint.iter().map(ToString::to_string).collect())
+            .collect()
+    })
 }
 
 /// Whether `literal`, as written, is a string literal.
@@ -274,6 +297,13 @@ mod tests {
             (with(expect), SOURCE.to_owned(), "removing an expect"),
             (SOURCE.to_owned(), with(multiline), "a multi-line expect"),
             (SOURCE.to_owned(), with(cfg_attr), "the cfg_attr form"),
+            (
+                SOURCE.to_owned(),
+                with(
+                    "#[cfg_attr(not(test), expect(dead_code, reason = \"the next change calls it\"))]",
+                ),
+                "the cfg_attr form for code only tests use",
+            ),
             (
                 with(expect),
                 with(&expect.replace("fits", "always fits")),
@@ -326,6 +356,27 @@ mod tests {
                 SOURCE.to_owned(),
                 with("#[cfg_attr(test, expect(dead_code, reason = \"used only in builds\"))]"),
                 "a cfg_attr on another condition",
+            ),
+            (
+                SOURCE.to_owned(),
+                with(
+                    "#[cfg_attr(not(test), expect(unused, reason = \"the next change calls it\"))]",
+                ),
+                "a cfg_attr on not(test) of a lint other than dead_code",
+            ),
+            (
+                SOURCE.to_owned(),
+                with(
+                    "#[cfg_attr(not(test), expect(dead_code, unused, reason = \"the next change calls it\"))]",
+                ),
+                "a cfg_attr on not(test) of dead_code beside another lint",
+            ),
+            (
+                SOURCE.to_owned(),
+                with(
+                    "#[cfg_attr(not(all(test)), expect(dead_code, reason = \"the next change calls it\"))]",
+                ),
+                "a cfg_attr on a predicate other than exactly not(test)",
             ),
             (
                 SOURCE.to_owned(),

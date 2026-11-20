@@ -162,6 +162,9 @@ Put an `expect` with a reason on the smallest item the lint applies to:
 - a clippy or rustc lint: `#[expect(clippy::lint_name, reason = "...")]`;
 - a custom lint: `#[cfg_attr(dylint_lib = "trellis_lints", expect(lint_name, reason = "..."))]`.
   The `cfg_attr` keeps ordinary builds, which don't know the lint, from warning about it.
+- private code that only its tests use until its first caller lands:
+  `#[cfg_attr(not(test), expect(dead_code, reason = "..."))]`. A plain `expect(dead_code, ..)`
+  goes unmet in the test build, where the tests use the code.
 
 An `expect` fails once its lint stops firing, so a stale exception doesn't linger. Nothing else
 silences a lint, and these all fail `just dylint`. `suppression_policy` reads the source text, so
@@ -176,8 +179,9 @@ a `cfg_attr` that only one of the clippy and dylint runs sees can't hide any of 
 - Any `#[clippy::...]` attribute, such as `#[clippy::msrv]` or `#[clippy::cognitive_complexity]`,
   which changes what clippy checks without an `expect`. Set the Rust version with `rust-version`
   and thresholds in `clippy.toml`.
-- A `cfg_attr` around a lint level in any other form than
-  `cfg_attr(dylint_lib = "trellis_lints", expect(lint, reason = "..."))`.
+- A `cfg_attr` around a lint level in any other form than the two above,
+  `cfg_attr(dylint_lib = "trellis_lints", expect(lint, reason = "..."))` and
+  `cfg_attr(not(test), expect(dead_code, reason = "..."))`.
 - A lint-level attribute on a `mod`, or on an `impl` block or a trait for a lint that doesn't
   report at the block.
 - A lint attribute built from macro variables or assembled by a macro: a `#` that doesn't start

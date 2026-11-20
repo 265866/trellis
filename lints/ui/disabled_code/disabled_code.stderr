@@ -343,8 +343,34 @@ LL |     #[cfg(test)]
    |
    = help: code that changes under `cfg(test)` makes the tests check something other than what ships: make the code the same in tests, and put test-only code in a `#[cfg(test)]` module
 
+warning: `cfg_attr` predicate on `test` outside test code
+  --> $DIR/disabled_code.rs:160:1
+   |
+LL | / #[cfg_attr(
+LL | |     not(test),
+LL | |     cfg_attr(
+LL | |         dylint_lib = "trellis_lints",
+...  |
+LL | | )]
+   | |__^
+   |
+   = help: code that changes under `cfg(test)` makes the tests check something other than what ships: make the code the same in tests, and put test-only code in a `#[cfg(test)]` module
+
+warning: `cfg_attr` predicate on `dylint_lib`
+  --> $DIR/disabled_code.rs:169:1
+   |
+LL | / #[cfg_attr(
+LL | |     dylint_lib = "trellis_lints",
+LL | |     cfg_attr(
+LL | |         not(test),
+...  |
+LL | | )]
+   | |__^
+   |
+   = help: code behind it escapes clippy, `trellis_lints`, or both: make it the same in every build
+
 warning: `cfg` predicate on `test` that can hold outside tests, in test code
-  --> $DIR/disabled_code.rs:173:5
+  --> $DIR/disabled_code.rs:193:5
    |
 LL |     #[cfg(not(test))]
    |     ^^^^^^^^^^^^^^^^^
@@ -352,7 +378,7 @@ LL |     #[cfg(not(test))]
    = help: test code builds only in tests, so `not(test)` hides the code behind it from every build: write `cfg(test)`, or remove the predicate
 
 warning: ignored test
-  --> $DIR/disabled_code.rs:212:9
+  --> $DIR/disabled_code.rs:232:9
    |
 LL |         #[ignore]
    |         ^^^^^^^^^
@@ -360,7 +386,7 @@ LL |         #[ignore]
    = help: an ignored test is a failing check nobody runs: fix the test, or delete it
 
 warning: ignored test
-  --> $DIR/disabled_code.rs:218:10
+  --> $DIR/disabled_code.rs:238:10
    |
 LL | written!(#[ignore] forwarded);
    |          ^^^^^^^^^
@@ -368,7 +394,7 @@ LL | written!(#[ignore] forwarded);
    = help: an ignored test is a failing check nobody runs: fix the test, or delete it
 
 warning: `cfg` predicate written as a macro variable
-  --> $DIR/disabled_code.rs:223:9
+  --> $DIR/disabled_code.rs:243:9
    |
 LL |         #[cfg($predicate)]
    |         ^^^^^^^^^^^^^^^^^^
@@ -376,7 +402,7 @@ LL |         #[cfg($predicate)]
    = help: only the macro's caller knows the predicate, so no check can tell which builds hold the code: write the predicate out
 
 warning: `cfg` predicate that is false in every build
-  --> $DIR/disabled_code.rs:250:1
+  --> $DIR/disabled_code.rs:270:1
    |
 LL | #[cfg(any())]
    | ^^^^^^^^^^^^^
@@ -384,7 +410,7 @@ LL | #[cfg(any())]
    = help: no build compiles or runs what it guards: delete that code, or fix it and remove the predicate
 
 warning: `cfg` predicate on `proc_macro`
-  --> $DIR/disabled_code.rs:324:1
+  --> $DIR/disabled_code.rs:350:1
    |
 LL | #[cfg(proc_macro)]
    | ^^^^^^^^^^^^^^^^^^
@@ -528,7 +554,7 @@ LL | #[ignore]
    = help: an ignored test is a failing check nobody runs: fix the test, or delete it
 
 warning: `cfg!` predicate written as a macro variable
-  --> $DIR/disabled_code.rs:232:9
+  --> $DIR/disabled_code.rs:252:9
    |
 LL |         cfg!($predicate)
    |         ^^^^^^^^^^^^^^^^
@@ -536,7 +562,7 @@ LL |         cfg!($predicate)
    = help: only the macro's caller knows the predicate, so no check can tell which builds hold the code: write the predicate out
 
 warning: `cfg!` predicate that is false in every build
-  --> $DIR/disabled_code.rs:420:8
+  --> $DIR/disabled_code.rs:446:8
    |
 LL |     if cfg!(any()) {
    |        ^^^^^^^^^^^
@@ -544,7 +570,7 @@ LL |     if cfg!(any()) {
    = help: no build compiles or runs what it guards: delete that code, or fix it and remove the predicate
 
 warning: `cfg!` predicate on `clippy`
-  --> $DIR/disabled_code.rs:423:21
+  --> $DIR/disabled_code.rs:449:21
    |
 LL |     let in_clippy = cfg!(clippy);
    |                     ^^^^^^^^^^^^
@@ -552,7 +578,7 @@ LL |     let in_clippy = cfg!(clippy);
    = help: code behind it escapes clippy, `trellis_lints`, or both: make it the same in every build
 
 warning: `cfg!` predicate on `debug_assertions`
-  --> $DIR/disabled_code.rs:424:19
+  --> $DIR/disabled_code.rs:450:19
    |
 LL |     let checked = cfg!(debug_assertions);
    |                   ^^^^^^^^^^^^^^^^^^^^^^
@@ -560,7 +586,7 @@ LL |     let checked = cfg!(debug_assertions);
    = help: the lints and tests run debug builds with every feature on, so code behind it ships in release builds unchecked, or never ships: make it the same in every build
 
 warning: `cfg!` predicate on `test` outside test code
-  --> $DIR/disabled_code.rs:429:19
+  --> $DIR/disabled_code.rs:455:19
    |
 LL |     let testing = cfg!(test);
    |                   ^^^^^^^^^^
@@ -568,7 +594,7 @@ LL |     let testing = cfg!(test);
    = help: code that changes under `cfg(test)` makes the tests check something other than what ships: make the code the same in tests, and put test-only code in a `#[cfg(test)]` module
 
 warning: `cfg!` predicate on `target_arch`, which CI doesn't build every way
-  --> $DIR/disabled_code.rs:430:18
+  --> $DIR/disabled_code.rs:456:18
    |
 LL |     let on_arm = cfg!(target_arch = "aarch64");
    |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -576,7 +602,7 @@ LL |     let on_arm = cfg!(target_arch = "aarch64");
    = help: `ci_targets` in `dylint.toml` lists the systems CI builds for (`linux`, `macos`, `windows`) and nothing finer, so no check is known to compile code that only other targets or architectures build: name only the `target_os` of a listed system, or `unix` or `windows` when it covers one
 
 warning: `cfg_select!` predicate on `clippy`
-  --> $DIR/disabled_code.rs:330:5
+  --> $DIR/disabled_code.rs:356:5
    |
 LL | /     any(clippy, dylint_lib = "trellis_lints") => {
 LL | |         fn linted() {}
@@ -586,7 +612,7 @@ LL | |     }
    = help: code behind it escapes clippy, `trellis_lints`, or both: make it the same in every build
 
 warning: `cfg_select!` arm that no target CI builds selects
-  --> $DIR/disabled_code.rs:357:5
+  --> $DIR/disabled_code.rs:383:5
    |
 LL | /     _ => {
 LL | |         fn family() {}
@@ -596,7 +622,7 @@ LL | |     }
    = help: the arms before it cover every system `ci_targets` in `dylint.toml` lists (`linux`, `macos`, `windows`), so no check compiles it: delete it, or list the system it is for
 
 warning: `cfg_select!` predicate on `debug_assertions`
-  --> $DIR/disabled_code.rs:364:5
+  --> $DIR/disabled_code.rs:390:5
    |
 LL | /     debug_assertions => {
 LL | |         fn checked() {}
@@ -606,7 +632,7 @@ LL | |     }
    = help: the lints and tests run debug builds with every feature on, so code behind it ships in release builds unchecked, or never ships: make it the same in every build
 
 warning: `cfg_select!` predicate on `target_pointer_width`, which CI doesn't build every way
-  --> $DIR/disabled_code.rs:409:9
+  --> $DIR/disabled_code.rs:435:9
    |
 LL |         target_pointer_width = "64" => 8,
    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -614,7 +640,7 @@ LL |         target_pointer_width = "64" => 8,
    = help: `ci_targets` in `dylint.toml` lists the systems CI builds for (`linux`, `macos`, `windows`) and nothing finer, so no check is known to compile code that only other targets or architectures build: name only the `target_os` of a listed system, or `unix` or `windows` when it covers one
 
 warning: doctest marked `ignore`
-  --> $DIR/disabled_code.rs:276:1
+  --> $DIR/disabled_code.rs:302:1
    |
 LL | /// ```ignore
    | ^^^^^^^^^^^^^
@@ -622,7 +648,7 @@ LL | /// ```ignore
    = help: an ignored doctest is an example nobody compiles: make it run, mark it `no_run` if it must compile but not run, or `text` if it isn't Rust
 
 warning: doctest marked `ignore`
-  --> $DIR/disabled_code.rs:280:1
+  --> $DIR/disabled_code.rs:306:1
    |
 LL | /// ```rust,ignore
    | ^^^^^^^^^^^^^^^^^^
@@ -630,7 +656,7 @@ LL | /// ```rust,ignore
    = help: an ignored doctest is an example nobody compiles: make it run, mark it `no_run` if it must compile but not run, or `text` if it isn't Rust
 
 warning: doctest marked `ignore`
-  --> $DIR/disabled_code.rs:284:1
+  --> $DIR/disabled_code.rs:310:1
    |
 LL | /// ~~~ ignore
    | ^^^^^^^^^^^^^^
@@ -638,7 +664,7 @@ LL | /// ~~~ ignore
    = help: an ignored doctest is an example nobody compiles: make it run, mark it `no_run` if it must compile but not run, or `text` if it isn't Rust
 
 warning: doctest marked `ignore`
-  --> $DIR/disabled_code.rs:288:1
+  --> $DIR/disabled_code.rs:314:1
    |
 LL | /// ````edition2024,ignore
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -646,7 +672,7 @@ LL | /// ````edition2024,ignore
    = help: an ignored doctest is an example nobody compiles: make it run, mark it `no_run` if it must compile but not run, or `text` if it isn't Rust
 
 warning: doctest marked `ignore`
-  --> $DIR/disabled_code.rs:318:5
+  --> $DIR/disabled_code.rs:344:5
    |
 LL |     //! ```ignore
    |     ^^^^^^^^^^^^^
@@ -654,7 +680,7 @@ LL |     //! ```ignore
    = help: an ignored doctest is an example nobody compiles: make it run, mark it `no_run` if it must compile but not run, or `text` if it isn't Rust
 
 warning: code brought in by `include!`
-  --> $DIR/disabled_code.rs:237:1
+  --> $DIR/disabled_code.rs:257:1
    |
 LL | include!("modules/included.rs");
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -670,7 +696,7 @@ LL | fn renamed() -> u32 {
    = help: write the code in a module, so every check reads it
 
 warning: ignored test, which the macro `ignored` defined in this crate writes
-  --> $DIR/disabled_code.rs:201:9
+  --> $DIR/disabled_code.rs:221:9
    |
 LL | macro_rules! ignored {
 LL |     ($pound:tt $($item:tt)*) => {
@@ -683,7 +709,7 @@ LL | ignored! { # fn flaky() {} }
    = help: an ignored test is a failing check nobody runs: fix the test, or delete it
 
 warning: `use` of `cfg_select!`
-  --> $DIR/disabled_code.rs:374:1
+  --> $DIR/disabled_code.rs:400:1
    |
 LL | use std::cfg_select as pick;
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -691,7 +717,7 @@ LL | use std::cfg_select as pick;
    = help: call `cfg_select!` by its own name and drop the `use`: the lints find its calls by that name, so a call through an import goes unchecked
 
 warning: `use` of `cfg!`
-  --> $DIR/disabled_code.rs:375:11
+  --> $DIR/disabled_code.rs:401:11
    |
 LL | use std::{cfg as flag, cfg_select};
    |           ^^^
@@ -699,12 +725,12 @@ LL | use std::{cfg as flag, cfg_select};
    = help: call `cfg!` by its own name and drop the `use`: the lints find its calls by that name, so a call through an import goes unchecked
 
 warning: `use` of `cfg_select!`
-  --> $DIR/disabled_code.rs:375:24
+  --> $DIR/disabled_code.rs:401:24
    |
 LL | use std::{cfg as flag, cfg_select};
    |                        ^^^^^^^^^^
    |
    = help: call `cfg_select!` by its own name and drop the `use`: the lints find its calls by that name, so a call through an import goes unchecked
 
-warning: 87 warnings emitted
+warning: 89 warnings emitted
 

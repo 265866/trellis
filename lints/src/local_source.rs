@@ -170,6 +170,12 @@ impl Meta {
         is_test(self) || self.path == "all" && self.items().iter().any(is_test)
     }
 
+    /// Whether this predicate is exactly `not(test)`, which holds in every build but tests.
+    pub(crate) fn is_not_test(&self) -> bool {
+        let is_test = |meta: &Meta| meta.path == "test" && matches!(meta.kind, MetaKind::Word);
+        self.path == "not" && matches!(self.items(), [inner] if is_test(inner))
+    }
+
     /// The value of a `path = "value"` item.
     fn string_value(&self) -> Option<&str> {
         match &self.kind {

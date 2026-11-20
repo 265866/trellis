@@ -6,6 +6,16 @@ part lists what a project's owner must do around the update: a rule that can fla
 a setting to change, or a step to do by hand. [CONTRIBUTING.md](CONTRIBUTING.md#release-trellis)
 has the versioning rule.
 
+## v0.7.1
+
+### Changed
+
+- `suppression_policy` allows `#[cfg_attr(not(test), expect(dead_code, reason = "..."))]`, so
+  private code that only its tests use can land before its first caller. A plain
+  `expect(dead_code, ..)` went unmet in the test build, and no other form passed. The predicate
+  must be exactly `not(test)`, and the `expect` must name `dead_code` alone. `just policy` counts
+  it as a lint expectation, so a rule update's pull request may add or remove it.
+
 ## v0.7.0
 
 ### Action required in projects
