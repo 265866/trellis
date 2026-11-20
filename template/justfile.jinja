@@ -9,8 +9,10 @@
 
 set windows-shell := ["powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-Command"]
 
-# Only the formatter runs on this nightly: the Google Rust Style Guide asks for rustfmt options that
-# stable rustfmt lacks. Everything else builds on the stable toolchain in rust-toolchain.toml.
+# Only the formatter runs on this nightly, for two options stable rustfmt lacks.
+# `imports_granularity` is the setting for the Google Rust Style Guide's rule that a `use` imports
+# items from one module. The guide lets a codebase on stable Rust skip `format_macro_matchers`, and
+# trellis applies it anyway. Everything else builds on the stable toolchain in rust-toolchain.toml.
 nightly := "nightly-2026-10-28"
 
 # The nightly the trellis lints build on. `cargo dylint` installs it on first use; CI installs it
