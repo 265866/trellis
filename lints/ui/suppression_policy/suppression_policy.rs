@@ -368,3 +368,58 @@ macro_rules! documented {
 }
 
 documented!("A documented struct.", struct Documented;);
+
+// Not flagged: an `expect` of `dead_code` alone outside tests, for private code that only its
+// tests use until its first caller lands.
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "the device manager in the next change calls it")
+)]
+fn connect() {}
+
+// Flagged: `allow` behind `not(test)`.
+#[cfg_attr(not(test), allow(dead_code))]
+fn disconnect() {}
+
+// Flagged: an `expect` of a lint other than `dead_code` behind `not(test)`, alone or beside it.
+#[cfg_attr(
+    not(test),
+    expect(clippy::unwrap_used, reason = "the device manager in the next change calls it")
+)]
+fn pair() {}
+
+#[cfg_attr(
+    not(test),
+    expect(dead_code, non_snake_case, reason = "the device manager in the next change calls it")
+)]
+fn Unpair() {}
+
+// Flagged: an `expect` of `dead_code` behind any predicate but exactly `not(test)`.
+#[cfg_attr(
+    test,
+    expect(dead_code, reason = "the device manager in the next change calls it")
+)]
+fn reboot() {}
+
+#[cfg_attr(
+    not(any(test, unix)),
+    expect(dead_code, reason = "the device manager in the next change calls it")
+)]
+fn shell() {}
+
+// Flagged: an `expect` behind `not(test)` without a reason, inner, or on a module.
+#[cfg_attr(not(test), expect(dead_code))]
+fn push() {}
+
+fn pull() {
+    #![cfg_attr(
+        not(test),
+        expect(dead_code, reason = "the device manager in the next change calls it")
+    )]
+}
+
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "the device manager in the next change calls it")
+)]
+mod forward {}

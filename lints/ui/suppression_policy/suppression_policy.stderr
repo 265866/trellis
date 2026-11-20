@@ -30,7 +30,7 @@ LL | |     allow(clippy::pedantic, clippy::unwrap_used, reason = "x")
 LL | | )]
    | |__^
    |
-   = help: clippy runs without `dylint_lib` and `trellis_lints` runs with it, so the attribute escapes one of them; the only allowed form is `#[cfg_attr(dylint_lib = "trellis_lints", expect(lint, reason = "..."))]`, for the lints in this library
+   = help: clippy runs without `dylint_lib` and `trellis_lints` runs with it, and tests build apart from the code that ships, so the attribute escapes some of them; the only allowed forms are `#[cfg_attr(dylint_lib = "trellis_lints", expect(lint, reason = "..."))]`, for the lints in this library, and `#[cfg_attr(not(test), expect(dead_code, reason = "..."))]`, for code only tests use until its caller lands
 
 warning: inner `#![expect(..)]` attribute
   --> $DIR/suppression_policy.rs:7:1
@@ -121,7 +121,7 @@ warning: `#[allow(..)]` behind a `cfg_attr` that is on in only some builds
 LL | #[cfg_attr(test, allow(dead_code))]
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    |
-   = help: clippy runs without `dylint_lib` and `trellis_lints` runs with it, so the attribute escapes one of them; the only allowed form is `#[cfg_attr(dylint_lib = "trellis_lints", expect(lint, reason = "..."))]`, for the lints in this library
+   = help: clippy runs without `dylint_lib` and `trellis_lints` runs with it, and tests build apart from the code that ships, so the attribute escapes some of them; the only allowed forms are `#[cfg_attr(dylint_lib = "trellis_lints", expect(lint, reason = "..."))]`, for the lints in this library, and `#[cfg_attr(not(test), expect(dead_code, reason = "..."))]`, for code only tests use until its caller lands
 
 warning: `#[expect(..)]` behind a `cfg_attr` that is on in only some builds
   --> $DIR/suppression_policy.rs:44:1
@@ -132,7 +132,7 @@ LL | |     expect(warnings, unused, reason = "the function is a placeholder for 
 LL | | )]
    | |__^
    |
-   = help: clippy runs without `dylint_lib` and `trellis_lints` runs with it, so the attribute escapes one of them; the only allowed form is `#[cfg_attr(dylint_lib = "trellis_lints", expect(lint, reason = "..."))]`, for the lints in this library
+   = help: clippy runs without `dylint_lib` and `trellis_lints` runs with it, and tests build apart from the code that ships, so the attribute escapes some of them; the only allowed forms are `#[cfg_attr(dylint_lib = "trellis_lints", expect(lint, reason = "..."))]`, for the lints in this library, and `#[cfg_attr(not(test), expect(dead_code, reason = "..."))]`, for code only tests use until its caller lands
 
 warning: `expect` of the lint group `warnings`
   --> $DIR/suppression_policy.rs:46:12
@@ -159,7 +159,7 @@ LL | |     cfg_attr(test, expect(non_snake_case, reason = "mirrors the test data
 LL | | )]
    | |__^
    |
-   = help: clippy runs without `dylint_lib` and `trellis_lints` runs with it, so the attribute escapes one of them; the only allowed form is `#[cfg_attr(dylint_lib = "trellis_lints", expect(lint, reason = "..."))]`, for the lints in this library
+   = help: clippy runs without `dylint_lib` and `trellis_lints` runs with it, and tests build apart from the code that ships, so the attribute escapes some of them; the only allowed forms are `#[cfg_attr(dylint_lib = "trellis_lints", expect(lint, reason = "..."))]`, for the lints in this library, and `#[cfg_attr(not(test), expect(dead_code, reason = "..."))]`, for code only tests use until its caller lands
 
 warning: `expect` of `code_comment`, which has no exceptions
   --> $DIR/suppression_policy.rs:60:12
@@ -417,6 +417,96 @@ LL | discard! { #[expect([<clippy::un wrap_used>], reason = "the caller checks i
    = help: the lints can't tell which lint the tokens name once a macro joins them: write the lint's name out
 
 warning: `allow` attribute
+  --> $DIR/suppression_policy.rs:381:1
+   |
+LL | #[cfg_attr(not(test), allow(dead_code))]
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: use `#[expect(lint, reason = "...")]` on the narrowest item, which fails once the lint stops firing
+
+warning: `#[allow(..)]` behind a `cfg_attr` that is on in only some builds
+  --> $DIR/suppression_policy.rs:381:1
+   |
+LL | #[cfg_attr(not(test), allow(dead_code))]
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: clippy runs without `dylint_lib` and `trellis_lints` runs with it, and tests build apart from the code that ships, so the attribute escapes some of them; the only allowed forms are `#[cfg_attr(dylint_lib = "trellis_lints", expect(lint, reason = "..."))]`, for the lints in this library, and `#[cfg_attr(not(test), expect(dead_code, reason = "..."))]`, for code only tests use until its caller lands
+
+warning: `#[expect(..)]` behind a `cfg_attr` that is on in only some builds
+  --> $DIR/suppression_policy.rs:385:1
+   |
+LL | / #[cfg_attr(
+LL | |     not(test),
+LL | |     expect(clippy::unwrap_used, reason = "the device manager in the next change calls it")
+LL | | )]
+   | |__^
+   |
+   = help: clippy runs without `dylint_lib` and `trellis_lints` runs with it, and tests build apart from the code that ships, so the attribute escapes some of them; the only allowed forms are `#[cfg_attr(dylint_lib = "trellis_lints", expect(lint, reason = "..."))]`, for the lints in this library, and `#[cfg_attr(not(test), expect(dead_code, reason = "..."))]`, for code only tests use until its caller lands
+
+warning: `#[expect(..)]` behind a `cfg_attr` that is on in only some builds
+  --> $DIR/suppression_policy.rs:391:1
+   |
+LL | / #[cfg_attr(
+LL | |     not(test),
+LL | |     expect(dead_code, non_snake_case, reason = "the device manager in the next change calls it")
+LL | | )]
+   | |__^
+   |
+   = help: clippy runs without `dylint_lib` and `trellis_lints` runs with it, and tests build apart from the code that ships, so the attribute escapes some of them; the only allowed forms are `#[cfg_attr(dylint_lib = "trellis_lints", expect(lint, reason = "..."))]`, for the lints in this library, and `#[cfg_attr(not(test), expect(dead_code, reason = "..."))]`, for code only tests use until its caller lands
+
+warning: `#[expect(..)]` behind a `cfg_attr` that is on in only some builds
+  --> $DIR/suppression_policy.rs:398:1
+   |
+LL | / #[cfg_attr(
+LL | |     test,
+LL | |     expect(dead_code, reason = "the device manager in the next change calls it")
+LL | | )]
+   | |__^
+   |
+   = help: clippy runs without `dylint_lib` and `trellis_lints` runs with it, and tests build apart from the code that ships, so the attribute escapes some of them; the only allowed forms are `#[cfg_attr(dylint_lib = "trellis_lints", expect(lint, reason = "..."))]`, for the lints in this library, and `#[cfg_attr(not(test), expect(dead_code, reason = "..."))]`, for code only tests use until its caller lands
+
+warning: `#[expect(..)]` behind a `cfg_attr` that is on in only some builds
+  --> $DIR/suppression_policy.rs:404:1
+   |
+LL | / #[cfg_attr(
+LL | |     not(any(test, unix)),
+LL | |     expect(dead_code, reason = "the device manager in the next change calls it")
+LL | | )]
+   | |__^
+   |
+   = help: clippy runs without `dylint_lib` and `trellis_lints` runs with it, and tests build apart from the code that ships, so the attribute escapes some of them; the only allowed forms are `#[cfg_attr(dylint_lib = "trellis_lints", expect(lint, reason = "..."))]`, for the lints in this library, and `#[cfg_attr(not(test), expect(dead_code, reason = "..."))]`, for code only tests use until its caller lands
+
+warning: `expect` without a reason
+  --> $DIR/suppression_policy.rs:411:1
+   |
+LL | #[cfg_attr(not(test), expect(dead_code))]
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: add `reason = "..."` saying why the lint is wrong here
+
+warning: inner `#![expect(..)]` attribute
+  --> $DIR/suppression_policy.rs:415:5
+   |
+LL | /     #![cfg_attr(
+LL | |         not(test),
+LL | |         expect(dead_code, reason = "the device manager in the next change calls it")
+LL | |     )]
+   | |______^
+   |
+   = help: it applies to everything in the enclosing crate, module or function: put an outer `#[expect(lint, reason = "...")]` on the narrowest item instead, or change the level in `[workspace.lints]` in `Cargo.toml`
+
+warning: `expect` on a module
+  --> $DIR/suppression_policy.rs:421:1
+   |
+LL | / #[cfg_attr(
+LL | |     not(test),
+LL | |     expect(dead_code, reason = "the device manager in the next change calls it")
+LL | | )]
+   | |__^
+   |
+   = help: it covers every item in the module and in the modules inside it: put the `expect` on the smallest item inside that the lint reports
+
+warning: `allow` attribute
   --> $DIR/modules/hidden.rs:5:1
    |
 LL | #[allow(dead_code)]
@@ -621,5 +711,5 @@ LL | careless!(#);
    |
    = help: expect each lint that fires here by name, so the exception covers only them
 
-warning: 69 warnings emitted
+warning: 78 warnings emitted
 

@@ -129,6 +129,9 @@ Put an `expect` with a reason on the smallest item the lint applies to:
 - a clippy or rustc lint: `#[expect(clippy::lint_name, reason = "...")]`;
 - a custom lint: `#[cfg_attr(dylint_lib = "trellis_lints", expect(lint_name, reason = "..."))]`.
   The `cfg_attr` keeps ordinary builds, which don't know the lint, from warning about it.
+- private code that only its tests use until its first caller lands:
+  `#[cfg_attr(not(test), expect(dead_code, reason = "..."))]`. A plain `expect(dead_code, ..)`
+  goes unmet in the test build, where the tests use the code.
 
 Nothing else silences a lint. [docs/style.md](docs/style.md#silencing-a-lint) has the rules for
 the reason and the forms that fail, and the lints that take no exception at all.
