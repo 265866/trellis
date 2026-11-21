@@ -2,6 +2,7 @@
 
 use std::collections::BTreeSet;
 use std::fs;
+use std::io::ErrorKind;
 use std::path::Path;
 
 use toml::{Table, Value};
@@ -13,6 +14,11 @@ use crate::{toml_file, upstream};
 
 /// Checks the shape of the workspace that the other checks rely on:
 ///
+/// - the members are exactly the packages one directory below `crates/`, `crates/<name>`, since
+///   `rule-changes` judges a crate's `build.rs`, its `LICENSE` files and its manifest by that
+///   place. Each resolved member is checked, not the `members` key, because Cargo also makes a
+///   member of every path dependency inside the workspace. Neither `crates` nor `crates/<name>`
+///   may be a symbolic link, which would put the crate's files at another path;
 /// - `exclude` in `[workspace]` is missing or empty, so no crate under the root escapes the
 ///   workspace lints;
 /// - every crate pulled in by path is a workspace member, so no excluded crate or crate outside
@@ -30,7 +36,8 @@ use crate::{toml_file, upstream};
 ///
 /// # Errors
 ///
-/// Fails if `.cargo/config.toml` exists but can't be read or parsed.
+/// Fails if `.cargo/config.toml` exists but can't be read or parsed, or if `crates/` exists but
+/// can't be read.
 pub fn check(workspace: &Workspace) -> Result<Vec<Violation>, PolicyError> {
     let manifest = workspace.manifest();
     let mut violations = Vec::new();
@@ -70,7 +77,88 @@ pub fn check(workspace: &Workspace) -> Result<Vec<Violation>, PolicyError> {
     }
     cargo_config(workspace, &mut violations)?;
     path_dependencies(workspace, &mut violations);
+    member_places(workspace, &mut violations)?;
     Ok(violations)
+}
+
+/// Reports each member that isn't `crates/<name>`, or whose `crates/<name>` or `crates` is a
+/// symbolic link, and each package `crates/<name>` that isn't a member.
+///
+/// # Errors
+///
+/// Fails if `crates/` exists but can't be read, or a member's directory can't be inspected.
+fn member_places(
+    workspace: &Workspace,
+    violations: &mut Vec<Violation>,
+) -> Result<(), PolicyError> {
+    let mut places = BTreeSet::new();
+    for member in workspace.members() {
+        let place = workspace.relative(member.dir());
+        let in_crates = place
+            .strip_prefix("crates/")
+            .is_some_and(|name| !name.is_empty() && !name.contains('/'));
+        if in_crates {
+            let path = workspace.root().join(&place);
+            let metadata =
+                fs::symlink_metadata(&path).map_err(|source| PolicyError::Read { path, source })?;
+            if metadata.is_symlink() {
+                violations.push(Violation::new(
+                    place.clone(),
+                    format!(
+                        "The workspace member `{}` lives in `{place}`, which is a symbolic link, \
+                         so the crate's files sit elsewhere and changes to them aren't judged as \
+                         the crate's. Move the crate itself to `{place}`.",
+                        member.name()
+                    ),
+                ));
+            }
+        } else {
+            violations.push(Violation::new(
+                workspace.relative(member.manifest_path()),
+                format!(
+                    "The workspace member `{}` lives in `{place}`, but every member lives one \
+                     directory below `crates/`, as `crates/<name>`. Which changes are rules and \
+                     which are code depends on that place: a crate's `build.rs`, its `LICENSE` \
+                     files and its manifest are judged by it. Move the crate to `crates/<name>`, \
+                     or, if it is a path dependency, make it a member there.",
+                    member.name()
+                ),
+            ));
+        }
+        places.insert(place);
+    }
+    let directory = workspace.root().join("crates");
+    let read_error = |source| PolicyError::Read {
+        path: directory.clone(),
+        source,
+    };
+    match fs::symlink_metadata(&directory) {
+        Ok(metadata) if metadata.is_symlink() => violations.push(Violation::new(
+            "crates".to_owned(),
+            "This is a symbolic link, so the crates' files sit elsewhere and changes to them \
+             aren't judged as theirs. Make `crates` a directory and move the crates into it."
+                .to_owned(),
+        )),
+        Ok(_) => {}
+        Err(error) if error.kind() == ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(read_error(error)),
+    }
+    for entry in fs::read_dir(&directory).map_err(read_error)? {
+        let entry = entry.map_err(read_error)?;
+        let manifest = entry.path().join("Cargo.toml");
+        let place = format!("crates/{}", entry.file_name().to_string_lossy());
+        if manifest.is_file() && !places.contains(&place) {
+            violations.push(Violation::new(
+                format!("{place}/Cargo.toml"),
+                "This package isn't a workspace member, so it builds without the workspace's \
+                 lints and checks, though a change to it counts as code. Every package one \
+                 directory below `crates/` is a member: keep `members = [\"crates/*\"]` in the \
+                 root Cargo.toml, or move the package out of the repository."
+                    .to_owned(),
+            ));
+        }
+    }
+    Ok(())
 }
 
 /// What is wrong with `exclude` in `[workspace]` of the root manifest `manifest`, if anything.

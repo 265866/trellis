@@ -79,24 +79,37 @@ const PLATFORM_KEYS: [&str; 3] = ["dependencies", "dev-dependencies", "build-dep
 /// setting turns off a crate's tests or doctests (`test = false`, `doctest = false`,
 /// `harness = false` outside a bench, `autotests = false`), builds code the checks don't see
 /// (`required-features`, `proc-macro`), or reads sources from outside the crate's directory. The
-/// crate's edition, `rust-version` and `publish` come from `[workspace.package]`, and every
-/// target's `path`
-/// stays inside the crate's directory.
+/// crate's edition, `rust-version` and `publish` come from `[workspace.package]`, and so does its
+/// license when `[workspace.package]` has one. Every target's `path` stays inside the crate's
+/// directory.
 #[must_use]
 pub fn check(workspace: &Workspace) -> Vec<Violation> {
+    let license = toml_file::lookup(workspace.manifest(), &["workspace", "package", "license"]);
     let mut violations = Vec::new();
     for member in workspace.members() {
         let file = workspace.relative(member.manifest_path());
-        for problem in problems(member.manifest()) {
+        for problem in problems(member.manifest(), license) {
             violations.push(Violation::new(file.clone(), problem));
         }
     }
     violations
 }
 
-/// What is wrong with the member manifest `manifest`.
-fn problems(manifest: &Table) -> Vec<String> {
+/// What is wrong with the member manifest `manifest`, in a workspace whose `[workspace.package]`
+/// license is `workspace_license`.
+fn problems(manifest: &Table, workspace_license: Option<&Value>) -> Vec<String> {
     let mut problems = Vec::new();
+    let license = toml_file::lookup(manifest, &["package", "license"]);
+    if workspace_license.is_some() && !inherits(license) {
+        let found = license.map_or_else(|| "missing".to_owned(), toml_file::render);
+        problems.push(format!(
+            "`[package] license` is {found}, but it must be `license.workspace = true`, because \
+             the root Cargo.toml's `[workspace.package]` has a license, and a crate without it \
+             would ship or publish with no license or another one. Set \
+             `license.workspace = true` in `[package]`; when the license answer changes, change \
+             each crate's line in the same pull request."
+        ));
+    }
     for (key, value) in manifest {
         match key.as_str() {
             "package" => package_problems(value, &mut problems),
@@ -131,10 +144,7 @@ fn package_problems(package: &Value, problems: &mut Vec<String>) {
     unknown_keys("[package]", package, &PACKAGE_KEYS, problems);
     for (key, why) in INHERITED_PACKAGE_KEYS {
         let value = package.get(key);
-        let inherits = value.and_then(Value::as_table).is_some_and(|table| {
-            table.len() == 1 && table.get("workspace") == Some(&Value::Boolean(true))
-        });
-        if !inherits {
+        if !inherits(value) {
             let found = value.map_or_else(|| "missing".to_owned(), toml_file::render);
             problems.push(format!(
                 "`[package] {key}` is {found}, but it must be `{key}.workspace = true`, because \
@@ -143,6 +153,14 @@ fn package_problems(package: &Value, problems: &mut Vec<String>) {
             ));
         }
     }
+}
+
+/// Whether the `[package]` value `value` is `{ workspace = true }`, which takes the key from
+/// `[workspace.package]`.
+fn inherits(value: Option<&Value>) -> bool {
+    value.and_then(Value::as_table).is_some_and(|table| {
+        table.len() == 1 && table.get("workspace") == Some(&Value::Boolean(true))
+    })
 }
 
 /// Adds what is wrong with the target table `target`, written `name`, which may have the keys
@@ -190,7 +208,7 @@ mod tests {
                            rust-version.workspace = true\npublish.workspace = true\n";
 
     fn problems_in(text: &str) -> Vec<String> {
-        problems(&toml_file::parse(text).unwrap())
+        problems(&toml_file::parse(text).unwrap(), None)
     }
 
     #[test]
@@ -289,6 +307,40 @@ mod tests {
                 "{setting:?} should be rejected, found {problems:?}"
             );
         }
+    }
+
+    #[test]
+    fn a_licensed_workspace_needs_each_member_to_inherit_the_license() {
+        let mit = Value::String("MIT".to_owned());
+        let licensed = |text: &str| problems(&toml_file::parse(text).unwrap(), Some(&mit));
+        let inheriting = format!("{PACKAGE}license.workspace = true\n");
+        assert_eq!(
+            licensed(&inheriting),
+            Vec::<String>::new(),
+            "a member that inherits the license passes"
+        );
+        for (text, found) in [
+            (PACKAGE.to_owned(), "missing"),
+            (format!("{PACKAGE}license = \"MIT\"\n"), "\"MIT\""),
+            (
+                format!("{PACKAGE}license = {{ workspace = false }}\n"),
+                "{ workspace = false }",
+            ),
+        ] {
+            let problems = licensed(&text);
+            let expected = format!("`[package] license` is {found}, but it must be");
+            assert!(
+                problems
+                    .iter()
+                    .any(|problem| problem.starts_with(&expected)),
+                "{text:?} should be rejected as {expected}, found {problems:?}"
+            );
+        }
+        assert_eq!(
+            problems_in(PACKAGE),
+            Vec::<String>::new(),
+            "a workspace with no license asks for none"
+        );
     }
 
     #[test]

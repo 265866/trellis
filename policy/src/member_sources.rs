@@ -24,7 +24,7 @@ const REMEDY: &str = "A crate's sources live under its own directory, so that a 
 ///   variable or an expression, that names a `.rs` file inside the crate's directory, so the
 ///   check also reads that file. It finds these attributes inside macro arguments and inside
 ///   other attributes' arguments too;
-/// - no file in or above a member's directory is a symbolic link.
+/// - no file in or above a member's directory, nor the directory itself, is a symbolic link.
 ///
 /// The check doesn't see a `path` attribute that a macro writes, such as `#[$meta] mod a;` called
 /// with `path = "..."`, or built from tokens that never spell `path =`. In a macro the crate
@@ -52,7 +52,7 @@ pub fn check(workspace: &Workspace) -> Result<Vec<Violation>, PolicyError> {
                     .and_then(|rest| rest.strip_prefix('/'))
             };
             let encloses = case_insensitive::strip_prefix(&directory, file)
-                .is_some_and(|rest| rest.starts_with('/'));
+                .is_some_and(|rest| rest.is_empty() || rest.starts_with('/'));
             if inside.is_none() && !encloses {
                 continue;
             }

@@ -465,7 +465,11 @@ templates: (template "binary") (template "service") (template "service" "ci" "fa
 # markers, keep the owner's lines, bring v2's, and pass `trellis-policy check`; the owner's code
 # and changelog must not move. Then it makes the project private and public again with
 # `--vcs-ref=:current:`, which must keep v2 and the owner's edits, and publishes the crate under
-# each license, which must deliver only that license's files to the crate's directory.
+# each license, which must deliver only that license's files to the crate's directory; each of
+# these answer changes must pass `trellis-policy check`. Last, it generates a library with no
+# license and publishes it: the update must refuse `publish_crate=true` without a license, and
+# with `license=MIT` it must fail `trellis-policy check` until the crate inherits the license,
+# then pass it and `trellis-policy rule-changes` as one rule change.
 #
 # Checks that `copier update` moves the rules and keeps the owner's code and edits.
 update:
@@ -476,6 +480,7 @@ update:
     trap 'rm -rf "$out"' EXIT
     commit() { git -c user.name=trellis -c user.email=trellis@localhost "$@"; }
     copier() { uv tool run copier@9.19.1 "$@"; }
+    policy() { cargo run --locked --quiet --manifest-path "$trellis/Cargo.toml" --package trellis-policy -- "$@"; }
     mkdir "$out/trellis"
     tar --create --exclude=./.git --exclude=./target --exclude=./lints/target --file=- . \
       | tar --extract --directory="$out/trellis" --file=-
@@ -492,6 +497,17 @@ update:
     commit commit --quiet --message "chore: generate from trellis"
     fail() { echo "error: $1" >&2; exit 1; }
     has() { grep --quiet --line-regexp --fixed-strings -- "$2" "$1"; }
+    # Runs an update with the arguments after $2 that must fail with the message $2 and change no
+    # file; $1 says what a success did.
+    refuse() {
+      local done=$1 message=$2 refusal
+      shift 2
+      if refusal=$(copier update --quiet --defaults --vcs-ref=:current: "$@" 2>&1); then
+        fail "$done"
+      fi
+      grep --quiet --fixed-strings -- "$message" <<< "$refusal" || fail "the update refused for another reason: $refusal"
+      [ -z "$(git status --porcelain)" ] || fail "the refused update changed files"
+    }
     # Replaces the line of the file $1 that is exactly $2 with $3, in which `\n` starts a new line.
     swap() {
       awk -v old="$2" -v new="$3" '!done && $0 == old { print new; done = 1; next } { print } END { exit !done }' \
@@ -572,7 +588,7 @@ update:
         || fail "the update didn't bring v2's line to ${trellis_lines[i]}: ${trellis_lines[i + 1]}"
     done
     ! has CONTRIBUTING.md "$boundaries" || fail "the update kept v1's Product boundaries sentence"
-    cargo run --locked --quiet --manifest-path "$trellis/Cargo.toml" --package trellis-policy -- check
+    policy check
     grep --quiet '^_commit: v2$' .copier-answers.yml || fail "the answers don't record v2"
     tail -n 1 rustfmt.toml | grep --quiet 'A rule a later trellis adds' || fail "rustfmt.toml didn't move"
     [ -f docs/added.md ] || fail "the new docs page wasn't added"
@@ -592,6 +608,14 @@ update:
       grep --quiet '^//! Mine.$' "$lib/lib.rs" || fail "making it $visibility rewrote the owner's lib.rs"
       if grep --recursive --quiet '^<<<<<<<' --exclude-dir=.git .; then fail "making it $visibility left conflict markers"; fi
       kept "making it $visibility"
+      policy check
+      if [ "$visibility" = private ]; then
+        git add --all
+        commit commit --quiet --allow-empty --message "chore: try to publish the private crate"
+        printf 'publish_crate: true\nlicense: MIT\n' > "$out/publish.yml"
+        refuse "the update published a private library" 'a private library can'"'"'t publish one' \
+          --data-file "$out/publish.yml"
+      fi
     done
     for license in 'MIT OR Apache-2.0' MIT; do
       git add --all
@@ -613,7 +637,55 @@ update:
       [ ! -e "$lib/added.rs" ] || fail "publishing under $license added a scaffold file to the owner's crate"
       if grep --recursive --quiet '^<<<<<<<' --exclude-dir=.git .; then fail "publishing under $license left conflict markers"; fi
       kept "publishing under $license"
+      policy check
     done
+    git add --all
+    commit commit --quiet --message "chore: publish the crate"
+    refuse "the update made a published library's repository private" \
+      "a published library's repository stays public" --data visibility=private
+    refuse "the update took the license off a published library" \
+      'crates.io needs a license for a published crate' --data license=none
+    copier update --quiet --defaults --vcs-ref=:current: --data visibility=private --data publish_crate=false
+    grep --quiet '^visibility: private$' .copier-answers.yml || fail "the answers don't record private"
+    grep --quiet '^publish_crate: false$' .copier-answers.yml || fail "making it private kept publishing"
+    [ ! -e crates/demo/LICENSE ] || fail "making it private left crates/demo/LICENSE"
+    kept "making it private and unpublished"
+    policy check
+    git add --all
+    commit commit --quiet --message "chore: publish the crate again"
+    copier update --quiet --defaults --vcs-ref=:current: --data visibility=public --data publish_crate=true
+    git add --all
+    commit commit --quiet --message "chore: unlicense the crate"
+    copier update --quiet --defaults --vcs-ref=:current: --data license=none --data publish_crate=false
+    grep --quiet '^license: none$' .copier-answers.yml || fail "the answers don't record no license"
+    grep --quiet '^publish_crate: false$' .copier-answers.yml || fail "unlicensing it kept publishing"
+    for file in LICENSE crates/demo/LICENSE; do
+      [ ! -e "$file" ] || fail "unlicensing it left $file"
+    done
+    kept "unlicensing it"
+    sed -i.bak '/^license.workspace = true$/d' crates/demo/Cargo.toml crates/demo_text/Cargo.toml
+    rm crates/demo/Cargo.toml.bak crates/demo_text/Cargo.toml.bak
+    policy check
+    policy rule-changes HEAD
+    copier copy --quiet --defaults --vcs-ref v2 --data project_name=unlicensed \
+      --data "description=An unlicensed library." --data kind=library --data license=none \
+      "$out/trellis" "$out/unlicensed"
+    cd "$out/unlicensed"
+    git init --quiet --initial-branch main
+    git add --all
+    commit commit --quiet --message "chore: generate from trellis"
+    refuse "the update published a library with no license" \
+      'crates.io needs a license for a published crate' --data publish_crate=true
+    copier update --quiet --defaults --vcs-ref=:current: --data publish_crate=true --data license=MIT
+    grep --quiet '^license: MIT$' .copier-answers.yml || fail "the answers don't record the MIT license"
+    if policy check > "$out/unlicensed.txt"; then
+      fail "trellis-policy check passed a crate that doesn't inherit the workspace license"
+    fi
+    grep --quiet 'license.workspace = true' "$out/unlicensed.txt" \
+      || fail "trellis-policy check failed for another reason: $(cat "$out/unlicensed.txt")"
+    swap crates/unlicensed/Cargo.toml 'publish.workspace = true' 'publish.workspace = true\nlicense.workspace = true'
+    policy check
+    policy rule-changes HEAD
     echo "copier update moved the rules and kept the owner's code and edits."
 
 # Generates a project of one kind, `binary`, `service` or `library`, from the working tree, with

@@ -158,6 +158,14 @@ impl Project {
         );
     }
 
+    /// Replaces the first `old` in the root `Cargo.toml` with `new`.
+    fn edit_root_manifest(&self, old: &str, new: &str) {
+        let root = fs::read_to_string(self.path().join("Cargo.toml"))
+            .expect("the root manifest should be read");
+        assert!(root.contains(old), "the root manifest has {old:?}");
+        self.write("Cargo.toml", &root.replacen(old, new, 1));
+    }
+
     /// Removes the line that starts with `key` from the root `Cargo.toml`.
     fn remove_policy_setting(&self, key: &str) {
         let root = fs::read_to_string(self.path().join("Cargo.toml"))
@@ -1742,5 +1750,158 @@ fn a_page_may_start_with_comments_before_its_title() {
     project.check().assert_reports(
         1,
         "[docs_layout] docs/install.md: It doesn't start with a `# Title` line.",
+    );
+}
+
+#[test]
+fn a_member_that_doesnt_inherit_the_workspace_license_fails() {
+    let project = Project::new();
+    project.edit_root_manifest("publish = false\n", "publish = false\nlicense = \"MIT\"\n");
+    project.check().assert_reports(
+        1,
+        "error: [member_manifests] crates/demo_core/Cargo.toml: `[package] license` is missing, \
+         but it must be `license.workspace = true`",
+    );
+
+    project.write(
+        "crates/demo_core/Cargo.toml",
+        &member_manifest("demo_core", "").replace(
+            "publish.workspace = true\n",
+            "publish.workspace = true\nlicense = \"MIT OR Apache-2.0\"\n",
+        ),
+    );
+    project.check().assert_reports(
+        1,
+        "`[package] license` is \"MIT OR Apache-2.0\", but it must be `license.workspace = true`",
+    );
+
+    for crate_name in ["demo", "demo_core"] {
+        let dependencies = if crate_name == "demo" {
+            "demo_core.workspace = true\n"
+        } else {
+            ""
+        };
+        project.write(
+            &format!("crates/{crate_name}/Cargo.toml"),
+            &member_manifest(crate_name, dependencies).replace(
+                "publish.workspace = true\n",
+                "publish.workspace = true\nlicense.workspace = true\n",
+            ),
+        );
+    }
+    project.check().assert_passes();
+}
+
+#[test]
+fn a_member_needs_no_license_when_the_workspace_has_none() {
+    Project::new().check().assert_passes();
+}
+
+#[test]
+fn a_member_outside_crates_fails() {
+    let project = Project::new();
+    project.write("tools/gen/Cargo.toml", &member_manifest("gen", ""));
+    project.write("tools/gen/src/lib.rs", "//! Generates.\n");
+    project.edit_root_manifest(
+        "members = [\"crates/*\"]",
+        "members = [\"crates/*\", \"tools/gen\"]",
+    );
+    project.lock();
+    project.check().assert_reports(
+        1,
+        "error: [workspace_shape] tools/gen/Cargo.toml: The workspace member `gen` lives in \
+         `tools/gen`",
+    );
+}
+
+#[test]
+fn a_nested_member_fails() {
+    let project = Project::new();
+    project.write("crates/demo/gen/Cargo.toml", &member_manifest("gen", ""));
+    project.write("crates/demo/gen/src/lib.rs", "//! Generates.\n");
+    project.edit_root_manifest(
+        "members = [\"crates/*\"]",
+        "members = [\"crates/*\", \"crates/demo/gen\"]",
+    );
+    project.lock();
+    project.check().assert_reports(
+        1,
+        "error: [workspace_shape] crates/demo/gen/Cargo.toml: The workspace member `gen` lives \
+         in `crates/demo/gen`",
+    );
+}
+
+#[test]
+fn a_path_dependency_in_the_workspace_is_a_member_that_must_live_under_crates() {
+    let project = Project::new();
+    project.write("tools/gen/Cargo.toml", &member_manifest("gen", ""));
+    project.write("tools/gen/src/lib.rs", "//! Generates.\n");
+    project.write(
+        "crates/demo_core/Cargo.toml",
+        &member_manifest("demo_core", "gen = { path = \"../../tools/gen\" }\n"),
+    );
+    project.lock();
+    project.check().assert_reports(
+        1,
+        "error: [workspace_shape] tools/gen/Cargo.toml: The workspace member `gen` lives in \
+         `tools/gen`",
+    );
+}
+
+#[test]
+fn a_package_under_crates_that_isnt_a_member_fails() {
+    let project = Project::new();
+    project.write("crates/extra/Cargo.toml", &member_manifest("extra", ""));
+    project.write("crates/extra/src/lib.rs", "//! Extra.\n");
+    project.edit_root_manifest(
+        "members = [\"crates/*\"]",
+        "members = [\"crates/demo\", \"crates/demo_core\"]",
+    );
+    project.lock();
+    project.check().assert_reports(
+        1,
+        "error: [workspace_shape] crates/extra/Cargo.toml: This package isn't a workspace member",
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn a_member_whose_crate_directory_is_a_symbolic_link_fails() {
+    let project = Project::new();
+    fs::create_dir_all(project.path().join("tools")).expect("tools/ should be created");
+    fs::rename(
+        project.path().join("crates/demo_core"),
+        project.path().join("tools/demo_core"),
+    )
+    .expect("the crate should move");
+    unix::fs::symlink(
+        "../tools/demo_core",
+        project.path().join("crates/demo_core"),
+    )
+    .expect("the link should be created");
+    let run = project.check();
+    run.assert_reports(
+        1,
+        "error: [workspace_shape] crates/demo_core: The workspace member `demo_core` lives in \
+         `crates/demo_core`, which is a symbolic link",
+    );
+    run.assert_reports(
+        1,
+        "error: [member_sources] crates/demo_core: This is a symbolic link in or above the crate \
+         `demo_core`",
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn a_member_under_a_linked_crates_directory_fails() {
+    let project = Project::new();
+    fs::rename(project.path().join("crates"), project.path().join("tools"))
+        .expect("crates/ should move");
+    unix::fs::symlink("tools", project.path().join("crates")).expect("the link should be created");
+    project.check().assert_reports(
+        1,
+        "error: [workspace_shape] crates: This is a symbolic link, so the crates' files sit \
+         elsewhere",
     );
 }

@@ -17,9 +17,12 @@ use crate::{case_insensitive, toml_file};
 /// lints. A case-insensitive file system finds `Build.rs` when Cargo looks for `build.rs`.
 ///
 /// It also checks that each crate the setting lists is a member with a build script, so the list
-/// doesn't keep allowing one after the crate stops needing it. The list entry, the `build.rs`, the
-/// `build` key and the `[build-dependencies]` are all rules, so adding or removing a build script
-/// is one rule change that holds all of them, and no order of landing needs a stale entry.
+/// doesn't keep allowing one after the crate stops needing it. The list entry, the `build` key,
+/// the `[build-dependencies]` and the script's own file, the crate's `build.rs` or the file the
+/// key names, are all rules, so adding or removing a build script is one rule change that holds
+/// all of them, and no order of landing needs a stale entry. The modules the script reads and the
+/// crates it calls are code, like the crate's other sources, so once a crate is listed, a code
+/// change can still change what its build script emits; the list entry is what review weighs.
 ///
 /// `build = false`, which turns off Cargo's automatic `build.rs`, is allowed.
 ///

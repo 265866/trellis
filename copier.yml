@@ -86,6 +86,18 @@ visibility:
     Public: public
     Private: private
   default: public
+  # Copier drops a stored answer that fails its validator and takes the default, without asking.
+  # So a check that compares two answers refuses only when its own question's answer is passed in
+  # this run, and leaves a stored answer to the other question's check. Without this one, a
+  # published library's `publish_crate` would turn off. A stored or `--data-file` answer is a
+  # boolean here, and a `--data publish_crate=...` value is still a string, which `publish_crate`'s
+  # validator checks.
+  validator: >-
+    {% if visibility == 'private' and 'visibility' in _copier_conf.data and publish_crate is defined
+    and publish_crate is sameas true %}
+    A crate on crates.io is public, so a published library's repository stays public. To make it
+    private, stop publishing too: pass `--data publish_crate=false`.
+    {% endif %}
 
 platforms:
   type: str
@@ -128,10 +140,18 @@ publish_crate:
     library has no optional features.
   default: false
   when: "{{ kind == 'library' }}"
+  # The license comes after this question, so it is defined here only when it is stored or
+  # passed. Without the license check, Copier would drop a stored `none`, which fails the
+  # license's validator, and license the crate under the default. Like `visibility`'s check, it
+  # applies only when `publish_crate` is passed, since otherwise Copier would drop a stored `true`
+  # and unpublish the crate; the license's own validator refuses a passed `none` then.
   validator: >-
     {% if publish_crate and visibility == 'private' %}
     A crate on crates.io is public, so a private library can't publish one. Answer no, or make the
     repository public.
+    {% elif publish_crate and 'publish_crate' in _copier_conf.data and license is defined
+    and license == 'none' %}
+    crates.io needs a license for a published crate. Pass one too, such as `--data license=MIT`.
     {% endif %}
 
 license:

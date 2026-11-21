@@ -271,8 +271,7 @@ fn the_working_tree_counts_staged_unstaged_and_untracked_files() {
         changed.rules(),
         [
             ".github/workflows/check.yml",
-            ".gitignore (untracked; commit it in a rules pull request, or ignore it in \
-             .git/info/exclude)",
+            ".gitignore",
             "clippy.toml",
             "deny.toml"
         ],
@@ -723,7 +722,8 @@ fn adding_a_build_script_with_its_build_dependency_is_one_rule_change() {
         changed.rules(),
         [
             "Cargo.toml (outside [workspace.dependencies] and [patch])".to_owned(),
-            "crates/app/Cargo.toml ([build-dependencies] and the build key)".to_owned(),
+            "crates/app/Cargo.toml ([build-dependencies], the build key and the license key)"
+                .to_owned(),
             "crates/app/build.rs".to_owned(),
         ],
         "the build script, its build dependencies and its policy entry are rules"
@@ -925,4 +925,178 @@ fn an_expectation_beside_a_code_change_in_one_file_is_code() {
         "an expectation beside a code change is code"
     );
     assert!(changed.rules().is_empty(), "{:?}", changed.rules());
+}
+
+#[test]
+fn inheriting_the_workspace_license_is_one_rule_change() {
+    let repository = Repository::new();
+    repository.write(
+        "Cargo.toml",
+        &ROOT_MANIFEST.replace(
+            "\n[workspace.dependencies]",
+            "\n[workspace.package]\nlicense = \"MIT\"\n\n[workspace.dependencies]",
+        ),
+    );
+    repository.write(
+        "crates/app/Cargo.toml",
+        &MEMBER_MANIFEST.replace(
+            "name = \"app\"\n",
+            "name = \"app\"\nlicense.workspace = true\n",
+        ),
+    );
+    repository.write("LICENSE", "MIT License\n");
+    repository.commit("license the project");
+
+    let changed = repository.changed_files();
+    assert_eq!(
+        changed.rules(),
+        [
+            "Cargo.toml (outside [workspace.dependencies] and [patch])".to_owned(),
+            "crates/app/Cargo.toml ([build-dependencies], the build key and the license key)"
+                .to_owned(),
+        ],
+        "the license answer and each crate's license line land in one rule change"
+    );
+    assert!(
+        changed.code().is_empty(),
+        "nothing else changed: {:?}",
+        changed.code()
+    );
+}
+
+#[test]
+fn nested_tool_settings_are_rules_and_a_web_app_is_code() {
+    let repository = Repository::new();
+    repository.write("crates/app/src/.ignore", "lib.rs\n");
+    repository.write("crates/app/.gitignore", "/src/lib.rs\n");
+    repository.write(
+        "crates/app/web/tsconfig.json",
+        "{ \"compilerOptions\": {} }\n",
+    );
+    repository.write("crates/app/web/bunfig.toml", "[install]\n");
+    repository.write("crates/app/web/.npmrc", "ignore-scripts=false\n");
+    repository.write(
+        "crates/app/web/package.json",
+        "{ \"scripts\": { \"check\": \"true\" } }\n",
+    );
+    repository.write("crates/app/web/src/main.ts", "export {};\n");
+    repository.commit("add a web app and settings files");
+
+    let changed = repository.changed_files();
+    assert_eq!(
+        changed.rules(),
+        [
+            "crates/app/.gitignore",
+            "crates/app/src/.ignore",
+            "crates/app/web/.npmrc",
+            "crates/app/web/bunfig.toml",
+            "crates/app/web/tsconfig.json",
+        ],
+        "a tool's settings file is a rule at any depth"
+    );
+    assert_eq!(
+        changed.code(),
+        ["crates/app/web/package.json", "crates/app/web/src/main.ts"],
+        "the web app's manifest and sources are code"
+    );
+}
+
+/// The member manifest of `app` with `build = "gen.rs"`.
+const GEN_MANIFEST: &str =
+    "[package]\nname = \"app\"\nbuild = \"gen.rs\"\n\n[lints]\nworkspace = true\n";
+
+/// A repository whose `base` has the member `app` with the build script `gen.rs`, which its
+/// `build` key names, and the helper module `helper.rs` the script uses.
+fn repository_with_a_named_build_script() -> Repository {
+    let repository = Repository::new();
+    repository.write("crates/app/Cargo.toml", GEN_MANIFEST);
+    repository.write("crates/app/gen.rs", "mod helper;\n\nfn main() {}\n");
+    repository.write("crates/app/helper.rs", "pub fn help() {}\n");
+    repository.commit("add a build script under another name");
+    repository.git(&["branch", "--force", "base"]);
+    repository
+}
+
+#[test]
+fn a_build_script_the_build_key_names_is_a_rule() {
+    let repository = repository_with_a_named_build_script();
+    repository.write(
+        "crates/app/gen.rs",
+        "mod helper;\n\nfn main() {\n    println!(\"cargo::rustc-cfg=hidden\");\n}\n",
+    );
+    repository.write(
+        "crates/app/src/lib.rs",
+        "//! The app.\n\n#[cfg(hidden)]\npub fn unchecked() {}\n",
+    );
+    repository.commit("hide code behind a cfg the build script sets");
+
+    let changed = repository.changed_files();
+    assert_eq!(
+        changed.rules(),
+        ["crates/app/gen.rs (the build script its crate's build key names)"],
+        "the file the build key names is the crate's build script"
+    );
+    assert!(
+        changed.mixes_rules_and_code(),
+        "a build script change beside code fails"
+    );
+}
+
+#[test]
+fn a_build_script_named_at_either_end_is_a_rule() {
+    let repository = repository_with_a_named_build_script();
+    repository.write(
+        "crates/app/Cargo.toml",
+        &GEN_MANIFEST.replace("build = \"gen.rs\"", "build = \"./scripts/../make.rs\""),
+    );
+    repository.git(&["mv", "crates/app/gen.rs", "crates/app/make.rs"]);
+    repository.commit("rename the build script");
+
+    let changed = repository.changed_files();
+    assert_eq!(
+        changed.rules(),
+        [
+            "crates/app/Cargo.toml ([build-dependencies], the build key and the license key)",
+            "crates/app/gen.rs (the build script its crate's build key names)",
+            "crates/app/make.rs (the build script its crate's build key names)",
+        ],
+        "the script the base names and the one the head names are both rules"
+    );
+    assert!(
+        changed.code().is_empty(),
+        "nothing else changed: {:?}",
+        changed.code()
+    );
+
+    repository.write("crates/app/make.rs", "fn main() {}\n");
+    let changed = repository.changed_files_to(&Head::WorkingTree);
+    assert!(
+        changed.rules().contains(
+            &"crates/app/make.rs (the build script its crate's build key names)".to_owned()
+        ),
+        "the working tree's manifest names the script too: {:?}",
+        changed.rules()
+    );
+}
+
+#[test]
+fn a_build_script_module_stays_code() {
+    let repository = repository_with_a_named_build_script();
+    repository.write(
+        "crates/app/helper.rs",
+        "pub fn help() {}\npub fn more() {}\n",
+    );
+    repository.commit("change the build script's module");
+
+    let changed = repository.changed_files();
+    assert!(
+        changed.rules().is_empty(),
+        "only the file the build key names is a rule, not the modules it reads: {:?}",
+        changed.rules()
+    );
+    assert_eq!(
+        changed.code(),
+        ["crates/app/helper.rs"],
+        "the module is code"
+    );
 }

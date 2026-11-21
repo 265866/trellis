@@ -2,6 +2,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
+use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 
 use toml::{Table, Value};
@@ -14,8 +15,19 @@ use crate::{agent_files, case_insensitive, git, lint_expectations, source_path, 
 /// Directories whose every file is a rule: the workflows.
 const RULE_DIRECTORIES: [&str; 1] = [".github/"];
 
-/// File names that are rules in any directory: the check recipes.
-const RULE_NAMES: [&str; 2] = ["justfile", ".justfile"];
+/// File names that are rules in any directory: the check recipes, and the settings files tools
+/// read from the directory they check and its ancestors. An ignore file hides files from git,
+/// `typos` and the checks that list the repository's files, and the TypeScript, Bun and npm
+/// settings change what a web UI's check and install do.
+const RULE_NAMES: [&str; 7] = [
+    "justfile",
+    ".justfile",
+    ".gitignore",
+    ".ignore",
+    "tsconfig.json",
+    "bunfig.toml",
+    ".npmrc",
+];
 
 /// The extensions of the images that the pages under `docs/` show, which are neither rules nor
 /// code, like the pages.
@@ -45,14 +57,16 @@ const OTHER_FILES: [&str; 5] = [
 ];
 
 /// The files a branch changes, split into rules and code. The rules are the tool configuration
-/// files, such as the lint, format and dependency settings, the build scripts, the check recipes,
-/// the workflows, `CONTRIBUTING.md`, the template answers, every agent instruction file, the root
-/// `Cargo.toml` outside its dependency tables, the part of a member `Cargo.toml` that holds the
-/// build script's settings, and any file the lists here don't know, which the listing marks when
-/// it is only untracked; the code is every other change under `crates/` and every Rust file
-/// elsewhere, except a Rust file whose change only adds, removes, moves or changes lint
-/// expectations, which is neither. A pull request changes one or the other, so review sees every
-/// loosened rule apart from the code that might have needed it.
+/// files, such as the lint, format and dependency settings, the ignore files and a web UI's
+/// TypeScript, Bun and npm settings, the build scripts, including the file a member's `build` key
+/// names at either end, the check recipes, the workflows, `CONTRIBUTING.md`, the template answers,
+/// every agent instruction file, the root `Cargo.toml` outside its dependency tables, the part of
+/// a member `Cargo.toml` that holds the build script's settings and the license, and any file the
+/// lists here don't know, which the listing marks when it is only untracked; the code is every
+/// other change under `crates/` and every Rust file elsewhere, except a Rust file whose change
+/// only adds, removes, moves or changes lint expectations, which is neither. A pull request
+/// changes one or the other, so review sees every loosened rule apart from the code that might
+/// have needed it.
 #[derive(Debug, Default)]
 pub struct ChangedFiles {
     /// The changed rule files.
@@ -77,26 +91,13 @@ impl ChangedFiles {
         };
         let merge_base = git::run(&top, &["merge-base", base, head_revision])?;
         let merge_base = merge_base.trim();
-        let mut paths = BTreeSet::new();
-        let mut untracked = BTreeSet::new();
-        let diff = ["diff", "--name-only", "--no-renames", "-z"];
-        let listings: Vec<Vec<&str>> = match head {
-            Head::Commit(revision) => vec![[&diff[..], &[merge_base, revision.as_str()]].concat()],
-            Head::WorkingTree => {
-                let output = git::run(&top, &["ls-files", "-z", "--others", "--exclude-standard"])?;
-                untracked.extend(git::paths(&output).map(str::to_owned));
-                vec![
-                    [&diff[..], &["--cached", merge_base]].concat(),
-                    [&diff[..], &[merge_base]].concat(),
-                ]
-            }
+        let ChangedPaths { paths, untracked } = ChangedPaths::between(&top, merge_base, head)?;
+        let head_commit = match head {
+            Head::WorkingTree => None,
+            Head::Commit(revision) => Some(revision.as_str()),
         };
-        for arguments in listings {
-            let output = git::run(&top, &arguments)?;
-            paths.extend(git::paths(&output).map(str::to_owned));
-        }
-        untracked.retain(|path| !paths.contains(path));
-        paths.extend(untracked.iter().cloned());
+        let mut build_scripts = named_build_scripts(&top, Some(merge_base))?;
+        build_scripts.extend(named_build_scripts(&top, head_commit)?);
         let mut changed = Self::default();
         let mut nesting = BTreeMap::new();
         let versions = |path: &str| {
@@ -118,6 +119,16 @@ impl ChangedFiles {
                 }
                 role => role,
             };
+            let is_key_named_build_script = matches!(role, Role::Code | Role::Other)
+                && build_scripts
+                    .iter()
+                    .any(|script| case_insensitive::eq(script, &path));
+            if is_key_named_build_script {
+                changed.rules.push(format!(
+                    "{path} (the build script its crate's build key names)"
+                ));
+                continue;
+            }
             match role {
                 Role::Unlisted if untracked.contains(&path) => {
                     changed.rules.push(format!("{path} {UNTRACKED_REMEDY}"));
@@ -145,9 +156,9 @@ impl ChangedFiles {
                     let (before, after) = versions(&path);
                     let change = member_manifest_change(before.as_deref(), after.as_deref());
                     if matches!(change, Some(ManifestChange::Rule | ManifestChange::Both)) {
-                        changed
-                            .rules
-                            .push(format!("{path} ([build-dependencies] and the build key)"));
+                        changed.rules.push(format!(
+                            "{path} ([build-dependencies], the build key and the license key)"
+                        ));
                     }
                     if matches!(change, Some(ManifestChange::Code | ManifestChange::Both)) {
                         changed.code.push(path);
@@ -178,6 +189,45 @@ impl ChangedFiles {
     }
 }
 
+/// The paths a change touches.
+struct ChangedPaths {
+    /// Every changed path, relative to the repository root.
+    paths: BTreeSet<String>,
+    /// The changed paths that are untracked files, which only a working-tree head has.
+    untracked: BTreeSet<String>,
+}
+
+impl ChangedPaths {
+    /// The paths changed from `merge_base` to `head` in the repository at `top`.
+    ///
+    /// # Errors
+    ///
+    /// Fails if git fails.
+    fn between(top: &Path, merge_base: &str, head: &Head) -> Result<Self, PolicyError> {
+        let mut paths = BTreeSet::new();
+        let mut untracked = BTreeSet::new();
+        let diff = ["diff", "--name-only", "--no-renames", "-z"];
+        let listings: Vec<Vec<&str>> = match head {
+            Head::Commit(revision) => vec![[&diff[..], &[merge_base, revision.as_str()]].concat()],
+            Head::WorkingTree => {
+                let output = git::run(top, &["ls-files", "-z", "--others", "--exclude-standard"])?;
+                untracked.extend(git::paths(&output).map(str::to_owned));
+                vec![
+                    [&diff[..], &["--cached", merge_base]].concat(),
+                    [&diff[..], &[merge_base]].concat(),
+                ]
+            }
+        };
+        for arguments in listings {
+            let output = git::run(top, &arguments)?;
+            paths.extend(git::paths(&output).map(str::to_owned));
+        }
+        untracked.retain(|path| !paths.contains(path));
+        paths.extend(untracked.iter().cloned());
+        Ok(Self { paths, untracked })
+    }
+}
+
 /// What a changed file is.
 #[derive(Debug, PartialEq, Eq)]
 enum Role {
@@ -190,7 +240,8 @@ enum Role {
     Code,
     /// The root `Cargo.toml`, which holds rules and the workspace's dependency versions.
     RootManifest,
-    /// A member's `Cargo.toml`, which is code apart from the build script's settings.
+    /// A member's `Cargo.toml`, which is code apart from the build script's settings and the
+    /// license.
     MemberManifest,
     /// Neither: the readme, the lockfile, the changelog, the licenses and the docs. A Rust file
     /// whose change only touches lint expectations is neither too, though its role is code: a
@@ -251,12 +302,13 @@ fn role(path: &str) -> Role {
 }
 
 /// Whether `path`, by its shape alone, is a rule as a package's build script: `build.rs` in any
-/// case and any directory, since Cargo runs the `build.rs` beside any package's `Cargo.toml` and
-/// no rule pins where members live. The exception is a file below a crate's `src/`, `tests/`,
-/// `benches/` or `examples/` directory, `crates/<crate>/src/build.rs` for one, which is a module,
-/// a test, a benchmark or an example unless a package is nested there. [`ChangedFiles::between`]
-/// still makes such a file a rule when the crate's directory holds any package manifest besides
-/// its own, at either side of the change, or when a side can't be read.
+/// case and any directory, since Cargo runs the `build.rs` beside any package's `Cargo.toml`, and
+/// a change can add a package anywhere before `trellis-policy check` sees it. The exception is a
+/// file below a crate's `src/`, `tests/`, `benches/` or `examples/` directory,
+/// `crates/<crate>/src/build.rs` for one, which is a module, a test, a benchmark or an example
+/// unless a package is nested there. [`ChangedFiles::between`] still makes such a file a rule
+/// when the crate's directory holds any package manifest besides its own, at either side of the
+/// change, or when a side can't be read.
 fn is_build_script(path: &str) -> bool {
     let directory = path.rsplit_once('/').map_or("", |(directory, _)| directory);
     let mut segments = directory.split('/');
@@ -278,6 +330,96 @@ fn is_named_build_script(path: &str) -> bool {
 /// system finds `cargo.toml` when Cargo looks for `Cargo.toml`.
 fn is_manifest(name: &str) -> bool {
     case_insensitive::eq(name, "Cargo.toml")
+}
+
+/// The paths, relative to the repository root, of the build scripts that the `build` key of each
+/// member manifest `crates/<crate>/Cargo.toml` names at `revision`, or in the working tree
+/// without one. `build = true` names `build.rs`. A path that leaves the repository names no file
+/// in it.
+///
+/// # Errors
+///
+/// Fails if git fails, or if the working tree's `crates/` exists but can't be read.
+fn named_build_scripts(
+    repository: &Path,
+    revision: Option<&str>,
+) -> Result<BTreeSet<String>, PolicyError> {
+    let crates = match revision {
+        Some(revision) => {
+            let output = git::run(
+                repository,
+                &["ls-tree", "-z", "--name-only", revision, "crates/"],
+            )?;
+            git::paths(&output).map(str::to_owned).collect()
+        }
+        None => working_tree_crates(repository)?,
+    };
+    let mut scripts = BTreeSet::new();
+    for directory in crates {
+        let manifest = format!("{directory}/Cargo.toml");
+        let text = match revision {
+            Some(revision) => show(repository, revision, &manifest),
+            None => fs::read_to_string(repository.join(&manifest)).ok(),
+        };
+        let Some(table) = text.and_then(|text| toml_file::parse(&text).ok()) else {
+            continue;
+        };
+        let names = match toml_file::lookup(&table, &["package", "build"]) {
+            Some(Value::Boolean(true)) => vec!["build.rs"],
+            Some(Value::String(name)) => vec![name.as_str()],
+            Some(Value::Array(names)) => names.iter().filter_map(Value::as_str).collect(),
+            _ => Vec::new(),
+        };
+        scripts.extend(
+            names
+                .into_iter()
+                .filter_map(|name| normalized(&format!("{directory}/{name}"))),
+        );
+    }
+    Ok(scripts)
+}
+
+/// The entries of the working tree's `crates/` directory under `repository`, as `crates/<name>`.
+///
+/// # Errors
+///
+/// Fails if `crates/` exists but can't be read.
+fn working_tree_crates(repository: &Path) -> Result<Vec<String>, PolicyError> {
+    let directory = repository.join("crates");
+    let read_error = |source| PolicyError::Read {
+        path: directory.clone(),
+        source,
+    };
+    let entries = match fs::read_dir(&directory) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(error) => return Err(read_error(error)),
+    };
+    let mut crates = Vec::new();
+    for entry in entries {
+        let name = entry.map_err(read_error)?.file_name();
+        crates.push(format!("crates/{}", name.to_string_lossy()));
+    }
+    Ok(crates)
+}
+
+/// `path`, relative to the repository root with `/` or `\` separators, with its `.` and `..`
+/// parts resolved, or `None` if it is absolute or climbs above the root.
+fn normalized(path: &str) -> Option<String> {
+    if path.starts_with(['/', '\\']) || path.contains(':') {
+        return None;
+    }
+    let mut parts = Vec::new();
+    for part in path.split(['/', '\\']) {
+        match part {
+            "" | "." => {}
+            ".." => {
+                parts.pop()?;
+            }
+            _ => parts.push(part),
+        }
+    }
+    Some(parts.join("/"))
 }
 
 /// Whether the root `Cargo.toml` changed anywhere but in `[workspace.dependencies]` and `[patch]`,
@@ -305,7 +447,7 @@ fn without_dependencies(text: &str) -> Option<Table> {
 /// Which part of a member's `Cargo.toml` a change touches.
 #[derive(Debug, PartialEq, Eq)]
 enum ManifestChange {
-    /// Only the build script's settings.
+    /// Only the rule settings.
     Rule,
     /// Only the rest, which is code.
     Code,
@@ -315,10 +457,10 @@ enum ManifestChange {
 
 /// What a change to a member's `Cargo.toml` from `before` to `after` touches, compared as parsed
 /// TOML, or `None` if nothing parses differently. The rule settings are `[build-dependencies]` on
-/// any platform and the `build` key of `[package]`, so a build script and the dependencies it
-/// needs land in one rule change. A proc-macro dependency is code: it lands with its first use,
-/// since `cargo shear` rejects a dependency nothing uses. A new, deleted or unparsable manifest is
-/// [`Code`].
+/// any platform and the `build` and `license` keys of `[package]`, so a build script and the
+/// dependencies it needs land in one rule change, and so does a license with the answer that
+/// sets it. A proc-macro dependency is code: it lands with its first use, since `cargo shear`
+/// rejects a dependency nothing uses. A new, deleted or unparsable manifest is [`Code`].
 ///
 /// [`Code`]: ManifestChange::Code
 fn member_manifest_change(before: Option<&str>, after: Option<&str>) -> Option<ManifestChange> {
@@ -347,15 +489,19 @@ struct ManifestParts {
 
 impl ManifestParts {
     /// The member manifest `table` split into its rule settings, which are `[build-dependencies]`
-    /// on any platform and the `build` key of `[package]`, and the rest. A `[target.<platform>]`
-    /// table or a `[target]` table left empty is dropped, so adding the first platform-specific
-    /// build dependency changes nothing else.
+    /// on any platform and the `build` and `license` keys of `[package]`, and the rest. The
+    /// license is a rule setting so that the pull request that changes the workspace's license
+    /// can change each crate's line with it. A `[target.<platform>]` table or a `[target]` table
+    /// left empty is dropped, so adding the first platform-specific build dependency changes
+    /// nothing else.
     fn split(mut table: Table) -> Self {
         let mut rules = BTreeMap::new();
-        if let Some(Value::Table(package)) = table.get_mut("package")
-            && let Some(build) = package.remove("build")
-        {
-            rules.insert(vec!["package".to_owned(), "build".to_owned()], build);
+        if let Some(Value::Table(package)) = table.get_mut("package") {
+            for key in ["build", "license"] {
+                if let Some(value) = package.remove(key) {
+                    rules.insert(vec!["package".to_owned(), key.to_owned()], value);
+                }
+            }
         }
         if let Some(build) = table.remove("build-dependencies") {
             rules.insert(vec!["build-dependencies".to_owned()], build);
@@ -536,6 +682,15 @@ mod tests {
             "AGENTS.md",
             "CONTRIBUTING.md",
             ".copier-answers.yml",
+            ".gitignore",
+            "crates/app/.gitignore",
+            "crates/app/src/.ignore",
+            ".ignore",
+            "crates/app/web/tsconfig.json",
+            "crates/app/web/bunfig.toml",
+            "crates/app/web/.npmrc",
+            "crates/app/web/.GitIgnore",
+            "crates/app/web/TSConfig.json",
         ] {
             assert_eq!(role(path), Role::Rule, "{path} should be a rule");
         }
@@ -593,6 +748,9 @@ mod tests {
             "crates/a/examples/build.rs",
             "crates/a/src/bin/build.rs",
             "crates/app/README.md",
+            "crates/app/web/package.json",
+            "crates/app/web/bun.lock",
+            "crates/app/web/src/main.ts",
             "docs/notes.rs",
             "src/main.rs",
             "tools/x/y.rs",
@@ -629,6 +787,22 @@ mod tests {
                 MEMBER.to_owned(),
                 format!("{MEMBER}\n[target.'cfg(windows)'.build-dependencies]\nwinres = \"0.1\"\n"),
                 "a platform-specific build dependency",
+            ),
+            (
+                MEMBER.to_owned(),
+                MEMBER.replace(
+                    "name = \"app\"\n",
+                    "name = \"app\"\nlicense.workspace = true\n",
+                ),
+                "inheriting the license",
+            ),
+            (
+                MEMBER.replace(
+                    "name = \"app\"\n",
+                    "name = \"app\"\nlicense.workspace = true\n",
+                ),
+                MEMBER.to_owned(),
+                "dropping the license",
             ),
         ] {
             assert_eq!(
@@ -768,7 +942,6 @@ mod tests {
     #[test]
     fn files_no_list_knows_are_unlisted_rules() {
         for path in [
-            ".gitignore",
             ".pre-commit-config.yaml",
             "cliff.toml",
             "docs/notes.txt",
