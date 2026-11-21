@@ -127,27 +127,26 @@ Beyond the Google guide, the workspace also turns on:
 - `rustdoc::unescaped_backticks`.
 - `trellis-policy check` (`just policy`): every crate has an entry in `internal_dependencies` and
   depends directly only on the workspace crates its entry lists, dev and build dependencies
-  included; a crate in `dev_only_crates` is allowed to every crate, but only as a dev-dependency.
-  So a new crate or a new edge between crates is a rule change. It also checks that every crate's
+  included; a crate in `dev_only_crates` is allowed to every crate, but only as a dev-dependency. So
+  a new crate or a new edge between crates is a rule change. It also checks that every crate's
   `[lints]` table is exactly `workspace = true`; that no crate has a build script unless
-  `build_script_crates` lists it, since a build script can set a `cfg` that hides code from the
-  lint runs, and that a listed crate's `build` key names a file in the crate's own directory, with
-  no `\\` in the path; that tool configuration files exist only at the root, with no variant name that would
+  `build_script_crates` lists it, since a build script can set a `cfg` that hides code from the lint
+  runs, and that a listed crate's `build` key names a file in the crate's own directory, with no `\`
+  in the path; that tool configuration files exist only at the root, with no variant name that would
   override them; that the workspace's members are exactly the packages one directory below
   `crates/`, with no symbolic link for `crates` or a crate's directory, since which changes are
-  rules depends on that place; that the workspace excludes
-  nothing, pulls in no non-member crate by path, and loads only the trellis lints as its dylint
-  library; that each crate's `Cargo.toml` holds only allowed keys (no `test = false`,
-  `harness = false` outside a `[[bench]]`, `auto*` or `required-features`), inherits `edition`,
-  `rust-version` and `publish`, and `license` when the workspace has one, and keeps its sources,
-  `#[path]` files included, inside the crate, with no symbolic link in or above its directory
-  and no git submodule, or other git repository, in or above it or anywhere under `crates/`;
-  that `.cargo/config.toml` holds only the Windows `+crt-static` flags; that a crate depends
-  directly only on proc-macro crates
-  listed in `proc_macro_crates`, since a proc macro writes code the custom lints don't check;
-  that the root `AGENTS.md` is the only file of instructions for coding agents; that every
-  crate's commits reach the release notes through `changelog_include` in `release-plz.toml`; and
-  that the docs keep the layout under [Documentation](#documentation).
+  rules depends on that place; that the workspace excludes nothing, pulls in no non-member crate by
+  path, and loads only the trellis lints as its dylint library; that each crate's `Cargo.toml` holds
+  only allowed keys (no `test = false`, `harness = false` outside a `[[bench]]`, `auto*` or
+  `required-features`), inherits `edition`, `rust-version` and `publish`, and `license` when the
+  workspace has one, and keeps its sources, `#[path]` files included, inside the crate, with no
+  symbolic link in or above its directory and no git submodule, or other git repository, in or above
+  it or anywhere under `crates/`; that `.cargo/config.toml` holds only the Windows `+crt-static`
+  flags; that a crate depends directly only on proc-macro crates listed in `proc_macro_crates`,
+  since a proc macro writes code the custom lints don't check; that the root `AGENTS.md` is the only
+  file of instructions for coding agents; that every crate's commits reach the release notes through
+  `changelog_include` in `release-plz.toml`; and that the docs keep the layout under
+  [Documentation](#documentation).
 - `overflow-checks` and `panic = "abort"` in release builds: an overflow stops the program rather
   than wrapping, and nothing catches a panic. `trellis-policy` fails a change that turns either
   off, including a per-package or `.cargo/config.toml` override.
