@@ -35,17 +35,17 @@ has, it runs:
 A generated project's check that fails is a trellis bug: fix the template, the lints or the
 checker, never the generated project.
 
-[docs/style.md](docs/style.md) is the generated projects' style guide, not trellis's own: it names
-checks such as `just policy` that only a project has. It is a copy of `template/docs/style.md`, and
-`just pins` keeps the two equal.
+[template/docs/style.md](template/docs/style.md) is the generated projects' style guide, not
+trellis's own: it names checks such as `just policy` that only a project has. Each project gets it
+as its `docs/style.md`.
 
 ## Change a rule
 
 A rule change reaches every project on its next update, and its update PR can't also change code. So
 a new lint or check must pass on the template's own files and on `just dependencies`. Add the way
-past it that it closes to `violations.sh`, and say what it enforces in `template/docs/style.md` and
-its copy `docs/style.md`. Nothing may get looser than the Google Rust Style Guide asks; a relaxation
-needs a false positive on code that follows it, shown in a test.
+past it that it closes to `violations.sh`, and say what it enforces in `template/docs/style.md`.
+Nothing may get looser than the Google Rust Style Guide asks; a relaxation needs a false positive on
+code that follows it, shown in a test.
 
 ## Add a lint
 
@@ -59,11 +59,11 @@ needs a false positive on code that follows it, shown in a test.
    saved to" a file for each fixture. Read it, and copy it to the fixture's name with `.stderr`
    for `.rs`, such as `lints/ui/<lint>/<lint>.stderr`, once every report in it is one you meant.
    The `--bless` flag the output suggests doesn't work here.
-5. Add its row to the "Checked by tools" table in `template/docs/style.md` and `docs/style.md`.
+5. Add its row to the "Checked by tools" table in `template/docs/style.md`.
 6. If it takes no exception, add it to `NO_EXCEPTION_LINTS` in `lints/src/suppression_policy.rs`
-   and to the list of lints without exceptions under "Silencing a lint" in both `style.md` files.
-   A lint whose reports all come from the crate root takes none, since an `expect` on an item
-   can't reach them. A lint that reports at an impl block, a trait or a module itself goes in
+   and to the style guide's list of lints without exceptions under "Silencing a lint". A lint
+   whose reports all come from the crate root takes none, since an `expect` on an item can't reach
+   them. A lint that reports at an impl block, a trait or a module itself goes in
    `BLOCK_LINTS` or `MODULE_LINTS` there instead, so its `expect` can go on it.
 7. If it takes a setting, add a field for it to `Config` in `lints/src/config.rs`, whose doc
    comment names the lint, and read it with `crate::config::get`. Every key is required and has no

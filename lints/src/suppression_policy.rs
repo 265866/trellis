@@ -174,7 +174,8 @@ const TOOL_GROUPS: &[&str] = &[
 ];
 
 const FIX_THE_CODE: &str = "fix what the lint reports; if the rule itself is wrong for the \
-                            workspace, change it in trellis's `lints/` and `docs/style.md`";
+                            workspace, change it in trellis's `lints/` and \
+                            `template/docs/style.md`";
 const LIST_THE_CRATE: &str = "use a function, type or trait; a macro goes only in a crate that \
                               `macro_crates` in `dylint.toml` lists, which is a rule change";
 

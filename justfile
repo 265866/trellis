@@ -231,7 +231,7 @@ pins:
       echo "error: template/CONTRIBUTING.md.jinja's rust-analyzer setting doesn't name the nightly in template/justfile.jinja" >&2
       status=1
     fi
-    for file in rustfmt.toml clippy.toml .taplo.toml .editorconfig .gitattributes .config/nextest.toml docs/style.md \
+    for file in rustfmt.toml clippy.toml .taplo.toml .editorconfig .gitattributes .config/nextest.toml \
       .github/workflows/pr-title.yml; do
       if ! cmp --quiet "$file" "template/$file"; then
         echo "error: $file differs from template/$file" >&2

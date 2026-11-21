@@ -49,7 +49,7 @@ warning: `expect` of `code_comment`, which has no exceptions
 LL |     expect(code_comment, reason = "the generated tables carry comments")
    |            ^^^^^^^^^^^^
    |
-   = help: fix what the lint reports; if the rule itself is wrong for the workspace, change it in trellis's `lints/` and `docs/style.md`
+   = help: fix what the lint reports; if the rule itself is wrong for the workspace, change it in trellis's `lints/` and `template/docs/style.md`
 
 warning: inner `#![expect(..)]` attribute
   --> $DIR/suppression_policy.rs:12:1
@@ -167,7 +167,7 @@ warning: `expect` of `code_comment`, which has no exceptions
 LL |     expect(code_comment, missing_workspace_lints, reason = "the parser is generated")
    |            ^^^^^^^^^^^^
    |
-   = help: fix what the lint reports; if the rule itself is wrong for the workspace, change it in trellis's `lints/` and `docs/style.md`
+   = help: fix what the lint reports; if the rule itself is wrong for the workspace, change it in trellis's `lints/` and `template/docs/style.md`
 
 warning: `expect` of `missing_workspace_lints`, which has no exceptions
   --> $DIR/suppression_policy.rs:60:26
@@ -175,7 +175,7 @@ warning: `expect` of `missing_workspace_lints`, which has no exceptions
 LL |     expect(code_comment, missing_workspace_lints, reason = "the parser is generated")
    |                          ^^^^^^^^^^^^^^^^^^^^^^^
    |
-   = help: fix what the lint reports; if the rule itself is wrong for the workspace, change it in trellis's `lints/` and `docs/style.md`
+   = help: fix what the lint reports; if the rule itself is wrong for the workspace, change it in trellis's `lints/` and `template/docs/style.md`
 
 warning: `expect` of `macro_definition`, which has no exceptions
   --> $DIR/suppression_policy.rs:68:12
@@ -279,7 +279,7 @@ warning: `expect` of `disabled_code`, which has no exceptions
 LL |     expect(disabled_code, suppression_policy, reason = "the guard is written by a code generator")
    |            ^^^^^^^^^^^^^
    |
-   = help: fix what the lint reports; if the rule itself is wrong for the workspace, change it in trellis's `lints/` and `docs/style.md`
+   = help: fix what the lint reports; if the rule itself is wrong for the workspace, change it in trellis's `lints/` and `template/docs/style.md`
 
 warning: `expect` of `suppression_policy`, which has no exceptions
   --> $DIR/suppression_policy.rs:153:27
@@ -287,7 +287,7 @@ warning: `expect` of `suppression_policy`, which has no exceptions
 LL |     expect(disabled_code, suppression_policy, reason = "the guard is written by a code generator")
    |                           ^^^^^^^^^^^^^^^^^^
    |
-   = help: fix what the lint reports; if the rule itself is wrong for the workspace, change it in trellis's `lints/` and `docs/style.md`
+   = help: fix what the lint reports; if the rule itself is wrong for the workspace, change it in trellis's `lints/` and `template/docs/style.md`
 
 warning: `expect` on a module
   --> $DIR/suppression_policy.rs:158:1
@@ -517,7 +517,7 @@ warning: `expect` of `doc_after_attribute`, which has no exceptions
 LL |     expect(doc_after_attribute, reason = "the derive reads better above the docs here")
    |            ^^^^^^^^^^^^^^^^^^^
    |
-   = help: fix what the lint reports; if the rule itself is wrong for the workspace, change it in trellis's `lints/` and `docs/style.md`
+   = help: fix what the lint reports; if the rule itself is wrong for the workspace, change it in trellis's `lints/` and `template/docs/style.md`
 
 warning: `allow` attribute
   --> $DIR/modules/hidden.rs:5:1

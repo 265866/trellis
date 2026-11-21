@@ -1,5 +1,5 @@
 //! Checks the structure rules of a trellis project that the compiler and the lints can't see.
-//! [The style guide](https://github.com/265866/trellis/blob/main/docs/style.md#checked-by-tools)
+//! [The style guide](https://github.com/265866/trellis/blob/main/template/docs/style.md#checked-by-tools)
 //! lists them under Checked by tools and Docs checked by just policy.
 //!
 //! The `trellis-policy check [--manifest-path <Cargo.toml>]` command runs every [`Rule`] on a
