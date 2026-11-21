@@ -91,10 +91,11 @@ Commit the generated project on a branch named `main` (`git init --initial-branc
 
 5. Check the settings. `just check-github` reports each one as ok or wrong, and fails if any is
    wrong. It checks that the `RELEASE_PLZ_TOKEN` secret exists, but GitHub never shows it a
-   secret's value, so the token's access is left to the check in step 4.
-{%- if visibility == 'private' %}
-   With no ruleset, as on a plan that can't protect `main`, it reports `main`'s protection as
-   unavailable rather than wrong.
+   secret's value, so the token's access is left to the check in step 4. A missing `main` ruleset,
+   one that isn't active and one that anything may bypass
+   are each wrong.
+{%- if visibility == 'private' %} When GitHub answers that the account's plan can't protect
+   `main` in a private repository, it reports `main`'s protection as unavailable rather than wrong.
 {%- endif %}
    On Windows, run it in Git Bash too:
 
@@ -166,6 +167,20 @@ files that name `crates/{{ crate_name }}/web`: `justfile`, `Containerfile`, `.gi
 `.dockerignore`. They are rules, so that move is a rules pull request, and the Layout rows can go
 in it.
 {%- endif %}
+
+GitHub's merge doesn't follow a moved directory, though git's does. When the move and another
+open pull request that changes any file in the moved crate both branched before either landed,
+GitHub refuses to merge whichever of the two lands second, and refuses its "Update branch" too,
+with a merge conflict. Update that pull request's branch on your machine and push it:
+
+```sh
+git switch <branch>
+git fetch origin
+git merge origin/main
+git push
+```
+
+Its diff then holds only its own change, at the crate's new path, and its checks run again.
 
 To rename a crate's package, use three pull requests. A rules pull request adds the new name to
 `internal_dependencies` as a key with the old name's list, and beside the old name in each list

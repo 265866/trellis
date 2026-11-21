@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Stands in for `gh api` in tests/check-github/test.sh: it serves the JSON file in $GH_FIXTURES
-# named after the endpoint, filtered with jq, and answers as gh does for a missing one.
+# named after the endpoint, filtered with jq, and answers as gh does for a missing one. A file with
+# the endpoint's name and `.error` holds an error for gh to print instead.
 set -euo pipefail
 if [ "${1:-}" != api ]; then
   echo "error: the fake gh only serves gh api, not: $*" >&2
@@ -20,6 +21,10 @@ while [ $# -gt 0 ]; do
 done
 name=$(sed -E 's#\?.*##; s#^repos/[^/]+/[^/]+/?##; s#/#-#g' <<< "$endpoint")
 file="$GH_FIXTURES/${name:-repository}.json"
+if [ -f "${file%.json}.error" ]; then
+  cat "${file%.json}.error" >&2
+  exit 1
+fi
 if [ ! -f "$file" ]; then
   echo "gh: Not Found (HTTP 404)" >&2
   exit 1

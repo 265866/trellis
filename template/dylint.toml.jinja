@@ -8,9 +8,15 @@ unsafe_crates = []
 # Type names that may be written with their module, such as `io::Error` (`qualified_type_path`).
 ambiguous_type_names = ["Error", "Result"]
 # Crates whose `#[doc(hidden)]` items this project owns and may use (`foreign_doc_hidden`).
-owned_crate_prefixes = ["{{ crate_name }}"]
+owned_crate_prefixes = [
+    "{{ crate_name }}",
+]
 # Lowercase words a doc comment may start with (`doc_starts_lowercase`).
-lowercase_doc_words = ["{{ project_name }}", "e.g.", "i.e."]
+lowercase_doc_words = [
+    "{{ project_name }}",
+    "e.g.",
+    "i.e.",
+]
 # Crates that may define macros (`macro_definition`). Listing a crate is a rule change.
 macro_crates = []
 # Crates whose macros may write `allow`, `warn`, `expect` and `ignore` attributes into this

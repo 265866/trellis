@@ -2,5 +2,6 @@
 
 #[test]
 fn greets_by_name() {
-    assert_eq!({{ crate_name }}::greeting("Ada"), "Hello, Ada!");
+    let greeting = {{ crate_name }}::greeting("Ada");
+    assert_eq!(greeting, "Hello, Ada!");
 }

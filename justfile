@@ -825,34 +825,44 @@ shapes: (shape "binary") (shape "binary-windows-macos-dual") (shape "library-pub
 # Actions policy and vulnerability reporting only for a public repository, without calling `gh`.
 # `just check-github` runs against the fixtures in tests/check-github/, and
 # `just check-release-token` and `just set-release-token` against the fake gh in
-# tests/check-release-token/.
+# tests/check-release-token/. The private binary and library get a 55-character name, the longest
+# Copier takes and the longest for which a binary's scaffold is formatted as generated, so a line
+# that fits only a short name fails `fmt-check`, and a name one character longer must be refused.
 #
 # Checks the project a user gets for one set of answers.
 shape answers:
     #!/usr/bin/env bash
     set -euo pipefail
+    name=demo-shape
     case "{{ answers }}" in
       binary) data=(--data kind=binary) ;;
       binary-windows-macos-dual) data=(--data kind=binary --data 'platforms=[windows, macos]' --data 'license=MIT OR Apache-2.0') ;;
       library-published) data=(--data kind=library --data publish_crate=true --data 'license=MIT OR Apache-2.0') ;;
       library-unlicensed) data=(--data kind=library --data license=none) ;;
       service-unlicensed) data=(--data kind=service --data license=none) ;;
-      binary-private) data=(--data kind=binary --data visibility=private) ;;
+      binary-private) data=(--data kind=binary --data visibility=private) name=demo-binary-with-the-longest-name-the-template-supports ;;
       service-private) data=(--data kind=service --data visibility=private) ;;
-      library-private) data=(--data kind=library --data visibility=private) ;;
+      library-private) data=(--data kind=library --data visibility=private) name=demo-library-with-the-longest-name-the-template-formats ;;
       *) echo "error: no answer set named {{ answers }}" >&2; exit 2 ;;
     esac
     trellis="{{ justfile_directory() }}"
     out=$(mktemp -d)
     trap 'rm -rf "$out"' EXIT
-    project="$out/demo-shape"
+    project="$out/$name"
     fail() { echo "error: {{ answers }}: $1" >&2; exit 1; }
     has() { grep --quiet --fixed-strings -- "$2" <<< "$1"; }
     copied=$(uv tool run copier@9.19.1 copy --defaults --vcs-ref HEAD \
-      --data project_name=demo-shape \
+      --data "project_name=$name" \
       --data "description=A demo that trellis generates for its tests." \
       "${data[@]}" "$trellis" "$project" 2>&1) || { echo "$copied" >&2; exit 1; }
-    has "$copied" 'Follow "Before the first push" in docs/maintaining.md. It creates 265866/demo-shape' \
+    if [ "${#name}" -eq 55 ]; then
+      longer=$(uv tool run copier@9.19.1 copy --defaults --vcs-ref HEAD \
+        --data "project_name=${name}x" \
+        --data "description=A demo that trellis generates for its tests." \
+        "${data[@]}" "$trellis" "$out/longer" 2>&1) && fail "Copier took a name of 56 characters"
+      has "$longer" 'Use at most 55 characters.' || fail "Copier refused a longer name for another reason: $longer"
+    fi
+    has "$copied" "Follow \"Before the first push\" in docs/maintaining.md. It creates 265866/$name" \
       || fail "Copier didn't print the next steps"
     has "$copied" 'cargo binstall just@' || fail "Copier's next steps don't install just"
     cd "$project"
@@ -890,11 +900,11 @@ shape answers:
     dry_run=$(PATH="$out/bin:$PATH" just setup-github --dry-run)
     for expected in '"context": "PR title", "integration_id": 15368' '"context": "CI passed", "integration_id": 15368' \
       '"context": "Rule changes stand alone", "integration_id": 15368' '"allow_merge_commit": false' \
-      'POST repos/265866/demo-shape/labels' '"name": "release"' 'POST repos/265866/demo-shape/rulesets'; do
+      "POST repos/265866/$name/labels" '"name": "release"' "POST repos/265866/$name/rulesets"; do
       has "$dry_run" "$expected" || fail "the setup-github dry run lacks $expected"
     done
     public=$(grep --quiet '^visibility: public$' .copier-answers.yml && echo yes || echo no)
-    for public_only in 'repos/265866/demo-shape/actions/policies' 'PUT repos/265866/demo-shape/private-vulnerability-reporting'; do
+    for public_only in "repos/265866/$name/actions/policies" "PUT repos/265866/$name/private-vulnerability-reporting"; do
       if has "$dry_run" "$public_only"; then
         [ "$public" = yes ] || fail "the setup-github dry run of a private repository has $public_only"
       else

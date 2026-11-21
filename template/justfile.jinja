@@ -431,29 +431,58 @@ check-github:
         | .parameters.required_status_checks[]
         | "\(.context) from \(if .integration_id == 15368 then "GitHub Actions" else .integration_id // "any source" end)"]
         | unique | join(", ")) + "; " + ([.[].type | select(. == "deletion" or . == "non_fast_forward" or . == "pull_request")] | unique | join(", "))'
-    {%- if visibility == 'private' %}
-    if ! rulesets=$(gh api --paginate "repos/$repo/rulesets?per_page=100" --jq '.[].id' 2> "$err"); then
-      grep --quiet 'Upgrade to GitHub' "$err" || { cat "$err" >&2; exit 1; }
-      rulesets=''
-    fi
-    if [ -z "$rulesets" ]; then
-      echo "unavailable: main's protection: there's no ruleset, and rulesets in a private repository need GitHub Pro or a paid organization plan; on one, run just setup-github"
-    elif rules=$(gh api "repos/$repo/rules/branches/main" --jq "$rules_jq" 2> "$err"); then
-    {%- else %}
-    if rules=$(gh api "repos/$repo/rules/branches/main" --jq "$rules_jq" 2> "$err"); then
-    {%- endif %}
-      verdict "main's required checks and rules" "$rules" \
-        "CI passed from GitHub Actions, PR title from GitHub Actions, Rule changes stand alone from GitHub Actions; deletion, non_fast_forward, pull_request"
-    else
-      cat "$err" >&2
-      exit 1
-    fi
     if ! classic=$(gh api "repos/$repo/branches/main/protection/required_status_checks" --jq '.contexts | join(", ")' 2> "$err"); then
       if ! grep --quiet 'HTTP 404\|Upgrade to GitHub' "$err"; then
         cat "$err" >&2
         exit 1
       fi
       classic=''
+    fi
+    {%- if visibility == 'private' %}
+    # GitHub gates rulesets and classic branch protection in a private repository behind the same
+    # plans, so either endpoint's "Upgrade to GitHub" answer means the plan lacks them.
+    plan_lacks_rules=$(grep --quiet 'Upgrade to GitHub' "$err" && echo yes || echo no)
+    {%- endif %}
+    if ! ruleset=$(gh api --paginate "repos/$repo/rulesets?includes_parents=false&per_page=100" \
+      --jq '[.[] | select(.name == "main" and .source_type == "Repository") | "\(.id) \(.enforcement)"] | first // empty' 2> "$err"); then
+      {%- if visibility == 'private' %}
+      grep --quiet 'Upgrade to GitHub' "$err" || { cat "$err" >&2; exit 1; }
+      plan_lacks_rules=yes
+      {%- else %}
+      cat "$err" >&2
+      exit 1
+      {%- endif %}
+    fi
+    read -r ruleset_id enforcement <<< "${ruleset:-}"
+    {%- if visibility == 'private' %}
+    if [ "$plan_lacks_rules" = yes ] && [ -z "$enforcement" ]; then
+      echo "unavailable: main's protection: GitHub says rulesets in a private repository need GitHub Pro or a paid organization plan; on one, run just setup-github"
+    elif [ -z "$enforcement" ]; then
+    {%- else %}
+    if [ -z "$enforcement" ]; then
+    {%- endif %}
+      echo "wrong: main's protection: there's no ruleset named main; run just setup-github"
+      wrong=1
+    elif [ "$enforcement" != active ]; then
+      echo "wrong: main's protection: the ruleset main is ${enforcement/evaluate/in evaluate mode}, so it protects nothing; run just setup-github"
+      wrong=1
+    else
+      # Only the ruleset itself lists who may bypass it, and only to an account that may change it.
+      bypass=$(gh api "repos/$repo/rulesets/$ruleset_id" --jq 'if (.bypass_actors | type) != "array" then "unreadable"
+        elif .bypass_actors == [] then "nothing"
+        else [.bypass_actors[] | "\(.actor_type) \(.actor_id) (\(.bypass_mode))"] | join(", ") end' 2> "$err") \
+        || { cat "$err" >&2; exit 1; }
+      verdict "what may bypass main's ruleset" "$bypass" nothing
+      # Another ruleset's rules don't count: this reads who may bypass only the one named main.
+      rules=$(gh api "repos/$repo/rules/branches/main" \
+        --jq "[.[] | select(.ruleset_id == $ruleset_id)] | $rules_jq" 2> "$err") || { cat "$err" >&2; exit 1; }
+      if [ "$rules" = '; ' ]; then
+        echo "wrong: main's protection: the ruleset main is active but applies no rule to the branch main; run just setup-github"
+        wrong=1
+      else
+        verdict "main's required checks and rules" "$rules" \
+          "CI passed from GitHub Actions, PR title from GitHub Actions, Rule changes stand alone from GitHub Actions; deletion, non_fast_forward, pull_request"
+      fi
     fi
     verdict "classic branch protection's required checks" "${classic:-none}" none
     token=$(gh api --paginate "repos/$repo/actions/secrets?per_page=100" --jq '.secrets[] | select(.name == "RELEASE_PLZ_TOKEN") | "present"')
