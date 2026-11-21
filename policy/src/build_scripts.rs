@@ -27,8 +27,9 @@ use crate::{case_insensitive, source_path, toml_file};
 /// A listed crate's `build` key names a file in the crate's directory. Outside it, the path could
 /// pass through a symbolic link that leads back to one of the crate's modules, and a change to
 /// that module would then change the build script as code. The key holds no `\`, which is a
-/// separator on Windows and part of a file name elsewhere, so that every system and the
-/// rule-change check agree on which file it names.
+/// separator on Windows and part of a file name elsewhere, and only ASCII characters, since a
+/// file system that ignores case or accents reads two other spellings as one file. So every
+/// system and the rule-change check agree on which file the key names.
 ///
 /// `build = false`, which turns off Cargo's automatic `build.rs`, is allowed.
 ///
@@ -60,6 +61,17 @@ pub fn check(workspace: &Workspace) -> Result<Vec<Violation>, PolicyError> {
                             "`build = {path:?}` in `[package]` names a build script outside the \
                              crate's directory, where no check looks for a symbolic link on the \
                              way to it. Move the file into the crate's directory."
+                        ),
+                    ));
+                }
+                if !path.is_ascii() {
+                    violations.push(Violation::new(
+                        workspace.relative(member.manifest_path()),
+                        format!(
+                            "`build = {path:?}` in `[package]` holds a character outside ASCII. \
+                             File systems disagree on which such names are one file, so no check \
+                             can tell which file the key names everywhere. Give the file an ASCII \
+                             name."
                         ),
                     ));
                 }

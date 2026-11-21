@@ -205,6 +205,30 @@ fn a_build_key_that_leaves_the_crate_fails() {
 }
 
 #[test]
+fn a_build_key_outside_ascii_fails() {
+    let fixture = Fixture::new("build_script_crates = [\"app\"]\n");
+    for (path, is_ascii) in [
+        ("scripts/make.rs", true),
+        ("scripts/\u{c9}t\u{e9}.rs", false),
+    ] {
+        fixture.write(
+            "crates/app/Cargo.toml",
+            &APP_MANIFEST.replace(
+                "edition = \"2024\"\n",
+                &format!("edition = \"2024\"\nbuild = \"{path}\"\n"),
+            ),
+        );
+        let violations =
+            build_scripts::check(&fixture.workspace()).expect("the members should be readable");
+        assert_eq!(
+            mentions(&violations, "holds a character outside ASCII"),
+            !is_ascii,
+            "`build = \"{path}\"` on a listed crate: {violations:?}"
+        );
+    }
+}
+
+#[test]
 fn a_build_key_with_a_backslash_fails() {
     let fixture = Fixture::new("build_script_crates = [\"app\"]\n");
     for (path, has_a_backslash) in [("scripts/make.rs", false), ("scripts\\\\x/make.rs", true)] {

@@ -63,10 +63,10 @@ fn fold(character: char) -> impl Iterator<Item = char> {
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
     use std::io::Write as _;
     use std::path::Path;
     use std::process::{Command, Stdio};
+    use std::{env, fs};
 
     use tempfile::TempDir;
 
@@ -146,6 +146,12 @@ mod tests {
         assert!(
             !git_refuses("xy"),
             "git writes an ordinary name, so a refusal below is about the name"
+        );
+        let ignores_case = fs::read_to_string(directory.path().join("A")).is_ok();
+        assert!(
+            ignores_case || !matches!(env::consts::OS, "macos" | "windows"),
+            "the temporary directory keeps case apart, so this test would ask nothing here; run \
+             it on a volume that ignores case, as macOS and Windows do by default"
         );
         let mut missed = Vec::new();
         for candidate in candidates {
