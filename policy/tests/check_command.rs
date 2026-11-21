@@ -1892,6 +1892,22 @@ fn a_member_outside_crates_fails() {
 }
 
 #[test]
+fn a_member_directory_outside_ascii_fails() {
+    let project = Project::new();
+    project.write(
+        "crates/\u{e9}t\u{e9}/Cargo.toml",
+        &member_manifest("ete", ""),
+    );
+    project.write("crates/\u{e9}t\u{e9}/src/lib.rs", "//! Summer.\n");
+    project.lock();
+    project.check().assert_reports(
+        1,
+        "error: [workspace_shape] crates/\u{e9}t\u{e9}: The workspace member `ete` lives in \
+         `crates/\u{e9}t\u{e9}`, whose name holds a character outside ASCII.",
+    );
+}
+
+#[test]
 fn a_nested_member_fails() {
     let project = Project::new();
     project.write("crates/demo/gen/Cargo.toml", &member_manifest("gen", ""));

@@ -353,13 +353,17 @@ enum Role {
 
 /// What the file at `path`, relative to the repository root, is. Rule names match in any case,
 /// since a case-insensitive file system finds `Clippy.toml` or `Build.rs` for the name a tool
-/// looks for; the names that make a file code or neither match exactly.
+/// looks for; the names that make a file code or neither match exactly. A path Windows reads as
+/// another path is a rule that no list knows, whatever it names.
 fn role(path: &str) -> Role {
     if path == "Cargo.toml" {
         return Role::RootManifest;
     }
     if OTHER_FILES.contains(&path) {
         return Role::Other;
+    }
+    if source_path::windows_reads_as_another(path) {
+        return Role::Unlisted;
     }
     let name = path.rsplit('/').next().unwrap_or(path);
     if name == "Cargo.toml" && path.starts_with("crates/") {
@@ -813,6 +817,25 @@ mod tests {
             "Renovate.json",
         ] {
             assert_eq!(role(path), Role::Rule, "{path} should be a rule");
+        }
+    }
+
+    #[test]
+    fn a_path_windows_reads_as_another_is_a_rule() {
+        for path in [
+            "crates/app/build.rs.",
+            "crates/app/build.rs ",
+            "crates/app/build.rs. .",
+            "crates/app/build.rs::$DATA",
+            "crates/app./Cargo.toml",
+            "crates/app /src/lib.rs",
+            "crates/app\\build.rs",
+            "docs/notes.md.",
+        ] {
+            assert_eq!(role(path), Role::Unlisted, "{path:?} should be a rule");
+        }
+        for path in ["crates/app/src/lib.rs", "crates/app/src/.hidden.rs"] {
+            assert_eq!(role(path), Role::Code, "{path:?} should be code");
         }
     }
 

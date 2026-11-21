@@ -24,6 +24,16 @@ pub(crate) fn escapes(depth: usize, path: &str) -> bool {
     false
 }
 
+/// Whether Windows reads `path`, written with `/` separators, as another path. It drops dots and
+/// spaces from the end of each part, reads a `:` as the start of a stream of the file before it,
+/// and reads a `\` as a separator, so `build.rs.` and `build.rs::$DATA` are `build.rs` there. Git
+/// for Windows refuses to check such a path out, but only while its `core.protectNTFS` setting is
+/// on.
+pub(crate) fn windows_reads_as_another(path: &str) -> bool {
+    path.split('/')
+        .any(|part| part.contains([':', '\\']) || part.ends_with(['.', ' ']))
+}
+
 /// Whether `path` names a Rust source file: one whose extension is `rs` in any case, since a
 /// case-insensitive file system finds `lib.RS` for `lib.rs`.
 pub(crate) fn is_rust(path: &str) -> bool {

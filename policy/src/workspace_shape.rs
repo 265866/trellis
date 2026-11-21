@@ -81,8 +81,9 @@ pub fn check(workspace: &Workspace) -> Result<Vec<Violation>, PolicyError> {
     Ok(violations)
 }
 
-/// Reports each member that isn't `crates/<name>`, or whose `crates/<name>` or `crates` is a
-/// symbolic link, and each package `crates/<name>` that isn't a member.
+/// Reports each member that isn't `crates/<name>`, whose `<name>` isn't ASCII, or whose
+/// `crates/<name>` or `crates` is a symbolic link, and each package `crates/<name>` that isn't a
+/// member.
 ///
 /// # Errors
 ///
@@ -98,6 +99,18 @@ fn member_places(
             .strip_prefix("crates/")
             .is_some_and(|name| !name.is_empty() && !name.contains('/'));
         if in_crates {
+            if !place.is_ascii() {
+                violations.push(Violation::new(
+                    place.clone(),
+                    format!(
+                        "The workspace member `{}` lives in `{place}`, whose name holds a \
+                         character outside ASCII. File systems disagree on which such names are \
+                         one directory, so no check can tell which files are the crate's \
+                         everywhere. Give the directory an ASCII name.",
+                        member.name()
+                    ),
+                ));
+            }
             let path = workspace.root().join(&place);
             let metadata =
                 fs::symlink_metadata(&path).map_err(|source| PolicyError::Read { path, source })?;
