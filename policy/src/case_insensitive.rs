@@ -13,6 +13,12 @@ pub(crate) fn eq(left: &str, right: &str) -> bool {
     left.chars().flat_map(fold).eq(right.chars().flat_map(fold))
 }
 
+/// `name` as a case-insensitive file system compares it, so two names that it reads as one fold
+/// to the same text. A `/` stays a `/`.
+pub(crate) fn folded(name: &str) -> String {
+    name.chars().flat_map(fold).collect()
+}
+
 /// `path` without `prefix`, if `path` starts with it in any case.
 pub(crate) fn strip_prefix<'a>(path: &'a str, prefix: &str) -> Option<&'a str> {
     let mut expected = prefix.chars().flat_map(fold).peekable();

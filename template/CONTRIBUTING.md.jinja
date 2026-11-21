@@ -32,9 +32,12 @@ Add a row for each crate you add, in the same pull request as the rule change th
 
 Every crate is a workspace member one directory below `crates/`, as `crates/<name>`. That is a
 rule: `just policy` fails a member anywhere else, a nested one included, a crate directory or
-`crates` that is a symbolic link, a crate directory whose name isn't ASCII, and a package there
-that isn't a member, because which changes are rules depends on that place. It also fails a git
-submodule, or any other git repository, under `crates/`, since no check sees its files.
+`crates` that is a symbolic link, a crate directory whose name isn't ASCII or that Windows reads
+as another name, ending in a dot or a space or holding a `:` or a `\`, and a package there that
+isn't a member, because which changes are rules depends on that place. It also fails a git
+submodule, or any other git repository, under `crates/`, since no check sees its files, and two
+paths anywhere in the repository that macOS and Windows read as one, such as two crate directories
+whose names differ only in letter case.
 
 ## Set up
 
@@ -159,7 +162,8 @@ one:
   in `release-plz.toml`, so its commits reach the release notes. A build script needs the crate in
   `build_script_crates`, and a direct dependency on a proc-macro crate needs that crate in
   `proc_macro_crates`. These settings are rules, so a new crate or a new edge between crates is a
-  rule change.
+  rule change. To rename a crate, follow "Rename a crate" in
+  [docs/maintaining.md](docs/maintaining.md#rename-a-crate).
 {%- if kind == 'library' and publish_crate %}
 - **Publishing.** Every crate is published to crates.io. A new crate needs a first manual publish
   and a trusted publisher on crates.io before the next release, which only the owner can set up;
@@ -239,7 +243,14 @@ crate's `src/`, `tests/`, `benches/` or `examples/` when the crate's directory h
 `Cargo.toml`, in any letter case, before or after the change. The file a crate's `build` key
 names is a rule as well, as is every `.gitignore`, `.ignore`, `tsconfig.json`, `bunfig.toml`,
 `.npmrc` and git submodule, wherever it sits, and every path Windows reads as another path: one
-with a part that ends in a dot or a space, or that holds a `:` or a `\`.
+with a part that ends in a dot or a space, or that holds a `:` or a `\`. `just policy` fails a
+`tsconfig.json` whose `extends` or `references` names anything but another `tsconfig.json` in the
+repository, by a path that starts with `./` or `../`, so every file TypeScript reads its settings
+from is a rule. A crate whose directory moves whole, renamed with no file in it changed, is
+neither, so a crate's directory can move in one pull request beside the `path` of each dependency
+on it. A file in the crate that reads its own location, such as a build script that reads
+`CARGO_MANIFEST_DIR`, can then do something else, as a code change can change what a listed build
+script emits.
 {%- if web_ui %} The web UI's `package.json`, its scripts and its sources are code, outside
 the rule split, so a code pull request can change what its `check` script runs.
 {%- endif %}

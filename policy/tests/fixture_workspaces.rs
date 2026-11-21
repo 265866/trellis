@@ -144,8 +144,8 @@ fn a_build_script_crate_entry_without_a_build_script_fails() {
         build_scripts::check(&fixture.workspace()).expect("the members should be readable");
     assert_eq!(
         files(&violations),
-        ["Cargo.toml", "Cargo.toml"],
-        "both stale entries fail: {violations:?}"
+        ["Cargo.toml"],
+        "only the member's stale entry fails: {violations:?}"
     );
     assert!(
         mentions(
@@ -155,11 +155,9 @@ fn a_build_script_crate_entry_without_a_build_script_fails() {
         "a listed member without a build script fails: {violations:?}"
     );
     assert!(
-        mentions(
-            &violations,
-            "lists `not_a_member`, which isn't a workspace member"
-        ),
-        "a listed name that isn't a member fails: {violations:?}"
+        !mentions(&violations, "not_a_member"),
+        "a listed name that isn't a member lets a package rename land in three pull requests: \
+         {violations:?}"
     );
 }
 

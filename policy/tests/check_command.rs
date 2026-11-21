@@ -904,17 +904,110 @@ fn a_proc_macro_lands_as_a_rule_change_then_a_code_change_that_pass() {
         );
 }
 
+/// The `tsconfig.json` of a web UI in the crate `demo`, with the `extends` and `references`
+/// lines `reaches`, and a comment and trailing commas, which TypeScript allows.
+fn web_tsconfig(reaches: &str) -> String {
+    format!(
+        "{{\n    // The web UI.\n    {reaches}\n    \"compilerOptions\": {{ \"strict\": true, }},\n    \
+         \"include\": [\"src\",],\n}}\n"
+    )
+}
+
+#[test]
+fn a_tsconfig_that_reaches_only_other_tsconfig_files_passes() {
+    let project = Project::new();
+    project.write(
+        "crates/demo/web/tsconfig.json",
+        &web_tsconfig(
+            "\"extends\": [\"./strict/tsconfig.json\", \"../../demo_core/web/tsconfig.json\"],\n    \
+             \"references\": [{ \"path\": \"./tools/tsconfig.json\" }],",
+        ),
+    );
+    project.write("crates/demo/web/strict/tsconfig.json", &web_tsconfig(""));
+    project.write("crates/demo/web/tools/tsconfig.json", &web_tsconfig(""));
+    project.write("crates/demo_core/web/tsconfig.json", &web_tsconfig(""));
+    project.check().assert_passes();
+}
+
+#[test]
+fn a_tsconfig_that_reaches_another_file_fails() {
+    for (reaches, problem) in [
+        (
+            "\"extends\": \"./tsconfig.base.json\",",
+            "`extends` names `./tsconfig.base.json`",
+        ),
+        (
+            "\"extends\": [\"./strict/tsconfig.json\", \"./tsconfig.base.json\"],",
+            "`extends` names `./tsconfig.base.json`",
+        ),
+        (
+            "\"extends\": \"@tsconfig/strictest/tsconfig.json\",",
+            "`extends` names `@tsconfig/strictest/tsconfig.json`",
+        ),
+        (
+            "\"extends\": \"./node_modules/strictest/tsconfig.json\",",
+            "`extends` names `./node_modules/strictest/tsconfig.json`",
+        ),
+        (
+            "\"extends\": \"./missing/tsconfig.json\",",
+            "`extends` names `./missing/tsconfig.json`",
+        ),
+        (
+            "\"extends\": \"../../../../tsconfig.json\",",
+            "`extends` names `../../../../tsconfig.json`",
+        ),
+        ("\"extends\": 1,", "`extends` is `1`"),
+        (
+            "\"references\": [{ \"path\": \"./strict\" }],",
+            "`references` names `./strict`",
+        ),
+        (
+            "\"references\": [{ \"path\": \"./tsconfig.base.json\" }],",
+            "`references` names `./tsconfig.base.json`",
+        ),
+        (
+            "\"references\": [\"./strict\"],",
+            "`references` is `[\"./strict\"]`",
+        ),
+        (
+            "\"extends\": ./strict/tsconfig.json,",
+            "This file isn't JSON with comments",
+        ),
+    ] {
+        let project = Project::new();
+        project.write("crates/demo/web/tsconfig.json", &web_tsconfig(reaches));
+        project.write("crates/demo/web/strict/tsconfig.json", &web_tsconfig(""));
+        project.write(
+            "crates/demo/web/tsconfig.base.json",
+            "{ \"compilerOptions\": { \"strict\": false } }\n",
+        );
+        project.write(
+            "crates/demo/web/node_modules/strictest/tsconfig.json",
+            &web_tsconfig(""),
+        );
+        project.check().assert_reports(
+            1,
+            &format!("error: [config_files] crates/demo/web/tsconfig.json: {problem}"),
+        );
+    }
+}
+
 #[test]
 fn a_stale_build_script_entry_fails() {
     let project = Project::new();
-    project.policy_setting("build_script_crates = [\"demo\", \"gone\"]");
-    let run = project.check();
-    run.assert_reports(
+    project.policy_setting("build_script_crates = [\"demo\"]");
+    project.check().assert_reports(
         1,
         "error: [build_scripts] Cargo.toml: `build_script_crates` in \
          `[workspace.metadata.policy]` lists `demo`, which has no build script any more.",
     );
-    run.assert_reports(1, "lists `gone`, which isn't a workspace member.");
+}
+
+#[test]
+fn a_build_script_entry_that_names_no_member_passes() {
+    let project = Project::new();
+    project.policy_setting("build_script_crates = [\"demo_engine\"]");
+    project.check().assert_passes();
 }
 
 #[test]
@@ -1904,6 +1997,82 @@ fn a_member_directory_outside_ascii_fails() {
         1,
         "error: [workspace_shape] crates/\u{e9}t\u{e9}: The workspace member `ete` lives in \
          `crates/\u{e9}t\u{e9}`, whose name holds a character outside ASCII.",
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn a_member_directory_windows_reads_as_another_fails() {
+    for name in ["extra.", "extra ", "ex:tra", "ex\\tra"] {
+        let project = Project::new();
+        project.write(
+            &format!("crates/{name}/Cargo.toml"),
+            &member_manifest("extra", ""),
+        );
+        project.write(&format!("crates/{name}/src/lib.rs"), "//! Extra.\n");
+        project.lock();
+        project.check().assert_reports(
+            1,
+            &format!(
+                "error: [workspace_shape] crates/{name}: The workspace member `extra` lives in \
+                 `crates/{name}`, whose name Windows reads as another name."
+            ),
+        );
+    }
+}
+
+#[test]
+fn paths_a_case_insensitive_file_system_reads_as_one_fail() {
+    let project = Project::new();
+    if fs::exists(project.path().join("crate\u{17f}"))
+        .expect("the file system should say whether the directory is there")
+    {
+        return;
+    }
+    project.write(
+        "crate\u{17f}/demo_core/src/lib.rs",
+        "//! The demo's core, where macOS reads it.\n",
+    );
+    project.write(
+        "docs/INSTALL.md",
+        "# Install\n\nFor people who run the demo: how to install it.\n",
+    );
+    let run = project.check();
+    run.assert_reports(
+        1,
+        "error: [workspace_shape] crate\u{17f}: `crates` and `crate\u{17f}` are one path to a \
+         file system that ignores case, as macOS's and Windows' do,",
+    );
+    run.assert_reports(
+        1,
+        "error: [workspace_shape] docs/install.md: `docs/INSTALL.md` and `docs/install.md` are \
+         one path",
+    );
+    assert_eq!(
+        run.stdout.matches("are one path").count(),
+        2,
+        "each collision is reported once, at its shortest path: {run:#?}"
+    );
+}
+
+#[test]
+fn member_directories_that_differ_only_in_case_fail() {
+    let project = Project::new();
+    if fs::exists(project.path().join("crates/DEMO_CORE"))
+        .expect("the file system should say whether the crate is there")
+    {
+        return;
+    }
+    project.write(
+        "crates/DEMO_CORE/Cargo.toml",
+        &member_manifest("shouting", ""),
+    );
+    project.write("crates/DEMO_CORE/src/lib.rs", "//! The core, louder.\n");
+    project.lock();
+    project.check().assert_reports(
+        1,
+        "error: [workspace_shape] crates/demo_core: `crates/DEMO_CORE` and `crates/demo_core` \
+         are one path to a file system that ignores case",
     );
 }
 

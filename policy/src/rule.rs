@@ -16,7 +16,8 @@ pub enum Rule {
     LintsTables,
     /// Only the crates in `build_script_crates` have a build script.
     BuildScripts,
-    /// Tool configuration files exist only where the workspace keeps them.
+    /// Tool configuration files exist only where the workspace keeps them, and each
+    /// `tsconfig.json` reaches only other `tsconfig.json` files.
     ConfigFiles,
     /// The workspace keeps its exclusions, members, custom lints and release profile.
     WorkspaceShape,

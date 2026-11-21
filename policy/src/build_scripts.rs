@@ -16,13 +16,21 @@ use crate::{case_insensitive, source_path, toml_file};
 /// it. A build script can emit `cargo::rustc-cfg` and so hide code from clippy and the custom
 /// lints. A case-insensitive file system finds `Build.rs` when Cargo looks for `build.rs`.
 ///
-/// It also checks that each crate the setting lists is a member with a build script, so the list
-/// doesn't keep allowing one after the crate stops needing it. The list entry, the `build` key,
-/// the `[build-dependencies]` and the script's own file, the crate's `build.rs` or the file the
-/// key names, are all rules, so adding or removing a build script is one rule change that holds
-/// all of them, and no order of landing needs a stale entry. The modules the script reads and the
-/// crates it calls are code, like the crate's other sources, so once a crate is listed, a code
-/// change can still change what its build script emits; the list entry is what review weighs.
+/// It also checks that each member the setting lists has a build script, so the list doesn't keep
+/// allowing one after the crate stops needing it. The list entry, the `build` key, the
+/// `[build-dependencies]` and the script's own file, the crate's `build.rs` or the file the key
+/// names, are all rules, so adding or removing a build script is one rule change that holds all of
+/// them. The modules the script reads and the crates it calls are code, like the crate's other
+/// sources, so once a crate is listed, a code change can still change what its build script
+/// emits; the list entry is what review weighs.
+///
+/// An entry may name a package that isn't a member, so renaming the package of a crate with a
+/// build script takes three pull requests that each pass: a rule change that lists the new name
+/// beside the old one, the code change that renames the package, and a rule change that drops the
+/// old name. Nothing makes the last one land, and until it does, the old name stays listed for a
+/// crate a later change could give that name. That crate's `build.rs` or `build` key is still a
+/// rule, so the build script lands in a rule change of its own, only without the list line that
+/// would otherwise show it.
 ///
 /// A listed crate's `build` key names a file in the crate's directory. Outside it, the path could
 /// pass through a symbolic link that leads back to one of the crate's modules, and a change to
@@ -105,21 +113,6 @@ pub fn check(workspace: &Workspace) -> Result<Vec<Violation>, PolicyError> {
                 format!(
                     "Cargo runs this file as the crate's build script. {}",
                     remedy(member.name())
-                ),
-            ));
-        }
-    }
-    for name in allowed {
-        if !workspace
-            .members()
-            .iter()
-            .any(|member| member.name() == name)
-        {
-            violations.push(Violation::new(
-                "Cargo.toml".to_owned(),
-                format!(
-                    "`build_script_crates` in `[workspace.metadata.policy]` lists `{name}`, which \
-                     isn't a workspace member. Remove it from the list."
                 ),
             ));
         }

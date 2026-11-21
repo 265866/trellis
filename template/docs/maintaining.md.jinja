@@ -153,6 +153,24 @@ the minor version and a `fix` the patch version. To ship:
 Changing a name that [Stability](stability.md#names-that-stay-the-same) lists breaks users'
 scripts, links and the commands they copied from Install and Verify a release.
 {%- endif %}
+
+## Rename a crate
+
+To move a crate to another directory, rename `crates/<old>` to `crates/<new>` with `git mv`,
+change nothing inside it, and fix the `path` of each dependency on it. `just rule-changes` counts
+the moved files as neither rules nor code, so this is a code pull request. Fix the crate's row
+under Layout in `CONTRIBUTING.md` in a rules pull request after it.
+{%- if web_ui %} Moving `crates/{{ crate_name }}`, which holds the web UI, also changes the root
+files that name `crates/{{ crate_name }}/web`, which are rules, so that move is a rules pull
+request, and the Layout rows can go in it.
+{%- endif %}
+
+To rename a crate's package, use three pull requests. A rules pull request adds the new name
+beside the old one in `internal_dependencies`, in `changelog_include` in `release-plz.toml`, and in
+`build_script_crates` if the crate has a build script. A code pull request then changes the
+package's `name`, each dependency on it and each path that names it in code. A last rules pull
+request removes the old name from each list. Move the directory and rename the package in separate
+pull requests.
 {%- if published %}
 
 ## Add a crate to a published library
