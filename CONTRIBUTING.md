@@ -24,7 +24,7 @@ has, it runs:
 
 | Recipe | Checks |
 | --- | --- |
-| `just pins` | The template pins the same toolchains as this repository and `lints/`. The config files, workflows and `[workspace.lints]` tables both keep agree, apart from what only some answers get. The versions `template/dylint.toml.jinja` says trellis read each trusted macro crate at are the ones `tests/dependencies/setup.sh` pins. Every tool has one version wherever it's pinned. |
+| `just pins` | The template pins the same toolchains as this repository and `lints/`. The config files, workflows and `[workspace.lints]` tables both keep agree, apart from what only some answers get. The template's two lists of accepted licenses agree. The versions `template/dylint.toml.jinja` says trellis read each trusted macro crate at are the ones `tests/dependencies/setup.sh` pins. Every tool and runner image has one version wherever it's pinned, in every file git has or would add apart from `CHANGELOG.md`, `policy/` and the web starter's lockfile, and a conflict names the file and line of each version. A value it can't find or read fails. |
 | `just lints-lint`, `just lints-comments`, `just lints-test` | clippy, `code_comment` and the UI tests for the custom lints. The lints' own code has no code comments either; the UI fixtures in `lints/ui/` keep theirs, since their test directives are comments. |
 | `just template <kind> [recipes] [publish] [web] [target]` | Generates a `binary`, `service` or `library` project from the working tree and runs its `just ci`, or the recipes you name. `true` as `publish` makes a library a published one, `true` as `web` gives a service a web UI, whose build and notices must reach its image. A service's image must give its user read access to its license files, even under umask 077. A `target` runs `test` and `build-release` for that target. |
 | `just shapes` | Generates the project a user gets, with the lints from GitHub, for each set of answers the `shape` recipe lists, and runs the checks that don't fetch them. It also checks the next steps Copier prints, what `just setup-github --dry-run` would set, and what `just check-github` reports for the fixtures in `tests/check-github/`. |
@@ -70,15 +70,48 @@ needs a false positive on code that follows it, shown in a test.
 
 ## Update pinned versions
 
-Renovate bumps the actions, the container base images and the stable toolchain, in this repository
-and in `template/` together. These move by hand:
+Renovate moves each of these in one pull request, with every copy in this repository and in
+`template/`:
 
-- **The lints' nightly**, with each stable Rust release, so the lints never build on an older
-  compiler than the projects. Run `cargo dylint upgrade lints`, which moves
-  `lints/rust-toolchain.toml` and `clippy_utils` together, fix what the newer compiler internals
-  break, and set `lints_nightly` in `template/justfile.jinja` to match. A newer compiler can word
-  or place a report differently; rewrite the `.stderr` files it changes as step 4 of
-  [Add a lint](#add-a-lint) says.
+- The actions and the container base images. A new digest for any base image, Bun's included,
+  waits the seven days only when its registry says when it was published. The Rust and
+  distroless images' tags give no such date, so their new digests come at once.
+- The stable toolchain, with `rust-version` in both `Cargo.toml` files. A patch release leaves
+  `rust-version` alone.
+- Bun: its image in `template/Containerfile.jinja`, `bun-version:` in the workflows and in
+  `template/.github/workflows/`, and the Set up section of `template/CONTRIBUTING.md.jinja`.
+- The runner images, in every workflow, CI's matrix and `targets` in `copier.yml`.
+- The crates `just dependencies` adds, in `tests/dependencies/setup.sh`.
+
+Two of these pull requests need a step by hand before they merge, which their descriptions repeat:
+
+- **Bun's**: move the web UI starter's packages, in its `package.json.jinja`, and regenerate its
+  lockfile, `bun.lock.jinja`, with the new Bun, since Renovate reads neither. Install the
+  starter's `package.json` in a scratch directory and copy the lockfile back, with the project's
+  name templated.
+- **The crates `just dependencies` adds**: for each crate that `trusted_macro_crates` in
+  `template/dylint.toml.jinja` lists, read what its macros write at the new version, as that
+  file's comments describe, and update the comment's version and its description. A crate whose
+  macros now write more lint levels may have to leave the list. `just pins` fails until each
+  comment names the version `tests/dependencies/setup.sh` pins.
+
+Renovate finds the copies through the custom managers in `renovate.json`. When one of its pull
+requests fails `just pins` because a copy wasn't moved, fix the manager that should have found it.
+
+These move by hand:
+
+- **The lints' nightly**, so the lints never build on an older compiler than the projects.
+  `just pins` needs the lints' `clippy_utils` to be for a newer Rust than stable. Each
+  `clippy_utils` is for the Rust two releases after the stable it comes out beside, so one port
+  covers that stable and the next. Port as soon as Renovate's Dependency Dashboard lists a newer
+  `clippy_utils` under "Pending Approval", about five weeks before stable catches up. Until the
+  port lands, the toolchain pull request for the release that catches up fails `just pins`. Don't
+  approve `clippy_utils` there, since it can't build without its nightly. Run
+  `cargo dylint upgrade lints`, which moves `lints/rust-toolchain.toml` and `clippy_utils`
+  together, fix what the newer compiler internals break, and set `lints_nightly` in
+  `template/justfile.jinja` to match. If the new nightly needs a newer cargo-dylint, move
+  cargo-dylint and dylint-link with it, as below. A newer compiler can word or place a report
+  differently; rewrite the `.stderr` files it changes as step 4 of [Add a lint](#add-a-lint) says.
 - **The rustfmt nightly**: `nightly` in `justfile`, `template/justfile.jinja` and the Editors
   section of `template/CONTRIBUTING.md.jinja`.
 - **cargo-dylint and dylint-link**, at the version of `dylint_linting` in `lints/Cargo.toml`.
@@ -88,20 +121,9 @@ and in `template/` together. These move by hand:
   `copier.yml` and `template/docs/maintaining.md.jinja`; release-plz's `version:` inputs and the
   `tool@x.y.z` mentions in the comments of `template/.github/workflows/`; actionlint's `go install`
   in `template/justfile.jinja` and the workflows; and copier's version in `justfile`.
-- **Bun**, with its image in `template/Containerfile.jinja`, which Renovate moves: `bun-version:` in
-  the workflows and in `template/.github/workflows/`, and the Set up section of
-  `template/CONTRIBUTING.md.jinja`. Then regenerate the web UI starter's lockfile,
-  `bun.lock.jinja`, with that Bun, as its packages also move by hand: install the starter's
-  `package.json` in a scratch directory and copy the lockfile back, with the project's name
-  templated.
-- **`rust-version`** in both `Cargo.toml` files: push it to Renovate's toolchain pull request,
-  which fails `just pins` until then.
-- **The crates `just dependencies` adds**, in `tests/dependencies/setup.sh`. For each crate that
-  `trusted_macro_crates` in `template/dylint.toml.jinja` lists, read what its macros write at the
-  new version, as that file's comments describe, and update the comment's version and its
-  description. A crate whose macros now write more lint levels may have to leave the list.
 
-`just pins` fails until every copy of a version agrees.
+`just pins` fails until every copy of a version agrees, including a copy in a file it hasn't seen
+before.
 
 ## Set up the repository
 

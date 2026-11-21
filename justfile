@@ -1,6 +1,5 @@
 # Every check CI runs is a recipe here, so `just ci` before pushing runs the same checks, apart from
-# what needs GitHub or another platform: the pull request title, and the template entries CI runs
-# on macOS and Windows (`binary on macOS`, `binary on Windows` and `published library on Windows`).
+# the CI jobs that need GitHub or another target, which "Check a change" in CONTRIBUTING.md lists.
 
 # Only the formatter runs on this nightly. The policy crate builds on the stable toolchain in
 # rust-toolchain.toml, and the lints on the nightly in lints/rust-toolchain.toml.
@@ -16,7 +15,7 @@ export CLIPPY_CONF_DIR := justfile_directory()
 default:
     @just --list
 
-# Runs every check CI runs, except the pull request title and the macOS and Windows entries.
+# Runs every check CI runs, apart from the jobs "Check a change" in CONTRIBUTING.md lists.
 ci: fmt-check typos actionlint zizmor shear deny changelog release-test links pins lint dylint test docs lints-lint lints-comments lints-test templates
 
 # Installs the pinned nightly rustfmt that `just fmt` uses.
@@ -44,8 +43,12 @@ fmt-check:
 typos:
     typos
 
-# Checks the GitHub workflows, and their shell scripts if shellcheck is installed.
+# actionlint skips the shell scripts without a word when shellcheck is missing, so this runs
+# shellcheck first to fail instead.
+#
+# Checks the GitHub workflows and their shell scripts.
 actionlint:
+    shellcheck --version
     actionlint
 
 # Audits the GitHub workflows for security problems.
@@ -164,19 +167,32 @@ links:
 # Checks that the template pins the same toolchains as this repository and its lints, that the
 # config files and workflows both keep are the same apart from the Advisories workflow's web UI
 # step, that both `[workspace.lints]` tables agree apart from the library-only lints, that the
-# versions template/dylint.toml.jinja says trellis read each trusted macro crate at are the ones
-# tests/dependencies/setup.sh pins, and that every tool has one version wherever it's pinned.
+# template's two lists of accepted licenses agree, that the versions template/dylint.toml.jinja
+# says trellis read each trusted macro crate at are the ones tests/dependencies/setup.sh pins, and
+# that every tool and runner image has one version wherever it's pinned. A value it can't find or
+# read fails, as does a file it reads that's gone.
 #
 # Checks that pinned versions and the shared config files agree.
 pins:
     #!/usr/bin/env bash
     set -euo pipefail
-    channel() { sed -n 's/^channel = "\(.*\)"$/\1/p' "$1"; }
-    variable() { sed -n "s/^$1 := \"\(.*\)\"$/\1/p" "$2"; }
     status=0
+    # Prints what a sed script prints from a file, or fails when that's nothing.
+    extract() {
+      local found
+      found=$(sed -n "$2" "$3") || true
+      if [ -z "$found" ]; then
+        echo "error: found no $1 in $3" >&2
+        return 1
+      fi
+      printf '%s\n' "$found"
+    }
+    channel() { extract "toolchain channel" 's/^channel = "\(.*\)"$/\1/p' "$1"; }
+    variable() { extract "$1 variable" "s/^$1 := \"\(.*\)\"$/\1/p" "$2"; }
+    key() { extract "$1 key" "s/^$1 = \"=\{0,1\}\(.*\)\"$/\1/p" "$2"; }
     check() {
-      if [ "$2" != "$3" ]; then
-        echo "error: $1: $2 != $3" >&2
+      if [ -z "$2" ] || [ -z "$3" ] || [ "$2" != "$3" ]; then
+        echo "error: $1: ${2:-(none)} != ${3:-(none)}" >&2
         status=1
       fi
     }
@@ -184,7 +200,6 @@ pins:
       "$(channel template/rust-toolchain.toml)" "$(channel rust-toolchain.toml)"
     check "lints_nightly in template/justfile.jinja and lints/rust-toolchain.toml" \
       "$(variable lints_nightly template/justfile.jinja)" "$(channel lints/rust-toolchain.toml)"
-    key() { sed -n "s/^$1 = \"=\{0,1\}\(.*\)\"$/\1/p" "$2"; }
     check "rust-version in template/Cargo.toml.jinja and Cargo.toml" \
       "$(key rust-version template/Cargo.toml.jinja)" "$(key rust-version Cargo.toml)"
     check "rust-version in Cargo.toml and the stable toolchain" \
@@ -196,6 +211,9 @@ pins:
       "$(grep --only-matching --no-filename 'cargo-dylint@[0-9.]*' .github/workflows/ci.yml | head -n 1 | cut -d@ -f2)"
     check "nightly in template/justfile.jinja and justfile" \
       "$(variable nightly template/justfile.jinja)" "$(variable nightly justfile)"
+    check "the licenses template/deny.toml.jinja allows and template/about.toml.jinja accepts" \
+      "$(extract "allow list" 's/^allow = \(\[.*\]\)$/\1/p' template/deny.toml.jinja)" \
+      "$(extract "accepted list" 's/^accepted = \(\[.*\]\)$/\1/p' template/about.toml.jinja)"
     # The lints' nightly must be newer than projects' stable, or code using an API that stable
     # just stabilized passes clippy and fails `just dylint`.
     lints_minor=$(sed -n 's/^clippy_utils = "=0\.1\.\([0-9]*\)"$/\1/p' lints/Cargo.toml)
@@ -282,19 +300,96 @@ pins:
       check "the version $crate is audited at in template/dylint.toml.jinja and tests/dependencies/setup.sh" \
         "$version" "$(grep "^${crate%_impl}@" <<< "$pinned" | cut -d@ -f2)"
     done
-    versions=$(grep --only-matching --no-filename --extended-regexp \
-      '\b[a-z][a-z0-9-]*@v?[0-9]+\.[0-9]+\.[0-9]+\b' \
-      .github/workflows/*.yml template/.github/workflows/* justfile template/justfile.jinja \
-      CONTRIBUTING.md template/CONTRIBUTING.md.jinja README.md copier.yml template/docs/maintaining.md.jinja \
-      tests/dependencies/*.sh | sed 's/@v/@/; s/^typos-cli@/typos@/; s/^taplo-cli@/taplo@/'
-      sed -n 's/^ *version: \([0-9.]*\)$/release-plz@\1/p' template/.github/workflows/release.yml.jinja
-      sed -n 's/.*\[shellcheck\]([^)]*) \([0-9.]*\),.*/shellcheck@\1/p' template/CONTRIBUTING.md.jinja
-      sed -n 's/.*\[Bun\]([^)]*) \([0-9.]*\),.*/bun@\1/p' template/CONTRIBUTING.md.jinja
-      sed -n 's/^ *bun-version: \([0-9.]*\)$/bun@\1/p' .github/workflows/*.yml template/.github/workflows/*
-      sed -n 's#.*docker\.io/oven/bun:\([0-9.]*\)-slim@.*#bun@\1#p' template/Containerfile.jinja)
-    versions=$(sort --unique <<< "$versions")
-    for tool in $(cut -d@ -f1 <<< "$versions" | uniq --repeated); do
-      echo "error: $tool is pinned to more than one version:" $(grep "^$tool@" <<< "$versions") >&2
+    # Every file git has or would add is scanned but these: CHANGELOG.md names old versions, and
+    # policy/ and the web starter's lockfile hold npm package keys, which aren't pins.
+    scan=(. ':!CHANGELOG.md' ':!policy/' ':!*bun.lock.jinja')
+    # Overrides each setting that changes what git grep prints, or stops it.
+    git_grep() { git grep --untracked --no-recurse-submodules --no-color --no-column -I -z -E "$@"; }
+    # A version is one or more numbers, with a pre-release suffix and build metadata if it has them.
+    version='([0-9]+([.][0-9]+)*(-[0-9A-Za-z-]+([.][0-9A-Za-z-]+)*)?([+][0-9A-Za-z-]+([.][0-9A-Za-z-]+)*)?)'
+    matches=$(mktemp)
+    trap 'rm -f "$matches"' EXIT
+    # Prints `<tool>@<version> <file>:<line>` for each match of an extended regex whose first group
+    # is the version, in the scanned files or the files named after it, and fails when there's none.
+    pinned_as() {
+      local tool=$1 regex=$2 where="the scanned files" file line match found=""
+      shift 2
+      if [ $# -gt 0 ]; then where=$*; else set -- "${scan[@]}"; fi
+      git_grep --line-number --only-matching "$regex" -- "$@" > "$matches" || [ $? -eq 1 ] || return 1
+      while IFS= read -r -d '' file && IFS= read -r -d '' line && IFS= read -r match; do
+        if ! [[ $match =~ ^$regex$ ]]; then
+          echo "error: $file:$line: can't read a $tool version in $match" >&2
+          return 1
+        fi
+        found+="$tool@${BASH_REMATCH[1]} $file:$line"$'\n'
+      done < "$matches"
+      if [ -z "$found" ]; then
+        echo "error: found no $tool version, as ${regex//"$version"/<version>} matches, in $where" >&2
+        return 1
+      fi
+      printf '%s' "$found"
+    }
+    # Prints `release-plz@<version> <file>:<line>` for the `version:` input of each step that runs
+    # the release-plz action, and fails on a step without one or when no file runs it.
+    release_plz() {
+      git_grep --files-with-matches 'uses: *release-plz/action@' -- "${scan[@]}" > "$matches" || [ $? -eq 1 ] || return 1
+      if ! [ -s "$matches" ]; then
+        echo "error: found no workflow that runs the release-plz action" >&2
+        return 1
+      fi
+      xargs -0 awk -v version="^$version" '
+        function unpinned() {
+          print "error: " step ": the release-plz action runs without a version: input" > "/dev/stderr"
+          failed = 1
+        }
+        FNR == 1 && step { unpinned(); step = "" }
+        /uses: *release-plz\/action@/ { if (step) unpinned(); step = FILENAME ":" FNR; next }
+        step && match($0, /^ *version: *["\047]?/) {
+          rest = substr($0, RLENGTH + 1)
+          if (match(rest, version)) {
+            print "release-plz@" substr(rest, 1, RLENGTH) " " FILENAME ":" FNR
+          } else {
+            print "error: " FILENAME ":" FNR ": can'"'"'t read the release-plz version in " $0 > "/dev/stderr"
+            failed = 1
+          }
+          step = ""
+          next
+        }
+        step && /^ *- / { unpinned(); step = "" }
+        END { if (step) unpinned(); exit failed }
+      ' < "$matches"
+    }
+    versions=""
+    collect() {
+      local found
+      if found=$("$@"); then
+        versions+=$found$'\n'
+      else
+        status=1
+      fi
+    }
+    collect pinned_as tool "\b([a-z][a-z0-9-]*@v?$version)\b"
+    collect release_plz
+    collect pinned_as shellcheck "\[shellcheck\]\([^)]*\) $version"
+    collect pinned_as bun "bun-version: *[\"']?$version"
+    collect pinned_as bun "docker\.io/oven/bun:$version-slim@"
+    collect pinned_as bun "\[Bun\]\([^)]*\) $version"
+    # A runner image's ARM64 label is its x86-64 one with `-arm`, apart from Windows on ARM64's.
+    # `latest` is a version like any other, so it conflicts with a numbered label.
+    collect pinned_as runner "\b((ubuntu|macos|windows)-([0-9][0-9.]*|latest)(-arm)?)\b"
+    versions=$(sed -E '/^$/d; s/^tool@//; s/@v/@/; s/^typos-cli@/typos@/; s/^taplo-cli@/taplo@/
+      s/^runner@windows-([^ ]*)-arm /windows-arm-runner@\1 /; t
+      s/^runner@(ubuntu|macos)-([^ ]*)-arm /\1-runner@\2 /; t
+      s/^runner@([a-z]+)-/\1-runner@/' <<< "$versions" | sort --unique)
+    for tool in $(cut -d' ' -f1 <<< "$versions" | sort --unique | cut -d@ -f1 | uniq --repeated); do
+      echo "error: $tool is pinned to more than one version:" >&2
+      grep "^$tool@" <<< "$versions" | sed -E 's/^[^@]*@([^ ]*) (.*):([0-9]+)$/\1\t\2\t\3/' \
+        | sort -t $'\t' -k 1,1 -k 2,2 -k 3,3n | awk -F '\t' '
+          $1 != version { if (NR > 1) print ""; printf "  %s in %s:%s", $1, $2, $3; version = $1; file = $2; next }
+          $2 != file { printf ", %s:%s", $2, $3; file = $2; next }
+          { printf ",%s", $3 }
+          END { print "" }
+        ' >&2
       status=1
     done
     exit "$status"
@@ -684,7 +779,7 @@ shape answers:
       service-private)
         grep --quiet '^          platforms: linux/amd64$' .github/workflows/release.yml \
           || fail "a private service's release doesn't build the image for amd64 only"
-        ! grep --quiet ubuntu-24.04-arm .github/workflows/ci.yml \
+        ! grep --quiet --extended-regexp '\b[a-z]+-[0-9.]+-arm\b' .github/workflows/ci.yml \
           || fail "a private service runs on ARM64 by default"
         ;;
     esac

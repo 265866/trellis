@@ -86,8 +86,12 @@ fmt-check:
 typos:
     typos
 
-# Checks the GitHub workflows, and their shell scripts if shellcheck is installed.
+# actionlint skips the shell scripts without a word when shellcheck is missing, so this runs
+# shellcheck first to fail instead.
+#
+# Checks the GitHub workflows and their shell scripts.
 actionlint:
+    shellcheck --version
     actionlint
 
 # Audits the GitHub workflows for security problems.
