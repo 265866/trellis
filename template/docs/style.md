@@ -131,7 +131,8 @@ Beyond the Google guide, the workspace also turns on:
   So a new crate or a new edge between crates is a rule change. It also checks that every crate's
   `[lints]` table is exactly `workspace = true`; that no crate has a build script unless
   `build_script_crates` lists it, since a build script can set a `cfg` that hides code from the
-  lint runs; that tool configuration files exist only at the root, with no variant name that would
+  lint runs, and that a listed crate's `build` key names a file in the crate's own directory; that
+  tool configuration files exist only at the root, with no variant name that would
   override them; that the workspace's members are exactly the packages one directory below
   `crates/`, with no symbolic link for `crates` or a crate's directory, since which changes are
   rules depends on that place; that the workspace excludes
@@ -139,7 +140,8 @@ Beyond the Google guide, the workspace also turns on:
   library; that each crate's `Cargo.toml` holds only allowed keys (no `test = false`,
   `harness = false` outside a `[[bench]]`, `auto*` or `required-features`), inherits `edition`,
   `rust-version` and `publish`, and `license` when the workspace has one, and keeps its sources,
-  `#[path]` files included, inside the crate, with no symbolic link in or above its directory;
+  `#[path]` files included, inside the crate, with no symbolic link in or above its directory
+  and no git submodule, or other git repository, in or above it or anywhere under `crates/`;
   that `.cargo/config.toml` holds only the Windows `+crt-static` flags; that a crate depends
   directly only on proc-macro crates
   listed in `proc_macro_crates`, since a proc macro writes code the custom lints don't check;
@@ -156,12 +158,13 @@ Beyond the Google guide, the workspace also turns on:
   its dependencies land together, and so does a change of license with each crate's line. The
   file a `build` key names is a rule too, though the modules a build script reads are code.
   `.gitignore`, `.ignore`, `tsconfig.json`, `bunfig.toml` and `.npmrc` are rules in any
-  directory, since they change what a check sees; a web UI's `package.json`, its scripts and its
-  sources are code. A proc-macro dependency is code: a rules pull request lists the crate in
-  `proc_macro_crates`, and a code pull request then adds the dependency with its first use, since
-  `cargo shear` rejects a dependency nothing uses. A `.rs` change that only adds, removes or moves
-  `expect` attributes is neither, so a new lint lands with the `expect`s it needs, and a code
-  change with the `expect`s it forces elsewhere.
+  directory, since they change what a check sees, and so is a git submodule, whose files no check
+  sees; a web UI's `package.json`, its scripts and its sources are code. A proc-macro dependency
+  is code: a rules pull request lists the crate in `proc_macro_crates`, and a code pull request
+  then adds the dependency with its first use, since `cargo shear` rejects a dependency nothing
+  uses. A `.rs` change that only adds, removes or moves `expect` attributes is neither, so a new
+  lint lands with the `expect`s it needs, and a code change with the `expect`s it forces
+  elsewhere.
 
 ## Silencing a lint
 

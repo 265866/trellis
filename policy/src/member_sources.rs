@@ -24,7 +24,11 @@ const REMEDY: &str = "A crate's sources live under its own directory, so that a 
 ///   variable or an expression, that names a `.rs` file inside the crate's directory, so the
 ///   check also reads that file. It finds these attributes inside macro arguments and inside
 ///   other attributes' arguments too;
-/// - no file in or above a member's directory, nor the directory itself, is a symbolic link.
+/// - no file in or above a member's directory, nor the directory itself, is a symbolic link;
+/// - no other git repository, a submodule or an untracked one, is in or above a member's
+///   directory or anywhere under `crates/`. The checks can't see its files, and
+///   `trellis-policy rule-changes` sees only the commit it points at, so its build script,
+///   manifest and tool settings could change beside code.
 ///
 /// The check doesn't see a `path` attribute that a macro writes, such as `#[$meta] mod a;` called
 /// with `path = "..."`, or built from tokens that never spell `path =`. In a macro the crate
@@ -41,7 +45,7 @@ const REMEDY: &str = "A crate's sources live under its own directory, so that a 
 /// Fails if the repository's files can't be listed, or a member's file can't be read.
 pub fn check(workspace: &Workspace) -> Result<Vec<Violation>, PolicyError> {
     let files = repository_files::list(workspace.root())?;
-    let mut violations = Vec::new();
+    let mut violations = nested_repositories(workspace)?;
     for member in workspace.members() {
         let directory = workspace.relative(member.dir());
         for file in &files {
@@ -86,6 +90,49 @@ pub fn check(workspace: &Workspace) -> Result<Vec<Violation>, PolicyError> {
         }
     }
     Ok(violations)
+}
+
+/// A violation for each git repository nested under `crates/`, or in or above a member's
+/// directory, in any case.
+///
+/// # Errors
+///
+/// Fails if git fails.
+fn nested_repositories(workspace: &Workspace) -> Result<Vec<Violation>, PolicyError> {
+    let directories: Vec<String> = workspace
+        .members()
+        .iter()
+        .map(|member| workspace.relative(member.dir()))
+        .chain(["crates".to_owned()])
+        .collect();
+    let mut violations = Vec::new();
+    for repository in repository_files::nested_repositories(workspace.root())? {
+        let is_near = directories
+            .iter()
+            .any(|directory| is_in_or_above(&repository, directory));
+        if is_near {
+            violations.push(Violation::new(
+                repository,
+                "This is another git repository, such as a submodule, so the checks can't see \
+                 its files, and `rule-changes` sees only the commit it points at, not which of \
+                 its files are rules. Copy the files you need into the repository, or depend on \
+                 it through Cargo as a git dependency."
+                    .to_owned(),
+            ));
+        }
+    }
+    Ok(violations)
+}
+
+/// Whether the path `path` is the directory `directory`, inside it or above it, in any case. Every
+/// path is inside the root, the empty `directory`.
+fn is_in_or_above(path: &str, directory: &str) -> bool {
+    let is_at_or_below = |path: &str, directory: &str| {
+        directory.is_empty()
+            || case_insensitive::strip_prefix(path, directory)
+                .is_some_and(|rest| rest.is_empty() || rest.starts_with('/'))
+    };
+    is_at_or_below(path, directory) || is_at_or_below(directory, path)
 }
 
 /// What is wrong with the Rust source `text`, a file `depth` directories below its crate's
@@ -359,6 +406,33 @@ mod tests {
             problems.len() == 1 && problems[0].starts_with("line 3: "),
             "the problem should name line 3, found {problems:?}"
         );
+    }
+
+    #[test]
+    fn a_repository_in_or_above_a_directory_is_near_it() {
+        for (path, directory) in [
+            ("crates/sub", "crates"),
+            ("Crates/sub", "crates"),
+            ("crates", "crates"),
+            ("crates", "crates/app"),
+            ("crates/app/vendor/x", "crates/app"),
+            ("tools/sub", ""),
+        ] {
+            assert!(
+                is_in_or_above(path, directory),
+                "{path} is in or above {directory:?}"
+            );
+        }
+        for (path, directory) in [
+            ("tools/sub", "crates"),
+            ("crates_old/sub", "crates"),
+            ("crates/application", "crates/app"),
+        ] {
+            assert!(
+                !is_in_or_above(path, directory),
+                "{path} is neither in nor above {directory:?}"
+            );
+        }
     }
 
     #[test]

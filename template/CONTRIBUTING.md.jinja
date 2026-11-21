@@ -33,7 +33,8 @@ Add a row for each crate you add, in the same pull request as the rule change th
 Every crate is a workspace member one directory below `crates/`, as `crates/<name>`. That is a
 rule: `just policy` fails a member anywhere else, a nested one included, a crate directory or
 `crates` that is a symbolic link, and a package there that isn't a member, because which changes
-are rules depends on that place.
+are rules depends on that place. It also fails a git submodule, or any other git repository,
+under `crates/`, since no check sees its files.
 
 ## Set up
 
@@ -236,8 +237,8 @@ A pull request changes either the rules or the code, never both. Roughly, code i
 are neither; and anything else is a rule. Every `build.rs` is a rule too, except one below a
 crate's `src/`, `tests/`, `benches/` or `examples/` when the crate's directory holds no other
 `Cargo.toml`, in any letter case, before or after the change. The file a crate's `build` key
-names is a rule as well, as is every `.gitignore`, `.ignore`, `tsconfig.json`, `bunfig.toml` and
-`.npmrc`, wherever it sits.
+names is a rule as well, as is every `.gitignore`, `.ignore`, `tsconfig.json`, `bunfig.toml`,
+`.npmrc` and git submodule, wherever it sits.
 {%- if web_ui %} The web UI's `package.json`, its scripts and its sources are code, outside
 the rule split, so a code pull request can change what its `check` script runs.
 {%- endif %}

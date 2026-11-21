@@ -25,8 +25,9 @@ lints_nightly := "nightly-2026-11-12"
 trellis_rev := "{{ trellis_rev }}"
 {%- raw %}
 
-# rustdoc warnings fail `just docs` and the doctests.
-export RUSTDOCFLAGS := "-D warnings"
+# rustdoc warnings fail `just docs` and the doctests. Cargo reads `CARGO_ENCODED_RUSTDOCFLAGS`
+# before `RUSTDOCFLAGS`, so a caller's setting of either, even an empty one, can't drop the flag.
+export CARGO_ENCODED_RUSTDOCFLAGS := "-Dwarnings"
 
 # clippy reads only the root `clippy.toml`, whatever other clippy configuration a directory holds.
 export CLIPPY_CONF_DIR := justfile_directory()

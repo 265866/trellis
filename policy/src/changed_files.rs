@@ -1,9 +1,9 @@
 //! Which files a branch changes are rules, and which are the code the rules check.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::fs;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
+use std::{fs, iter};
 
 use toml::{Table, Value};
 
@@ -38,6 +38,10 @@ const DOCS_IMAGE_EXTENSIONS: [&str; 6] = ["png", "svg", "jpg", "jpeg", "gif", "w
 const UNTRACKED_REMEDY: &str =
     "(untracked; commit it in a rules pull request, or ignore it in .git/info/exclude)";
 
+/// What the listing adds to a submodule, or another git repository inside this one, whose files
+/// no check sees, so its build script, manifest and tool settings could change with it.
+const NESTED_REPOSITORY_NOTE: &str = "(another git repository, whose files no check sees)";
+
 /// Rule files that aren't tool configuration or agent instruction files: the documents that hold
 /// the rules no check decides and the review checklist, and the template answers that
 /// `copier update` regenerates the rules from.
@@ -61,8 +65,9 @@ const OTHER_FILES: [&str; 5] = [
 /// TypeScript, Bun and npm settings, the build scripts, including the file a member's `build` key
 /// names at either end, the check recipes, the workflows, `CONTRIBUTING.md`, the template answers,
 /// every agent instruction file, the root `Cargo.toml` outside its dependency tables, the part of
-/// a member `Cargo.toml` that holds the build script's settings and the license, and any file the
-/// lists here don't know, which the listing marks when it is only untracked; the code is every
+/// a member `Cargo.toml` that holds the build script's settings and the license, every submodule
+/// or other git repository inside this one, whose files no check sees, and any file the lists
+/// here don't know, which the listing marks when it is only untracked; the code is every
 /// other change under `crates/` and every Rust file elsewhere, except a Rust file whose change
 /// only adds, removes, moves or changes lint expectations, which is neither. A pull request
 /// changes one or the other, so review sees every loosened rule apart from the code that might
@@ -96,12 +101,7 @@ impl ChangedFiles {
             let head_commit = format!("{revision}^{{commit}}");
             git::run(&top, &["rev-parse", "--verify", &head_commit])?;
         }
-        let base_commit = format!("{base}^{{commit}}");
-        let base_resolves =
-            git::run(&top, &["rev-parse", "--verify", "--quiet", &base_commit]).is_ok();
-        if !base_resolves
-            && git::run(&top, &["for-each-ref", "--count=1", "refs/remotes"])?.is_empty()
-        {
+        if !has_a_base(&top, base)? {
             return Ok(None);
         }
         let head_revision = match head {
@@ -110,14 +110,17 @@ impl ChangedFiles {
         };
         let merge_base = git::run(&top, &["merge-base", base, head_revision])?;
         let merge_base = merge_base.trim();
-        let ChangedPaths { paths, untracked } = ChangedPaths::between(&top, merge_base, head)?;
+        let changed_paths = ChangedPaths::between(&top, merge_base, head)?;
+        let mut changed = Self {
+            rules: changed_paths.nested_repository_rules(),
+            code: Vec::new(),
+        };
         let head_commit = match head {
             Head::WorkingTree => None,
             Head::Commit(revision) => Some(revision.as_str()),
         };
         let mut build_scripts = named_build_scripts(&top, Some(merge_base))?;
         build_scripts.extend(named_build_scripts(&top, head_commit)?);
-        let mut changed = Self::default();
         let mut nesting = BTreeMap::new();
         let versions = |path: &str| {
             let before = show(&top, merge_base, path);
@@ -127,7 +130,7 @@ impl ChangedFiles {
             };
             (before, after)
         };
-        for path in paths {
+        for path in changed_paths.paths {
             let role = match role(&path) {
                 Role::Code if is_named_build_script(&path) => {
                     let member = path.split('/').nth(1).unwrap_or_default();
@@ -149,7 +152,7 @@ impl ChangedFiles {
                 continue;
             }
             match role {
-                Role::Unlisted if untracked.contains(&path) => {
+                Role::Unlisted if changed_paths.untracked.contains(&path) => {
                     changed.rules.push(format!("{path} {UNTRACKED_REMEDY}"));
                 }
                 Role::Rule | Role::Unlisted => changed.rules.push(path),
@@ -208,12 +211,31 @@ impl ChangedFiles {
     }
 }
 
+/// Whether there is a base to compare with in the repository at `top`: whether `base` is a commit,
+/// or, when it isn't, whether the repository has a remote-tracking branch, so that `base` should
+/// have been one.
+///
+/// # Errors
+///
+/// Fails if git fails.
+fn has_a_base(top: &Path, base: &str) -> Result<bool, PolicyError> {
+    let base_commit = format!("{base}^{{commit}}");
+    if git::run(top, &["rev-parse", "--verify", "--quiet", &base_commit]).is_ok() {
+        return Ok(true);
+    }
+    let remotes = git::run(top, &["for-each-ref", "--count=1", "refs/remotes"])?;
+    Ok(!remotes.is_empty())
+}
+
 /// The paths a change touches.
 struct ChangedPaths {
-    /// Every changed path, relative to the repository root.
+    /// Every changed path but the nested repositories, relative to the repository root.
     paths: BTreeSet<String>,
     /// The changed paths that are untracked files, which only a working-tree head has.
     untracked: BTreeSet<String>,
+    /// The changed paths that are another git repository at either side: a submodule, or, in the
+    /// working tree, an untracked repository.
+    nested_repositories: BTreeSet<String>,
 }
 
 impl ChangedPaths {
@@ -225,12 +247,29 @@ impl ChangedPaths {
     fn between(top: &Path, merge_base: &str, head: &Head) -> Result<Self, PolicyError> {
         let mut paths = BTreeSet::new();
         let mut untracked = BTreeSet::new();
-        let diff = ["diff", "--name-only", "--no-renames", "-z"];
+        let mut nested_repositories = BTreeSet::new();
+        let diff = [
+            "diff",
+            "--raw",
+            "--no-renames",
+            "--ignore-submodules=none",
+            "-z",
+        ];
         let listings: Vec<Vec<&str>> = match head {
             Head::Commit(revision) => vec![[&diff[..], &[merge_base, revision.as_str()]].concat()],
             Head::WorkingTree => {
                 let output = git::run(top, &["ls-files", "-z", "--others", "--exclude-standard"])?;
-                untracked.extend(git::paths(&output).map(str::to_owned));
+                for path in git::paths(&output) {
+                    match path.strip_suffix('/') {
+                        Some(repository) => {
+                            nested_repositories.insert(repository.to_owned());
+                            untracked.insert(repository.to_owned());
+                        }
+                        None => {
+                            untracked.insert(path.to_owned());
+                        }
+                    }
+                }
                 vec![
                     [&diff[..], &["--cached", merge_base]].concat(),
                     [&diff[..], &[merge_base]].concat(),
@@ -239,11 +278,55 @@ impl ChangedPaths {
         };
         for arguments in listings {
             let output = git::run(top, &arguments)?;
-            paths.extend(git::paths(&output).map(str::to_owned));
+            for entry in DiffEntry::parse(&output) {
+                if entry.is_gitlink {
+                    nested_repositories.insert(entry.path.to_owned());
+                }
+                paths.insert(entry.path.to_owned());
+            }
         }
         untracked.retain(|path| !paths.contains(path));
         paths.extend(untracked.iter().cloned());
-        Ok(Self { paths, untracked })
+        paths.retain(|path| !nested_repositories.contains(path));
+        Ok(Self {
+            paths,
+            untracked,
+            nested_repositories,
+        })
+    }
+
+    /// The rule line of each nested repository the change touches.
+    fn nested_repository_rules(&self) -> Vec<String> {
+        self.nested_repositories
+            .iter()
+            .map(|path| format!("{path} {NESTED_REPOSITORY_NOTE}"))
+            .collect()
+    }
+}
+
+/// A path that `git diff --raw` lists.
+struct DiffEntry<'output> {
+    /// The path, relative to the repository root.
+    path: &'output str,
+    /// Whether the path is a submodule at either side.
+    is_gitlink: bool,
+}
+
+impl<'output> DiffEntry<'output> {
+    /// The entries of `output`, `git diff --raw --no-renames -z` output, where each entry is its
+    /// metadata, `:<mode before> <mode after> ...`, then its path.
+    fn parse(output: &'output str) -> impl Iterator<Item = Self> {
+        let mut fields = git::paths(output);
+        iter::from_fn(move || {
+            let metadata = fields.next()?;
+            let path = fields.next()?;
+            let is_gitlink = metadata
+                .trim_start_matches(':')
+                .split(' ')
+                .take(2)
+                .any(|mode| mode == git::GITLINK_MODE);
+            Some(Self { path, is_gitlink })
+        })
     }
 }
 
