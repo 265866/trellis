@@ -508,6 +508,13 @@ mod tests {
     #[test]
     fn other_dylint_libraries_fail() {
         let pinned = format!("git = \"{LINTS_GIT}\", rev = \"{REV}\", pattern = \"lints\"");
+        let unreadable = format!(
+            "couldn't read {}",
+            Path::new("/nonexistent")
+                .join("lints")
+                .join("Cargo.toml")
+                .display()
+        );
         for (libraries, problem) in [
             ("[]".to_owned(), "must hold exactly one entry"),
             (
@@ -542,10 +549,7 @@ mod tests {
                 "neither exactly the keys",
             ),
             ("[{ path = 1 }]".to_owned(), "isn't a string"),
-            (
-                "[{ path = \"lints\" }]".to_owned(),
-                "couldn't read /nonexistent/lints/Cargo.toml",
-            ),
+            ("[{ path = \"lints\" }]".to_owned(), unreadable.as_str()),
             ("\"lints\"".to_owned(), "must hold exactly one entry"),
         ] {
             let found = dylint_problem_in(&libraries);
