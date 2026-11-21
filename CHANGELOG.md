@@ -6,6 +6,31 @@ part lists what a project's owner must do around the update: a rule that can fla
 a setting to change, or a step to do by hand. [CONTRIBUTING.md](CONTRIBUTING.md#release-trellis)
 has the versioning rule.
 
+## v0.13.0
+
+### Action required in projects
+
+- **Remove every git submodule before the update.** `just policy` now fails a git submodule, or an
+  untracked git repository that `git add` would make one, anywhere in the repository, not only in
+  or above a crate. A diff shows only a submodule's commit, so a checkout that initializes one
+  holds files no check or review read, such as a `nextest.toml` that runs no tests. CI's checkout
+  leaves submodules out, so only such a checkout was affected. A project generated from trellis
+  has none. Before the update, run `git rm <path>` for each one outside `crates/`, which drops it
+  and its entry in `.gitmodules`, in a rules pull request. To keep its files, copy them in at that
+  path, in the same pull request when none of them is code, or else the code files (any `.rs`
+  file) in a code pull request after it. Copied files then pass the checks like any other file: a
+  page under `docs/` needs a link from the README's index and the page layout, and a nested tool
+  settings file, such as a `.gitattributes`, fails. Or depend on the repository through Cargo as
+  a git dependency, with its URL under `allow-git` in `deny.toml`. An untracked repository you
+  keep on disk, such as a clone, goes in `.gitignore`, which is a rules pull request too, or in
+  `.git/info/exclude`, which needs none.
+
+### Changed
+
+- The message for another git repository in a project says that a Cargo git dependency needs its
+  URL under `allow-git` in `deny.toml`, since the template's `deny.toml` denies an unknown git
+  source.
+
 ## v0.12.0
 
 ### Action required in projects
