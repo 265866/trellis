@@ -472,6 +472,8 @@ fn repository_with_nested_manifest(manifest: &str) -> Repository {
     repository
 }
 
+/// A file system that ignores case stores the build script under the spelling its directory
+/// already has, so the path is compared in any case.
 #[test]
 fn a_committed_build_rs_whose_package_directory_differs_in_case_is_a_rule() {
     for (manifest, build_script) in CASE_SPLIT_LAYOUTS {
@@ -481,15 +483,18 @@ fn a_committed_build_rs_whose_package_directory_differs_in_case_is_a_rule() {
         repository.commit("add the build script and change the code");
 
         let changed = repository.changed_files();
-        assert_eq!(
-            changed.rules(),
-            [build_script],
-            "a case-insensitive file system puts {build_script} beside {manifest}"
+        let rules = changed.rules();
+        assert!(
+            matches!(rules, [rule] if rule.eq_ignore_ascii_case(build_script)),
+            "a case-insensitive file system puts {build_script} beside {manifest}, but the rules \
+             are {rules:?}"
         );
         assert!(changed.mixes_rules_and_code(), "beside code, it fails");
     }
 }
 
+/// A file system that ignores case stores the build script under the spelling its directory
+/// already has, so the path is compared in any case.
 #[test]
 fn a_working_tree_build_rs_whose_package_directory_differs_in_case_is_a_rule() {
     for (manifest, build_script) in CASE_SPLIT_LAYOUTS {
@@ -498,10 +503,11 @@ fn a_working_tree_build_rs_whose_package_directory_differs_in_case_is_a_rule() {
         repository.write("crates/app/src/lib.rs", "//! The app, changed.\n");
 
         let changed = repository.changed_files_to(&Head::WorkingTree);
-        assert_eq!(
-            changed.rules(),
-            [build_script],
-            "a case-insensitive file system puts {build_script} beside {manifest}"
+        let rules = changed.rules();
+        assert!(
+            matches!(rules, [rule] if rule.eq_ignore_ascii_case(build_script)),
+            "a case-insensitive file system puts {build_script} beside {manifest}, but the rules \
+             are {rules:?}"
         );
         assert!(changed.mixes_rules_and_code(), "beside code, it fails");
     }
