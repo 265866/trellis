@@ -159,8 +159,9 @@ Beyond the Google guide, the workspace also turns on:
   library; that each crate's `Cargo.toml` holds only allowed keys (no `test = false`,
   `harness = false` outside a `[[bench]]`, `auto*` or `required-features`), inherits `edition`,
   `rust-version` and `publish`, and `license` when the workspace has one, and keeps its sources,
-  `#[path]` files included, inside the crate, with no symbolic link in or above its directory and no
-  git submodule, or other git repository, in or above it or anywhere under `crates/`; that
+  `#[path]` files included, inside the crate, with no symbolic link in or above its directory;
+  that the repository holds no git submodule, or other git repository, anywhere, since a checkout
+  that initializes one holds files no check or review read; that
   `.cargo/config.toml` holds only the Windows `+crt-static` flags; that a crate depends directly
   only on proc-macro crates listed in `proc_macro_crates`, since a proc macro writes code the custom
   lints don't check; that the root `AGENTS.md` is the only file of instructions for coding agents;

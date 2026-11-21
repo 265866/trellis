@@ -2623,9 +2623,17 @@ fn a_member_under_a_linked_crates_directory_fails() {
     );
 }
 
+/// A repository outside `crates/` fails too. A checkout that initializes a submodule at
+/// `.config/sub` or `tools/sub` holds files no check read, though a diff shows only its commit.
 #[test]
-fn a_git_repository_under_crates_fails() {
-    for path in ["crates/demo_core/vendor/sub", "crates/sub"] {
+fn a_git_repository_anywhere_fails() {
+    for path in [
+        "crates/demo_core/vendor/sub",
+        "crates/sub",
+        "tools/sub",
+        ".config/sub",
+        "docs/sub",
+    ] {
         let project = Project::new();
         project.git(&["init", "--quiet"]);
         project.nested_repository(path);
@@ -2640,12 +2648,19 @@ fn a_git_repository_under_crates_fails() {
     }
 }
 
+/// Git doesn't list a repository that `.gitignore` excludes, and a plain `git add` doesn't add
+/// it, so no pull request carries it. Added by force it is a submodule like any other.
 #[test]
-fn a_git_repository_outside_the_crates_passes() {
+fn a_git_repository_that_is_ignored_passes_until_it_is_tracked() {
     let project = Project::new();
+    project.write(".gitignore", "/scratch/\n");
     project.git(&["init", "--quiet"]);
-    project.nested_repository("tools/sub");
+    project.nested_repository("scratch/sub");
     project.check().assert_passes();
-    project.commit("add a submodule");
-    project.check().assert_passes();
+    project.git(&["add", "--force", "scratch/sub"]);
+    project.check().assert_reports(
+        1,
+        "error: [member_sources] scratch/sub: This is another git repository, such as a \
+         submodule, so the checks can't see its files",
+    );
 }
