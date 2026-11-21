@@ -2648,13 +2648,19 @@ fn a_git_repository_anywhere_fails() {
     }
 }
 
-/// Git doesn't list a repository that `.gitignore` excludes, and `git add` doesn't add it, so no
-/// pull request can carry it.
+/// Git doesn't list a repository that `.gitignore` excludes, and a plain `git add` doesn't add
+/// it, so no pull request carries it. Added by force it is a submodule like any other.
 #[test]
-fn a_git_repository_that_is_ignored_passes() {
+fn a_git_repository_that_is_ignored_passes_until_it_is_tracked() {
     let project = Project::new();
     project.write(".gitignore", "/scratch/\n");
     project.git(&["init", "--quiet"]);
     project.nested_repository("scratch/sub");
     project.check().assert_passes();
+    project.git(&["add", "--force", "scratch/sub"]);
+    project.check().assert_reports(
+        1,
+        "error: [member_sources] scratch/sub: This is another git repository, such as a \
+         submodule, so the checks can't see its files",
+    );
 }

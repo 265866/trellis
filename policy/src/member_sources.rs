@@ -109,7 +109,8 @@ fn nested_repositories(workspace: &Workspace) -> Result<Vec<Violation>, PolicyEr
                  its files, and `rule-changes` sees only the commit it points at, not which of \
                  its files are rules. A checkout that initializes it holds files no check or \
                  review read. Copy the files you need into the repository, or depend on it \
-                 through Cargo as a git dependency."
+                 through Cargo as a git dependency, with its URL under `allow-git` in \
+                 `deny.toml`."
                     .to_owned(),
             )
         })

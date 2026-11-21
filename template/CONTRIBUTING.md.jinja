@@ -36,8 +36,8 @@ else, a nested one included, and a package there that isn't a member. It also fa
 directory or `crates` that is a symbolic link, and a crate directory whose name isn't ASCII or
 that Windows reads as another name: one that ends in a dot or a space, or holds a `:` or a `\`.
 It fails a git submodule, or any other git repository, anywhere in the repository, since no check
-sees its files, and two paths anywhere in the repository that macOS or Windows reads as one, such as two
-crate directories whose names differ only in letter case. It fails any path with a part of the
+sees its files, and two paths anywhere in the repository that macOS or Windows reads as one, such
+as two crate directories whose names differ only in letter case. It fails any path with a part of the
 form of a Windows short name too, such as `cargo~1.tom` or `demo_c~1`: at most eight characters
 that end in `~` and digits, then at most three after a dot. Windows opens `Cargo.toml` under the
 first, so a checkout of both there can hold one file, with the other's contents.
