@@ -1,5 +1,11 @@
-use rustc_ast::visit::{self, Visitor};
-use rustc_ast::{AttrStyle, Attribute, Crate};
+use std::ops::ControlFlow;
+
+use clippy_utils::ast_utils::is_cfg_test;
+use rustc_ast::visit::{self, AssocCtxt, Visitor};
+use rustc_ast::{
+    Arm, AssocItem, AttrStyle, Attribute, Crate, Expr, ExprField, FieldDef, ForeignItem,
+    GenericParam, Item, ItemKind, Local, Param, PatField, Variant,
+};
 use rustc_lint::{EarlyContext, EarlyLintPass, LintContext};
 use rustc_lint_defs::{declare_lint, declare_lint_pass};
 use rustc_span::Span;
@@ -40,8 +46,9 @@ declare_lint! {
     ///   `missing_workspace_lints` or `suppression_policy`. These lints guard the checks
     ///   themselves and have no exceptions; they report from the crate root, so an `expect` on an
     ///   item can't reach them anyway, and a crate-wide one would silence every report.
-    /// - `expect`, `allow` or `warn` of `file_named_after_item` or `non_leaf_module_items`, whose
-    ///   fix, renaming or moving the code, is always possible.
+    /// - `expect`, `allow` or `warn` of `doc_after_attribute`, which reads source text and reports
+    ///   from the crate root, so an `expect` on an item can't reach it, and whose fix, moving the
+    ///   doc comment above the attributes, is always possible.
     /// - `expect`, `allow` or `warn` of `needless_raw_identifier`, whose fix, deleting the `r#`, is
     ///   always possible.
     /// - `expect`, `allow` or `warn` of `macro_definition`. The lints in this library skip the code
@@ -55,7 +62,15 @@ declare_lint! {
     ///   too: a workspace needs none of them.
     /// - A lint level whose lints aren't written as paths, such as `paste`'s `[<...>]`.
     /// - A lint-level attribute on a module, inline or out-of-line: it covers every item in the
-    ///   module and the modules inside it. Put the `expect` on the smallest item inside.
+    ///   module and the modules inside it. Put the `expect` on the smallest item inside. The one
+    ///   exception is an `expect` naming only `file_named_after_item` or `non_leaf_module_items`,
+    ///   which report at a module itself.
+    /// - An `expect` of `file_named_after_item` or `non_leaf_module_items`, on any item, with a
+    ///   module beneath the item, in a function body or below a `#[cfg(test)]` module too, whose
+    ///   reports it would cover as well. `file_named_after_item` reports at a module and
+    ///   `non_leaf_module_items` at an item in a module with child modules, so without a module
+    ///   beneath it the `expect` covers only the item's own report. A `#[cfg(test)]` module that
+    ///   holds no module may be beneath it, since neither lint reports it or anything in it.
     /// - A lint-level attribute on an impl block or a trait that names a lint other than those
     ///   that report at the block itself, such as `operator_overload`, `from_without_constructor`,
     ///   `single_impl_trait` or `extension_trait_suffix` (the full list is `BLOCK_LINTS`). An
@@ -160,29 +175,30 @@ const TOOL_GROUPS: &[&str] = &[
 
 const FIX_THE_CODE: &str = "fix what the lint reports; if the rule itself is wrong for the \
                             workspace, change it in trellis's `lints/` and `docs/style.md`";
-const RENAME_OR_MOVE: &str = "rename or move the code as the lint says; if the rule itself is \
-                              wrong for the workspace, change it in trellis's `lints/` and `docs/style.md`";
 const LIST_THE_CRATE: &str = "use a function, type or trait; a macro goes only in a crate that \
                               `macro_crates` in `dylint.toml` lists, which is a rule change";
 
 /// The lints in this library that have no exceptions, each with what to do instead. `code_comment`,
 /// `disabled_code`, `missing_workspace_lints` and `suppression_policy` guard the checks
 /// themselves: they report from the crate root, where an item's `expect` can't reach them, and a
-/// crate-wide one would silence every report. The fix for `file_named_after_item`,
-/// `needless_raw_identifier` and `non_leaf_module_items`, renaming or moving the code or deleting
-/// an `r#`, is always possible. An exception to
-/// `macro_definition` would let the code a macro writes past the lints, which skip it, so only
-/// `macro_crates`, a rule change, allows a macro.
+/// crate-wide one would silence every report. `doc_after_attribute` and `needless_raw_identifier`
+/// report from the crate root too, and their fix, moving a doc comment or deleting an `r#`, is
+/// always possible. An exception to `macro_definition` would let the code a macro writes past the
+/// lints, which skip it, so only `macro_crates`, a rule change, allows a macro.
 const NO_EXCEPTION_LINTS: &[(&str, &str)] = &[
     ("code_comment", FIX_THE_CODE),
     ("disabled_code", FIX_THE_CODE),
     ("missing_workspace_lints", FIX_THE_CODE),
     ("suppression_policy", FIX_THE_CODE),
-    ("file_named_after_item", RENAME_OR_MOVE),
-    ("non_leaf_module_items", RENAME_OR_MOVE),
+    ("doc_after_attribute", FIX_THE_CODE),
     ("macro_definition", LIST_THE_CRATE),
     ("needless_raw_identifier", FIX_THE_CODE),
 ];
+
+/// The lints in this library that report at a module itself, so an `expect` of them can only go on
+/// the module. Every report of theirs beneath an item needs a module beneath it, so an `expect` of
+/// them is rejected on an item with a module beneath it, and then covers only the item's own report.
+const MODULE_LINTS: &[&str] = &["file_named_after_item", "non_leaf_module_items"];
 
 /// The fewest distinct words, besides the words of the lints it names, that an `expect`'s reason
 /// may have. A word is a run of letters and digits, compared ignoring case.
@@ -198,6 +214,7 @@ const REASON_MIN_CHARS: usize = 20;
 const BLOCK_LINTS: &[&str] = &[
     "extension_trait_suffix",
     "from_without_constructor",
+    "non_leaf_module_items",
     "operator_overload",
     "single_impl_trait",
     "clippy::expl_impl_clone_on_copy",
@@ -262,19 +279,117 @@ impl EarlyLintPass for SuppressionPolicy {
             &mut Expanded {
                 checker: &checker,
                 source,
+                layout_expects: Vec::new(),
             },
             krate,
         );
     }
 }
 
-/// Checks the lint levels of the expanded crate that macros wrote, which the source doesn't hold.
+/// Checks the lint levels of the expanded crate that macros wrote, which the source doesn't hold,
+/// and the `expect`s of the lints in [`MODULE_LINTS`], which need to see what lies beneath them.
 struct Expanded<'a, 'cx> {
     checker: &'a Checker<'a, 'cx>,
     source: &'a LocalSource,
+    /// The span of each `expect` of a lint in [`MODULE_LINTS`] on the nodes the visit is inside,
+    /// outermost first, and whether it has been reported.
+    layout_expects: Vec<(Span, bool)>,
 }
 
+impl Expanded<'_, '_> {
+    /// Runs `walk` over a node whose lint-level attributes are `attributes`, with the `expect`s
+    /// among them of a lint in [`MODULE_LINTS`] in scope.
+    fn within(&mut self, attributes: &[Attribute], walk: impl FnOnce(&mut Self)) {
+        let depth = self.layout_expects.len();
+        self.layout_expects.extend(
+            attributes
+                .iter()
+                .filter(|attribute| expects_module_lint(attribute))
+                .map(|attribute| (attribute.span, false)),
+        );
+        walk(self);
+        self.layout_expects.truncate(depth);
+    }
+}
+
+/// Overrides each node that rustc's early lint pass sets lint levels on, as `with_lint_attrs` in
+/// `rustc_lint/src/early.rs` does, so that every `expect` that applies to a module is in
+/// `layout_expects` when the visit reaches it. A statement takes the attributes of the item,
+/// `let` or expression it holds, which are visited in turn.
 impl<'ast> Visitor<'ast> for Expanded<'_, '_> {
+    /// Reports each `expect` of a lint in [`MODULE_LINTS`] in scope at a module written in the
+    /// source, other than a `#[cfg(test)]` module that holds no module. Neither lint reports a
+    /// module or an item in one that a macro wrote, unless a module written in the source lies
+    /// inside it, which this reaches in turn.
+    fn visit_item(&mut self, item: &'ast Item) {
+        if matches!(item.kind, ItemKind::Mod(..))
+            && !item.span.from_expansion()
+            && (!is_cfg_test(item) || holds_module(item))
+        {
+            for (span, reported) in &mut self.layout_expects {
+                if !*reported {
+                    *reported = true;
+                    self.checker.report(
+                        &Place::written(*span),
+                        *span,
+                        "`expect` of a layout lint on an item with a module beneath it",
+                        "it covers the lint's reports in that module too, in a function body or \
+                         below a `#[cfg(test)]` module as well: put the `expect` on what the lint \
+                         reports inside, or move the module out. Only a `#[cfg(test)]` module \
+                         that holds no module may be beneath it",
+                    );
+                }
+            }
+        }
+        self.within(&item.attrs, |this| visit::walk_item(this, item));
+    }
+
+    fn visit_assoc_item(&mut self, item: &'ast AssocItem, context: AssocCtxt) {
+        self.within(&item.attrs, |this| {
+            visit::walk_assoc_item(this, item, context);
+        });
+    }
+
+    fn visit_foreign_item(&mut self, item: &'ast ForeignItem) {
+        self.within(&item.attrs, |this| visit::walk_item(this, item));
+    }
+
+    fn visit_local(&mut self, local: &'ast Local) {
+        self.within(&local.attrs, |this| visit::walk_local(this, local));
+    }
+
+    fn visit_expr(&mut self, expression: &'ast Expr) {
+        self.within(&expression.attrs, |this| visit::walk_expr(this, expression));
+    }
+
+    fn visit_expr_field(&mut self, field: &'ast ExprField) {
+        self.within(&field.attrs, |this| visit::walk_expr_field(this, field));
+    }
+
+    fn visit_arm(&mut self, arm: &'ast Arm) {
+        self.within(&arm.attrs, |this| visit::walk_arm(this, arm));
+    }
+
+    fn visit_pat_field(&mut self, field: &'ast PatField) {
+        self.within(&field.attrs, |this| visit::walk_pat_field(this, field));
+    }
+
+    fn visit_param(&mut self, param: &'ast Param) {
+        self.within(&param.attrs, |this| visit::walk_param(this, param));
+    }
+
+    fn visit_generic_param(&mut self, param: &'ast GenericParam) {
+        self.within(&param.attrs, |this| visit::walk_generic_param(this, param));
+    }
+
+    fn visit_field_def(&mut self, field: &'ast FieldDef) {
+        self.within(&field.attrs, |this| visit::walk_field_def(this, field));
+    }
+
+    fn visit_variant(&mut self, variant: &'ast Variant) {
+        self.within(&variant.attrs, |this| visit::walk_variant(this, variant));
+    }
+
     fn visit_attribute(&mut self, attribute: &'ast Attribute) {
         let path = attribute_origin::path_text(attribute);
         if LintLevel::lowering(&path).is_none() && !is_clippy_attribute(&path) {
@@ -505,12 +620,16 @@ impl Checker<'_, '_> {
     fn check_target(&self, meta: &Meta, place: &Place, level: LintLevel) {
         let name = level.name();
         match place.target {
+            Target::Module if level == LintLevel::Expect && names_only_module_lints(meta) => {}
             Target::Module => self.report(
                 place,
                 place.span,
                 &format!("`{name}` on a module"),
                 "it covers every item in the module and in the modules inside it: put the \
-                 `expect` on the smallest item inside that the lint reports",
+                 `expect` on the smallest item inside that the lint reports. Only an `expect` of \
+                 the lints that report at a module itself, listed in `MODULE_LINTS` in \
+                 `lints/src/suppression_policy.rs`, may go on a module, and only on one with no \
+                 module beneath it",
             ),
             Target::Fragment => self.report(
                 place,
@@ -615,6 +734,46 @@ fn explains(reason: &str, items: &[Meta]) -> bool {
 /// `clippy::msrv`.
 fn is_clippy_attribute(path: &str) -> bool {
     path.starts_with("clippy::")
+}
+
+/// Whether `attribute` is an `expect` that names a lint in [`MODULE_LINTS`].
+fn expects_module_lint(attribute: &Attribute) -> bool {
+    let meta = attribute_origin::meta(attribute);
+    LintLevel::lowering(&meta.path) == Some(LintLevel::Expect)
+        && meta.items().iter().any(|lint| {
+            matches!(lint.kind, MetaKind::Word) && MODULE_LINTS.contains(&lint.path.as_str())
+        })
+}
+
+/// Whether a `mod` item appears anywhere beneath `item`, in function bodies too.
+fn holds_module(item: &Item) -> bool {
+    struct FindModule;
+
+    impl<'ast> Visitor<'ast> for FindModule {
+        type Result = ControlFlow<()>;
+
+        fn visit_item(&mut self, item: &'ast Item) -> ControlFlow<()> {
+            if matches!(item.kind, ItemKind::Mod(..)) {
+                return ControlFlow::Break(());
+            }
+            visit::walk_item(self, item)
+        }
+    }
+
+    visit::walk_item(&mut FindModule, item).is_break()
+}
+
+/// Whether `meta`, a lint-level attribute, names at least one lint and only lints in
+/// [`MODULE_LINTS`].
+fn names_only_module_lints(meta: &Meta) -> bool {
+    let mut lints = meta
+        .items()
+        .iter()
+        .filter(|item| !matches!(item.kind, MetaKind::Value(_)));
+    lints.clone().next().is_some()
+        && lints.all(|lint| {
+            matches!(lint.kind, MetaKind::Word) && MODULE_LINTS.contains(&lint.path.as_str())
+        })
 }
 
 /// Whether `meta`, an `expect`, names `dead_code` and no other lint.

@@ -132,17 +132,19 @@ the minor version and a `fix` the patch version. To ship:
 
 1. To reword an entry, edit `CHANGELOG.md` on the release pull request's branch, as the last step
    before you merge: the next merge to `main` closes the release pull request and opens a new one
-   without the edit. The first release after you add a crate comes out as a patch when only that
-   crate changed. For a minor one, change the version on that branch too: in the root
-   `Cargo.toml`, in `Cargo.lock` and in the `CHANGELOG.md` heading. Its notes can repeat older
-   entries; delete those. Renaming the main crate stops the release workflow with an error that
-   says what to do by hand.
+   without the edit. To make a release a minor one, change the version on that branch too: in the
+   root `Cargo.toml`, in `Cargo.lock` and in the `CHANGELOG.md` heading.
+{%- if not published %}
+   The first release after you add a crate comes out as a patch when only that crate changed, and
+   its notes can repeat older entries; delete those. Renaming the main crate stops the release
+   workflow with an error that says what to do by hand.
+{%- endif %}
 2. Under each breaking change, from a commit marked `!` or with a `BREAKING CHANGE:` footer, write
    what users must do before they upgrade. Edit `CHANGELOG.md` on the release pull request's
    branch, as in step 1. [Stability](stability.md) promises users this note.
 3. Merge the release pull request once its checks pass. Merge no other pull request until the
-   release workflow's **{{ 'Release' if kind == 'library' else 'Tag' }}** job finishes, or
-   release-plz may propose the same version again.
+   release workflow's **{{ 'Release' if kind == 'library' else 'Tag' }}** job finishes. A pull
+   request merged before then can get no release pull request until the next push to `main`.
 {%- if kind != 'library' %}
 4. If a later job fails, re-run the failed jobs. They pick up from the same tag.
 
@@ -264,10 +266,10 @@ Some answers also change what GitHub needs:
 
 ## Update trellis
 
-Renovate opens a pull request when trellis tags a new version. Before you merge it, read that
-version's section in trellis's [CHANGELOG.md](https://github.com/265866/trellis/blob/main/CHANGELOG.md):
-its "Action required in projects" part says what to do before or after the update merges. To update
-by hand:
+Renovate opens a pull request in its weekly run after trellis tags a new version. Before you merge
+it, read that version's section in trellis's
+[CHANGELOG.md](https://github.com/265866/trellis/blob/main/CHANGELOG.md): its "Action required in
+projects" part says what to do before or after the update merges. To update by hand:
 
 ```sh
 uvx copier update --defaults
@@ -284,6 +286,13 @@ merges the new template into your edits to the files it renders, such as a crate
 markers; resolve them before you commit. Once the update merges, run `just check-github` on
 `main`. A newer trellis can set more than the one you set up with, so if it reports a wrong
 setting, run `just setup-github`.
+{%- if kind == 'service' %}
+
+An update that moves the base images' digests in the `Containerfile`, such as for a security fix,
+publishes no new image by itself. The release workflow builds the image only when it tags a
+release, and release-plz opens a release pull request only when a file of one of the crates
+changes; the `Containerfile` is in none of them. The new base images ship with the next release.
+{%- endif %}
 
 ## Renew the release token
 

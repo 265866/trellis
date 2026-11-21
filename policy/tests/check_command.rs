@@ -274,6 +274,16 @@ struct Run {
 }
 
 impl Run {
+    /// Asserts that the run exited with 0 and printed only the one-line summary.
+    fn assert_passes(&self) {
+        assert_eq!(self.code, Some(0), "the exit code should be 0: {self:#?}");
+        assert_eq!(
+            self.stdout.lines().count(),
+            1,
+            "a clean run prints only the summary: {self:#?}"
+        );
+    }
+
     /// Asserts that the run exited with `code` and printed a line that contains `text`.
     fn assert_reports(&self, code: i32, text: &str) {
         assert_eq!(
@@ -323,12 +333,8 @@ fn run(directory: &Path, arguments: &[&str], ci: Ci) -> Run {
 #[test]
 fn a_generated_project_passes() {
     let run = Project::new().check();
+    run.assert_passes();
     run.assert_reports(0, "All 12 structure rules hold");
-    assert_eq!(
-        run.stdout.lines().count(),
-        1,
-        "a clean run prints only the summary: {run:#?}"
-    );
 }
 
 #[test]
@@ -339,7 +345,7 @@ fn the_workspace_is_found_from_the_current_directory() {
         &["check"],
         Ci::Local,
     )
-    .assert_reports(0, "All 12 structure rules hold");
+    .assert_passes();
 }
 
 #[test]
@@ -356,9 +362,7 @@ fn a_lints_library_at_an_absolute_path_passes() {
         .to_str()
         .expect("the temporary path should be UTF-8");
     project.root_manifest("", &format!("[{{ path = {path:?} }}]"));
-    project
-        .check()
-        .assert_reports(0, "All 12 structure rules hold");
+    project.check().assert_passes();
 }
 
 #[test]
@@ -394,6 +398,22 @@ fn a_lints_library_linked_into_the_workspace_fails() {
     project.check().assert_reports(
         1,
         "is inside the workspace, so a change to its sources counts as code",
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn a_symbolic_link_in_a_crate_fails() {
+    let project = Project::new();
+    unix::fs::symlink(
+        "../../../README.md",
+        project.path().join("crates/demo_core/src/extra.rs"),
+    )
+    .expect("the link should be created");
+    project.check().assert_reports(
+        1,
+        "error: [member_sources] crates/demo_core/src/extra.rs: This is a symbolic link in or \
+         above the crate `demo_core`, so the crate could read a file from anywhere.",
     );
 }
 
@@ -542,9 +562,7 @@ fn readme_sections_must_match_in_order() {
              ### Linux\n\n{index}"
         ),
     );
-    project
-        .check()
-        .assert_reports(0, "All 12 structure rules hold");
+    project.check().assert_passes();
 }
 
 #[test]
@@ -627,9 +645,7 @@ fn a_page_without_a_title_and_a_paragraph_fails() {
         "docs/install.md",
         "# Install\n\nFor people who run the demo.\n",
     );
-    project
-        .check()
-        .assert_reports(0, "All 12 structure rules hold");
+    project.check().assert_passes();
 }
 
 #[test]
@@ -742,9 +758,7 @@ fn adding_or_removing_a_build_script_is_one_rule_change_that_passes() {
     );
     project.commit("add a build script");
     project.git(&["branch", "with"]);
-    project
-        .check()
-        .assert_reports(0, "All 12 structure rules hold");
+    project.check().assert_passes();
     project
         .run(&["rule-changes", "without", "--head", "HEAD"])
         .assert_reports(
@@ -760,9 +774,7 @@ fn adding_or_removing_a_build_script_is_one_rule_change_that_passes() {
         &member_manifest("demo", "demo_core.workspace = true\n"),
     );
     project.commit("remove the build script");
-    project
-        .check()
-        .assert_reports(0, "All 12 structure rules hold");
+    project.check().assert_passes();
     project
         .run(&["rule-changes", "with", "--head", "HEAD"])
         .assert_reports(
@@ -780,9 +792,7 @@ fn a_proc_macro_lands_as_a_rule_change_then_a_code_change_that_pass() {
     project.policy_setting("proc_macro_crates = [\"serde_derive\"]");
     project.commit("list a proc macro");
     project.git(&["branch", "listed"]);
-    project
-        .check()
-        .assert_reports(0, "All 12 structure rules hold");
+    project.check().assert_passes();
     project
         .run(&["rule-changes", "generated", "--head", "HEAD"])
         .assert_reports(
@@ -800,9 +810,7 @@ fn a_proc_macro_lands_as_a_rule_change_then_a_code_change_that_pass() {
     );
     project.lock();
     project.commit("derive with the proc macro");
-    project
-        .check()
-        .assert_reports(0, "All 12 structure rules hold");
+    project.check().assert_passes();
     project
         .run(&["rule-changes", "listed", "--head", "HEAD"])
         .assert_reports(
@@ -845,9 +853,7 @@ fn a_member_the_release_changelog_leaves_out_fails() {
         "[[package]]\nname = \"demo\"\nchangelog_update = true\n\
          changelog_include = [\"demo_core\", \"demo_server\"]\n",
     );
-    project
-        .check()
-        .assert_reports(0, "All 12 structure rules hold");
+    project.check().assert_passes();
 }
 
 /// The project's `README.md` with `extra` at the end of its `Install` section.
@@ -1484,9 +1490,7 @@ fn pages_github_renders_as_described_pass() {
         "docs/guides/deep/more.md",
         "# More\n\nFor people who want more.\n",
     );
-    project
-        .check()
-        .assert_reports(0, "All 12 structure rules hold");
+    project.check().assert_passes();
     project.write(
         "docs/guides/setup.md",
         "# Setup\n\nFor people who set up the demo.\n<!-- [deeper](deep/more.md) -->\n",
@@ -1517,9 +1521,7 @@ fn the_readme_has_one_title_first() {
         "README.md",
         &format!("[![CI](https://example.com/ci.svg)](https://example.com/ci)\n\n{README}"),
     );
-    project
-        .check()
-        .assert_reports(0, "All 12 structure rules hold");
+    project.check().assert_passes();
 }
 
 #[test]
@@ -1626,9 +1628,7 @@ fn pages_in_subdirectories_are_linked_and_shaped() {
         "docs/install.md",
         "# Install\n\nFor people who run the demo. [Set it up](guides/setup.md#first) first.\n",
     );
-    project
-        .check()
-        .assert_reports(0, "All 12 structure rules hold");
+    project.check().assert_passes();
 }
 
 #[test]
@@ -1734,9 +1734,7 @@ fn a_page_may_start_with_comments_before_its_title() {
         "docs/install.md",
         "<!-- SPDX-License-Identifier: MIT -->\n\n# Install\n\nFor people who run the demo.\n",
     );
-    project
-        .check()
-        .assert_reports(0, "All 12 structure rules hold");
+    project.check().assert_passes();
     project.write(
         "docs/install.md",
         "<!-- SPDX-License-Identifier: MIT -->\n\nText.\n\n# Install\n\nFor people.\n",

@@ -104,7 +104,10 @@ impl<'tcx> LateLintPass<'tcx> for ExtensionTraitSuffix {
 /// Whether the impl adds methods to another crate's type or to every type that meets bounds,
 /// rather than to a type or trait this crate defines.
 fn extends_foreign_type(tcx: TyCtxt<'_>, impl_id: DefId) -> bool {
-    let self_ty = tcx.type_of(impl_id).instantiate_identity().skip_norm_wip();
+    let self_ty = tcx
+        .type_of(impl_id)
+        .instantiate_identity()
+        .skip_normalization();
     let bounded_by_local_trait =
         tcx.explicit_clauses_of(impl_id)
             .clauses

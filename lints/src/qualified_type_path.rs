@@ -39,7 +39,8 @@ declare_lint! {
     /// ### Configuration
     ///
     /// `ambiguous_type_names` in the `trellis_lints` table of `dylint.toml` lists names that may
-    /// always be qualified, such as `io::Error`. It replaces the default, `["Error", "Result"]`.
+    /// always be qualified, such as `io::Error`. The list has no default; the workspace's
+    /// `dylint.toml` sets it, and the template ships `["Error", "Result"]`.
     ///
     /// ```toml
     /// [trellis_lints]

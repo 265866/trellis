@@ -45,8 +45,8 @@ mod nested {
     // Flagged: a function in an inline non-leaf module.
     fn tie() {}
 
-    // Not flagged here: an `expect` on the item covers it, in an inline module, though
-    // `suppression_policy` rejects it.
+    // Not flagged here: an `expect` on the item covers it, in an inline module, and
+    // `suppression_policy` allows it there.
     #[cfg_attr(
         dylint_lib = "trellis_lints",
         expect(non_leaf_module_items, reason = "the fixture checks an item-level expect")
@@ -54,16 +54,16 @@ mod nested {
     fn excused() {}
 }
 
-// Not flagged here: an `expect` on the item covers it, in the crate root, though
-// `suppression_policy` rejects it.
+// Not flagged here: an `expect` on the item covers it, in the crate root, and
+// `suppression_policy` allows it there.
 #[cfg_attr(
     dylint_lib = "trellis_lints",
     expect(non_leaf_module_items, reason = "the fixture checks an item-level expect")
 )]
 pub fn init() {}
 
-// Not flagged here: an `expect` on an inline leaf module covers it, though
-// `suppression_policy` rejects it.
+// Not flagged here: an `expect` on an inline leaf module covers it, and
+// `suppression_policy` allows it there.
 #[cfg_attr(
     dylint_lib = "trellis_lints",
     expect(non_leaf_module_items, reason = "the fixture checks an item-level expect")
@@ -94,3 +94,13 @@ mod tests {
 
 // Not flagged: `main` in a binary crate root.
 fn main() {}
+
+// Not flagged here: an `expect` on an impl block covers it, and `suppression_policy` allows it
+// there, since the lint reports at the block.
+#[cfg_attr(
+    dylint_lib = "trellis_lints",
+    expect(non_leaf_module_items, reason = "the fixture checks a block-level expect")
+)]
+impl Engine {
+    fn stop(&self) {}
+}

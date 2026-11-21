@@ -63,7 +63,7 @@ impl<'tcx> LateLintPass<'tcx> for OptionsStructDefault {
                 .tcx
                 .type_of(field.def_id)
                 .instantiate_identity()
-                .skip_norm_wip();
+                .skip_normalization();
             ty.has_param() || implements_trait(cx, ty, default, &[])
         });
         if !defaultable {
@@ -73,7 +73,7 @@ impl<'tcx> LateLintPass<'tcx> for OptionsStructDefault {
             .tcx
             .type_of(item.owner_id)
             .instantiate_identity()
-            .skip_norm_wip();
+            .skip_normalization();
         if cx
             .tcx
             .non_blanket_impls_for_ty(default, ty)

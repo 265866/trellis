@@ -21,9 +21,15 @@ declare_lint! {
     /// non-leaf. An inline child module that holds definitions is reported too, because its code
     /// lives in the non-leaf module's file; one holding only re-exports is fine. `macro_rules!`
     /// definitions are allowed, since a parent module must define a macro before the child
-    /// modules that use it. Each item is reported at the item itself. The lint has no
-    /// exceptions: moving the item is always possible, so `suppression_policy` rejects an
-    /// `expect` of it.
+    /// modules that use it. Each item is reported at the item itself.
+    ///
+    /// The guide allows a small amount of core "ties things together" implementation code in a
+    /// non-leaf module, which the lint can't tell from an API, so such an item takes an `expect`
+    /// saying what it ties together. It goes on the item the lint reports: a function, a type, an
+    /// impl block, a trait, or an inline leaf module such as a sealed trait's `mod sealed`.
+    /// `suppression_policy` allows an `expect` of this lint on an impl block, a trait and a module
+    /// too, and rejects one on an item with a module beneath it, other than a `#[cfg(test)]` module
+    /// that holds no module, so the `expect` covers only that one report.
     ///
     /// ```rust,ignore
     /// // lib.rs

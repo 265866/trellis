@@ -172,7 +172,7 @@ pub(crate) mod legacy;
 
 #[cfg_attr(
     dylint_lib = "trellis_lints",
-    expect(non_leaf_module_items, reason = "the legacy module predates these rules")
+    expect(qualified_function_calls, reason = "the legacy module predates these rules")
 )]
 mod configured {}
 
@@ -423,3 +423,86 @@ fn pull() {
     expect(dead_code, reason = "the device manager in the next change calls it")
 )]
 mod forward {}
+
+// Not flagged: an `expect` of `file_named_after_item` on the declaration of a leaf module, where
+// the lint reports. A module of unrelated functions beside one public type isn't about that
+// type, so the guide lets it be named as desired.
+#[cfg_attr(
+    dylint_lib = "trellis_lints",
+    expect(
+        file_named_after_item,
+        reason = "the module gathers unrelated test case helpers, not only Entries"
+    )
+)]
+#[path = "modules/cases.rs"]
+mod cases;
+
+// Not flagged: an `expect` of `non_leaf_module_items` on what it reports in a non-leaf module, an
+// inline leaf module, a function or an impl block. The guide allows a little code that ties the
+// module together.
+#[cfg_attr(
+    dylint_lib = "trellis_lints",
+    expect(
+        non_leaf_module_items,
+        reason = "the sealed trait keeps other crates from implementing the public traits"
+    )
+)]
+mod sealed {
+    pub trait Sealed {}
+}
+
+#[cfg_attr(
+    dylint_lib = "trellis_lints",
+    expect(non_leaf_module_items, reason = "registers each child module's routes in one place")
+)]
+pub fn routes() {}
+
+#[cfg_attr(
+    dylint_lib = "trellis_lints",
+    expect(non_leaf_module_items, reason = "the count joins the child modules' coupon types")
+)]
+impl Coupons {
+    fn count(&self) -> u32 {
+        self.0
+    }
+}
+
+// Flagged: an `expect` on a module that also names another lint.
+#[cfg_attr(
+    dylint_lib = "trellis_lints",
+    expect(
+        file_named_after_item,
+        dead_code,
+        reason = "the module gathers unrelated helpers nobody calls yet"
+    )
+)]
+mod mixed {}
+
+// Flagged: an `expect` of a layout lint on a module with child modules, which would cover the
+// reports of the modules inside it.
+#[cfg_attr(
+    dylint_lib = "trellis_lints",
+    expect(file_named_after_item, reason = "the catalog module predates the naming rule")
+)]
+#[path = "modules/catalog.rs"]
+mod catalog;
+
+#[cfg_attr(
+    dylint_lib = "trellis_lints",
+    expect(non_leaf_module_items, reason = "the wiring module predates the layout rule")
+)]
+mod wiring {
+    mod inner {}
+
+    fn glue() {}
+}
+
+// Flagged: an exception to `doc_after_attribute`, which reads source text and reports from the
+// crate root, so an `expect` on the item can't reach it.
+#[cfg_attr(
+    dylint_lib = "trellis_lints",
+    expect(doc_after_attribute, reason = "the derive reads better above the docs here")
+)]
+#[derive(Debug)]
+/// A count of coupons.
+struct Tally;

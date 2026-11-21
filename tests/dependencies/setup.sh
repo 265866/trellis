@@ -45,7 +45,8 @@ cargo update --quiet --package serde_derive --precise 1.0.229
 cargo update --quiet --package tracing-attributes --precise 0.1.31
 
 cat >$core/src/lib.rs <<'EOF'
-//! The logic behind `demo-binary`, apart from its binary so tests can use it.
+//! The logic behind `demo-binary`, apart from its binary so the binary's command-line and
+//! runtime dependencies stay out of it.
 
 mod byte_string;
 mod defaults;
@@ -381,6 +382,7 @@ pub enum SettingsError {
 }
 EOF
 
+mkdir -p "$core/tests"
 cat >$core/tests/settings.rs <<'EOF'
 //! Tests for `Settings`.
 

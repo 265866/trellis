@@ -19,9 +19,10 @@ need admin rights on the repository or the release token, so `just ci` leaves th
 | `crates/{{ crate_name }}` | The library. |
 {%- else %}
 | `crates/{{ crate_name }}` | The {{ 'service' if kind == 'service' else 'program' }}: `main.rs` starts it and wires the parts together. No logic that a test would want to call.
-{%- if kind == 'service' %} `{{ project_name }} --version` prints the version line and exits 0 without starting the service, since CI's `Container image` job runs the image that way; `tests/command_line.rs` checks it.
-{%- endif %} |
-| `crates/{{ crate_name }}_core` | The logic, apart from the binary so tests can use it. |
+{%- if kind == 'service' %} `{{ project_name }} --version` prints the version line and exits 0 without starting the service, since CI's `Container image` job runs the image that way.
+{%- else %} `{{ project_name }} --version` prints the version line and exits 0.
+{%- endif %} `tests/command_line.rs` runs the built binary and checks it. |
+| `crates/{{ crate_name }}_core` | The logic. A crate of its own keeps the binary's command-line and runtime dependencies out of it, lets `just docs` check the doc comments of both crates, and gives `internal_dependencies` its first edge: the binary depends on the logic, never the reverse. |
 {%- endif %}
 {%- if web_ui %}
 | `crates/{{ crate_name }}/web` | The web UI, a Bun app. trellis needs only its `check` and `build` scripts, and `build` to write the UI to `dist/`. The image puts that build in `/usr/share/{{ project_name }}/web`, and `just run` builds it into `dist/`; both name the directory in `{{ crate_name | upper }}_WEB_DIR`, for the service to read when it serves the UI. |
@@ -55,7 +56,8 @@ rustfmt, and the nightly the custom lints build on.
 
 ### Editors
 
-The options in `rustfmt.toml` exist only in nightly rustfmt. For rust-analyzer, set
+Two options in `rustfmt.toml`, `imports_granularity` and `format_macro_matchers`, exist only in
+nightly rustfmt, and stable rustfmt ignores them with a warning. For rust-analyzer, set
 `rust-analyzer.rustfmt.extraArgs` to `["+nightly-2026-10-28"]`, so format-on-save matches
 `just fmt-check`.
 
@@ -223,8 +225,12 @@ or `fix(config)!: reject unknown keys`. A `!` marks a breaking change.
 
 A pull request changes either the rules or the code, never both. Roughly, code is what's under
 `crates/` and every `.rs` file; the README, changelog, licenses, `Cargo.lock`, the root
-`Cargo.toml` dependency tables and pages in `docs/` other than `docs/style.md` are neither; and
-anything else, build scripts included, is a rule. When a new rule would flag existing
+`Cargo.toml` dependency tables, and pages in `docs/` other than `docs/style.md` with their images
+are neither; and anything else is a rule. Every `build.rs` is a rule too, except one below a
+crate's `src/`, `tests/`, `benches/` or `examples/` when the crate's directory holds no other
+`Cargo.toml`, in any letter case, before or after the change. So an untracked file that fits none
+of these, such as an `.envrc`, counts as a rule in `just rule-changes`: commit it in a rules pull
+request, or list it in `.git/info/exclude`. When a new rule would flag existing
 code, either fix the code in one pull request and add the rule in the next, or add the rule
 together with an `expect` and a real reason at each place it flags. A proc-macro dependency
 is code: list the crate in `proc_macro_crates` in one pull request, then add the dependency and

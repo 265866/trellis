@@ -36,6 +36,11 @@ mod geometry;
 #[path = "modules/helpers.rs"]
 mod helpers;
 
+// Not flagged: a module of public functions isn't about its private helper type, so the guide
+// lets it be named as desired.
+#[path = "modules/render.rs"]
+mod render;
+
 // Not flagged: a module with a child module isn't a leaf.
 #[path = "modules/widgets.rs"]
 mod widgets;
@@ -53,7 +58,7 @@ mod settings_inline {
 fn main() {}
 
 // Not reported here: flagged, but an item-level `expect` in the documented form takes it,
-// though `suppression_policy` rejects it.
+// on the declaration of a leaf module, where `suppression_policy` allows it.
 #[cfg_attr(
     dylint_lib = "trellis_lints",
     expect(

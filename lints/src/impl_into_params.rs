@@ -17,7 +17,9 @@ declare_lint! {
     ///
     /// The Google Rust Style Guide, "Accepting `Into`": application code should almost never use
     /// `impl Into<T>` parameters, which trade a `.into()` at the call site for a more complex
-    /// signature, more generated code, and harder type inference.
+    /// signature, more generated code, and harder type inference. trellis applies the rule to
+    /// library APIs too, where the guide lets you consider `impl Into<T>` when call-site
+    /// ergonomics are paramount; such a parameter takes an `expect` saying so.
     ///
     /// Code a macro writes isn't checked. Code a proc macro copies from its caller's tokens, such
     /// as the body of a function under an attribute macro, is: its author wrote it there.
@@ -75,7 +77,7 @@ fn check_params(cx: &LateContext<'_>, function: LocalDefId, decl: &FnDecl<'_>) {
         .tcx
         .fn_sig(function)
         .instantiate_identity()
-        .skip_norm_wip()
+        .skip_normalization()
         .skip_binder();
     let clauses: Vec<Clause<'_>> = cx
         .tcx
@@ -113,7 +115,9 @@ fn check_params(cx: &LateContext<'_>, function: LocalDefId, decl: &FnDecl<'_>) {
             None,
             format!(
                 "take `{target}` and call `.into()` at the call site, as the Google Rust Style \
-                 Guide's \"Accepting `Into`\" asks"
+                 Guide's \"Accepting `Into`\" asks of application code; trellis asks it of \
+                 library APIs too, where a parameter whose call-site ergonomics are paramount \
+                 takes an `expect` saying so"
             ),
         );
     }

@@ -50,7 +50,8 @@ needs a false positive on code that follows it, shown in a test.
 ## Add a lint
 
 1. Write it in `lints/src/<lint>.rs`. Its `declare_lint!` doc block says what it checks, the
-   Google guide rule it enforces, what it leaves alone, and an example with its fix.
+   Google guide rule it enforces or that it is trellis policy, what it leaves alone, and an example
+   with its fix.
 2. Register it: `mod <lint>;` and its pass in `PASSES`, both in `lints/src/lib.rs`.
 3. Add its UI test: fixtures in `lints/ui/<lint>/`, with the cases it flags and the ones it
    leaves alone, and a `#[test]` in its file that calls `crate::ui_harness::ui_test`.
@@ -61,6 +62,9 @@ needs a false positive on code that follows it, shown in a test.
 5. Add its row to the "Checked by tools" table in `template/docs/style.md` and `docs/style.md`.
 6. If it takes no exception, add it to `NO_EXCEPTION_LINTS` in `lints/src/suppression_policy.rs`
    and to the list of lints without exceptions under "Silencing a lint" in both `style.md` files.
+   A lint whose reports all come from the crate root takes none, since an `expect` on an item
+   can't reach them. A lint that reports at an impl block, a trait or a module itself goes in
+   `BLOCK_LINTS` or `MODULE_LINTS` there instead, so its `expect` can go on it.
 7. If it takes a setting, add a field for it to `Config` in `lints/src/config.rs`, whose doc
    comment names the lint, and read it with `crate::config::get`. Every key is required and has no
    default, so set it in `dylint.toml`, which `just dylint` and the UI tests read, and in
@@ -124,7 +128,9 @@ To release:
    owner must do before or after the update merges. `just changelog` checks that the heading is
    the version after the newest tag by the rule above, counting those list items as asks. To
    gather notes before you release, head the section `## Unreleased`, which releases nothing, and
-   rename it when you release.
+   rename it when you release. A release that moves the stable toolchain also moves projects'
+   `rust-version`, so list under "Action required in projects" that a published library notes
+   the new minimum Rust version in its changelog and makes its next release a minor one.
 2. Merge it. Once every other CI job passes on that commit, CI's `Release` job tags it with an
    annotated tag and publishes a GitHub release with the section as its notes. Renovate opens the
    update in every project. Only a commit that changes the section gets the tag, so a later

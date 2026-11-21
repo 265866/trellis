@@ -4,7 +4,7 @@ warning: code comment
 LL |     // Flagged: a line comment.
    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
    |
-   = help: move the explanation into a doc comment, a name, an assertion message or an `#[expect(..., reason = "...")]`, or delete it
+   = help: a code comment drifts from the code, and it is where a workaround gets justified instead of fixed: move the explanation into a doc comment, a name, an assertion message or an `#[expect(..., reason = "...")]`, or delete it
    = note: `#[warn(code_comment)]` on by default
 
 warning: code comment
@@ -13,7 +13,7 @@ warning: code comment
 LL |     /* Flagged: a block comment. */
    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    |
-   = help: move the explanation into a doc comment, a name, an assertion message or an `#[expect(..., reason = "...")]`, or delete it
+   = help: a code comment drifts from the code, and it is where a workaround gets justified instead of fixed: move the explanation into a doc comment, a name, an assertion message or an `#[expect(..., reason = "...")]`, or delete it
 
 warning: `SAFETY:` comment with no unsafe code after it
   --> $DIR/code_comment.rs:49:24
@@ -46,7 +46,7 @@ warning: code comment
 LL |     // Flagged: a separate comment after the blank line.
    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    |
-   = help: move the explanation into a doc comment, a name, an assertion message or an `#[expect(..., reason = "...")]`, or delete it
+   = help: a code comment drifts from the code, and it is where a workaround gets justified instead of fixed: move the explanation into a doc comment, a name, an assertion message or an `#[expect(..., reason = "...")]`, or delete it
 
 warning: code comment
   --> $DIR/modules/helper.rs:3:1
@@ -54,7 +54,7 @@ warning: code comment
 LL | // Flagged: a line comment in a module file.
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    |
-   = help: move the explanation into a doc comment, a name, an assertion message or an `#[expect(..., reason = "...")]`, or delete it
+   = help: a code comment drifts from the code, and it is where a workaround gets justified instead of fixed: move the explanation into a doc comment, a name, an assertion message or an `#[expect(..., reason = "...")]`, or delete it
 
 warning: code comment
   --> $DIR/modules/hidden.rs:4:1
@@ -62,7 +62,7 @@ warning: code comment
 LL | // Flagged: a line comment in a hidden module.
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    |
-   = help: move the explanation into a doc comment, a name, an assertion message or an `#[expect(..., reason = "...")]`, or delete it
+   = help: a code comment drifts from the code, and it is where a workaround gets justified instead of fixed: move the explanation into a doc comment, a name, an assertion message or an `#[expect(..., reason = "...")]`, or delete it
 
 warning: code comment
   --> $DIR/modules/elsewhere.rs:3:1
@@ -70,7 +70,7 @@ warning: code comment
 LL | // Flagged: a line comment in a module no build loads.
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    |
-   = help: move the explanation into a doc comment, a name, an assertion message or an `#[expect(..., reason = "...")]`, or delete it
+   = help: a code comment drifts from the code, and it is where a workaround gets justified instead of fixed: move the explanation into a doc comment, a name, an assertion message or an `#[expect(..., reason = "...")]`, or delete it
 
 warning: 9 warnings emitted
 

@@ -1,5 +1,8 @@
-# `just fmt` formats with the nightly rustfmt pinned in the justfile: the Google Rust Style Guide
-# asks for `imports_granularity` and `format_macro_matchers`, which only nightly rustfmt has.
+# `just fmt` formats with the nightly rustfmt pinned in the justfile, because stable rustfmt lacks
+# `imports_granularity` and `format_macro_matchers`. `imports_granularity = "Module"` is the
+# setting for the Google Rust Style Guide's rule "A use statement should import items from one
+# module". The guide lets a codebase on stable Rust skip `format_macro_matchers`, and trellis
+# applies it anyway.
 edition = "2024"
 style_edition = "2024"
 max_width = 100

@@ -1,9 +1,0 @@
-//! Tests for `version_line`.
-
-#[test]
-fn names_the_program_and_its_version() {
-    assert_eq!(
-        {{ crate_name }}_core::version_line(),
-        concat!("{{ project_name }} ", env!("CARGO_PKG_VERSION"))
-    );
-}

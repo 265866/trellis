@@ -77,11 +77,11 @@ jobs:
         run: rustup toolchain install
 
 {% endraw %}
+{%- set git_only = not (kind == 'library' and publish_crate) %}
 {%- set release_plz_config_step -%}
-{% raw %}      # In git_only mode, which every project but a published library uses, release-plz@0.4.3 looks
-      # every crate up by name at the last release tag and stops on one added or renamed since. A
-      # crate missing there gets its own tag name for this run, so release-plz treats it as new;
-      # release-plz.toml can't name it before it exists.
+{% raw %}      # In git_only mode, release-plz@0.4.3 looks every crate up by name at the last release tag
+      # and stops on one added or renamed since. A crate missing there gets its own tag name for
+      # this run, so release-plz treats it as new; release-plz.toml can't name it before it exists.
       - name: Write the release-plz config
         id: config
         run: |
@@ -107,15 +107,18 @@ jobs:
           fi
           echo "path=$config" >> "$GITHUB_OUTPUT"
 {%- endraw %}{% endset -%}
-{{ release_plz_config_step }}{% raw %}
+{%- if git_only %}{{ release_plz_config_step }}
 
-      - name: Release if this push merged the release PR
+{% endif %}{% raw %}      - name: Release if this push merged the release PR
         id: release-plz
         uses: release-plz/action@66b324fd6c72d05d2a08568492ecdd62bfb8a62b # v0.5.148
         with:
           command: release
           version: 0.4.3
-          config: ${{ steps.config.outputs.path }}
+{%- endraw %}
+{%- if git_only %}
+          config: {% raw %}${{ steps.config.outputs.path }}{% endraw %}
+{%- endif %}{% raw %}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 {%- endraw %}
@@ -412,13 +415,17 @@ jobs:
       - name: Install the pinned toolchain
         run: rustup toolchain install
 
-{% endraw %}{{ release_plz_config_step }}{% raw %}
+{% endraw %}
+{%- if git_only %}{{ release_plz_config_step }}
 
-      - uses: release-plz/action@66b324fd6c72d05d2a08568492ecdd62bfb8a62b # v0.5.148
+{% endif %}{% raw %}      - uses: release-plz/action@66b324fd6c72d05d2a08568492ecdd62bfb8a62b # v0.5.148
         with:
           command: release-pr
           version: 0.4.3
-          config: ${{ steps.config.outputs.path }}
+{%- endraw %}
+{%- if git_only %}
+          config: {% raw %}${{ steps.config.outputs.path }}{% endraw %}
+{%- endif %}{% raw %}
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
 {%- endraw %}

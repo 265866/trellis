@@ -15,13 +15,19 @@ declare_lint! {
     /// user-defined item": a leaf module about `Foo` is `mod foo` in `foo.rs`, so the file name
     /// says what is inside.
     ///
-    /// The primary item is the module's only struct, enum, union, trait or type alias, or, when it
-    /// has several, the one whose name starts every other one's name (`Price` beside
-    /// `PriceError`). Visible items count before private helpers. A module with no clear primary
-    /// item, such as `Point` beside `Size`, can be named as desired and isn't checked. Neither is
-    /// a module with a type, trait or function named after it, a module with child modules other
-    /// than `#[cfg(test)]` ones, nor a test module. The lint has no exceptions: renaming the
-    /// module is always possible, so `suppression_policy` rejects an `expect` of it.
+    /// The primary item is the module's only visible struct, enum, union, trait or type alias, or,
+    /// when it has several, the one whose name starts every other one's name (`Price` beside
+    /// `PriceError`). Private types are helpers and don't count. A module with no clear primary
+    /// item, such as `Point` beside `Size`, or public functions beside a private helper type, can
+    /// be named as desired and isn't checked. Neither is a module with a type, trait or function
+    /// named after it, a module with child modules other than `#[cfg(test)]` ones, nor a test
+    /// module.
+    ///
+    /// The guide also lets a module that isn't primarily about any one abstraction be named as
+    /// desired, such as helpers that return one public type among others, which the lint can't
+    /// tell apart. Such a module takes an `expect` on its `mod` declaration, where the lint
+    /// reports. `suppression_policy` rejects one on a module with another module beneath it, other
+    /// than a `#[cfg(test)]` module that holds no module, so it can't cover another module's report.
     ///
     /// ```rust,ignore
     /// // lib.rs
@@ -112,17 +118,13 @@ impl EarlyLintPass for FileNamedAfterItem {
     }
 }
 
-/// The module's primary type, if it has a clear one: the only type, or the type whose name starts
-/// every other type's name. Visible types count before private helpers.
+/// The module's primary type, if it has a clear one: the only visible type, or the visible type
+/// whose name starts every other visible type's name. Private types are helpers, so a module
+/// whose types are all private has none.
 fn primary_item(types: &[&Item]) -> Option<Ident> {
-    let visible: Vec<&Item> = types
+    let names: Vec<Ident> = types
         .iter()
-        .copied()
         .filter(|item| !matches!(item.vis.kind, VisibilityKind::Inherited))
-        .collect();
-    let candidates = if visible.is_empty() { types } else { &visible };
-    let names: Vec<Ident> = candidates
-        .iter()
         .filter_map(|item| item.kind.ident())
         .collect();
     names.iter().copied().find(|primary| {

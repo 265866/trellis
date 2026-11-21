@@ -11,7 +11,8 @@ use rustc_span::{BytePos, Span};
 declare_lint! {
     /// Checks for `unsafe` blocks, `unsafe fn`s, `unsafe impl`s, `unsafe trait`s, `extern`
     /// blocks and `#[unsafe(..)]` attributes in a crate that the `unsafe_crates` list in
-    /// `dylint.toml` doesn't name. The list is empty by default:
+    /// `dylint.toml` doesn't name. The list has no default; the workspace's `dylint.toml` sets it,
+    /// and the template ships it empty. A crate of unsafe code is listed like this:
     ///
     /// ```toml
     /// [trellis_lints]

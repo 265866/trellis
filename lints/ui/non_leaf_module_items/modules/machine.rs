@@ -11,8 +11,8 @@ pub enum State {
 // Flagged: `main` is only allowed in the crate root.
 fn main() {}
 
-// Not flagged here: an `expect` on the item covers it, in a file module, though
-// `suppression_policy` rejects it.
+// Not flagged here: an `expect` on the item covers it, in a file module, and
+// `suppression_policy` allows it there.
 #[cfg_attr(
     dylint_lib = "trellis_lints",
     expect(non_leaf_module_items, reason = "the fixture checks an item-level expect")
