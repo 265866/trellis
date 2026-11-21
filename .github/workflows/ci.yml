@@ -88,6 +88,8 @@ jobs:
       - run: just lint
       - run: just dylint
       - run: just test
+        env:
+          NEXTEST_PROFILE: ci
       - run: just docs
 
   template:

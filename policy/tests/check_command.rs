@@ -357,9 +357,11 @@ fn symbolic_link(target: impl AsRef<Path>, link: &Path) {
         command
     };
     let output = command.output().expect("the link command should run");
+    let is_a_link = fs::symlink_metadata(&link).is_ok_and(|metadata| metadata.is_symlink());
     assert!(
-        output.status.success(),
-        "the link should be created: {output:?}"
+        output.status.success() && is_a_link,
+        "{} should be a symbolic link: {output:?}",
+        link.display()
     );
 }
 
