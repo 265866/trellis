@@ -7,16 +7,39 @@
 //! the letters they join, so a name with the `st` ligature in `rustfmt.toml` is that file there.
 //! Those match too. A test here asks the file system it runs on which names it reads as an ASCII
 //! name, on every system CI has.
+//!
+//! A rule about a name compares it with an ASCII name, such as `clippy.toml`, so only the
+//! characters a file system reads as ASCII matter there, and a wider folding would make a rule
+//! match files no tool reads. Whether two paths in the repository are one path compares names
+//! with each other, in any script, so [`merge_key`] folds every letter: there a pair reported that
+//! some file system keeps apart costs a rename, while a pair missed is a checkout that builds files
+//! no check read.
 
 /// Whether `left` and `right` name the same file on a case-insensitive file system.
 pub(crate) fn eq(left: &str, right: &str) -> bool {
     left.chars().flat_map(fold).eq(right.chars().flat_map(fold))
 }
 
-/// `name` as a case-insensitive file system compares it, so two names that it reads as one fold
-/// to the same text. A `/` stays a `/`.
-pub(crate) fn folded(name: &str) -> String {
-    name.chars().flat_map(fold).collect()
+/// `name` folded so that two names macOS's or Windows' file system may read as one name fold to
+/// the same text: the characters of [`fold`], then Unicode's canonical caseless form, which makes
+/// `É` and `é`, and `é` written as one character or as `e` and a combining accent, one name, as
+/// macOS reads them. Windows compares names by their upper case, so it folds once more after
+/// mapping each letter to upper case, and a pair whose upper case is one letter, such as the
+/// dotless `ı` and `i`, folds together too. A `/` stays a `/`.
+pub(crate) fn merge_key(name: &str) -> String {
+    use caseless::Caseless as _;
+    use unicode_normalization::UnicodeNormalization as _;
+
+    name.chars()
+        .flat_map(fold)
+        .nfd()
+        .default_case_fold()
+        .nfd()
+        .flat_map(char::to_uppercase)
+        .nfd()
+        .default_case_fold()
+        .nfd()
+        .collect()
 }
 
 /// `path` without `prefix`, if `path` starts with it in any case.
@@ -201,6 +224,44 @@ mod tests {
             ("deny.toml", "d\u{e9}ny.toml"),
         ] {
             assert!(!eq(left, right), "{left} and {right} name different files");
+        }
+    }
+
+    #[test]
+    fn names_that_any_file_system_may_read_as_one_share_a_merge_key() {
+        for (left, right) in [
+            ("Clippy.toml", "clippy.toml"),
+            ("\u{c9}.rs", "\u{e9}.rs"),
+            ("\u{3a3}", "\u{3c3}"),
+            ("\u{3c2}", "\u{3c3}"),
+            ("\u{414}", "\u{434}"),
+            ("\u{e9}", "e\u{301}"),
+            ("\u{c9}", "e\u{301}"),
+            ("\u{131}", "i"),
+            ("cla\u{df}", "CLASS"),
+            ("cla\u{1e9e}", "class"),
+            ("crate\u{17f}", "crates"),
+            ("ru\u{fb06}fmt", "rustfmt"),
+            ("\u{212a}", "k"),
+            ("a/\u{c9}", "A/e\u{301}"),
+        ] {
+            assert_eq!(
+                merge_key(left),
+                merge_key(right),
+                "{left} and {right} can be one name"
+            );
+        }
+        for (left, right) in [
+            ("\u{e9}", "e"),
+            ("e\u{301}", "e"),
+            ("a/b", "ab"),
+            ("\u{ff21}", "a"),
+        ] {
+            assert_ne!(
+                merge_key(left),
+                merge_key(right),
+                "{left} and {right} stay apart"
+            );
         }
     }
 

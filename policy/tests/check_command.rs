@@ -919,13 +919,38 @@ fn a_tsconfig_that_reaches_only_other_tsconfig_files_passes() {
     project.write(
         "crates/demo/web/tsconfig.json",
         &web_tsconfig(
-            "\"extends\": [\"./strict/tsconfig.json\", \"../../demo_core/web/tsconfig.json\"],\n    \
-             \"references\": [{ \"path\": \"./tools/tsconfig.json\" }],",
+            "\"extends\": [\"./strict/tsconfig.json\", \"../../demo_core/web/tsconfig.json\", \
+             \"./tsconfig.base.json\"],\n    \
+             \"references\": [{ \"path\": \"./tools/tsconfig.json\" }, { \"path\": \"./tools\" }, \
+             { \"path\": \"../../demo_core/web/\" }],",
         ),
     );
     project.write("crates/demo/web/strict/tsconfig.json", &web_tsconfig(""));
     project.write("crates/demo/web/tools/tsconfig.json", &web_tsconfig(""));
-    project.write("crates/demo_core/web/tsconfig.json", &web_tsconfig(""));
+    project.write("crates/demo/web/tsconfig.base.json", &web_tsconfig(""));
+    project.write(
+        "crates/demo_core/web/tsconfig.json",
+        "\u{feff}{\r\n  // Windows line endings.\r\n  \"compilerOptions\": { \"strict\": true }\r\n}\r\n",
+    );
+    project.check().assert_passes();
+}
+
+/// Vite's starter splits the settings among `tsconfig.json`, `tsconfig.app.json` and
+/// `tsconfig.node.json`.
+#[test]
+fn a_tsconfig_that_references_other_tsconfig_files_by_any_name_passes() {
+    let project = Project::new();
+    project.write(
+        "crates/demo/web/tsconfig.json",
+        "{\n  \"files\": [],\n  \"references\": [\n    { \"path\": \"./tsconfig.app.json\" },\n    \
+         { \"path\": \"./TSConfig.Node.json\" }\n  ]\n}\n",
+    );
+    project.write(
+        "crates/demo/web/tsconfig.app.json",
+        &web_tsconfig("\"extends\": \"./tsconfig.base.json\","),
+    );
+    project.write("crates/demo/web/TSConfig.Node.json", &web_tsconfig(""));
+    project.write("crates/demo/web/tsconfig.base.json", &web_tsconfig(""));
     project.check().assert_passes();
 }
 
@@ -933,20 +958,28 @@ fn a_tsconfig_that_reaches_only_other_tsconfig_files_passes() {
 fn a_tsconfig_that_reaches_another_file_fails() {
     for (reaches, problem) in [
         (
-            "\"extends\": \"./tsconfig.base.json\",",
-            "`extends` names `./tsconfig.base.json`",
+            "\"extends\": \"./loose.json\",",
+            "`extends` names `./loose.json`",
         ),
         (
-            "\"extends\": [\"./strict/tsconfig.json\", \"./tsconfig.base.json\"],",
-            "`extends` names `./tsconfig.base.json`",
+            "\"extends\": [\"./strict/tsconfig.json\", \"./jsconfig.json\"],",
+            "`extends` names `./jsconfig.json`",
         ),
         (
             "\"extends\": \"@tsconfig/strictest/tsconfig.json\",",
             "`extends` names `@tsconfig/strictest/tsconfig.json`",
         ),
         (
+            "\"extends\": \"tsconfig.base.json\",",
+            "`extends` names `tsconfig.base.json`",
+        ),
+        (
             "\"extends\": \"./node_modules/strictest/tsconfig.json\",",
             "`extends` names `./node_modules/strictest/tsconfig.json`",
+        ),
+        (
+            "\"extends\": \"./strict/../node_modules/strictest/tsconfig.json\",",
+            "`extends` names `./strict/../node_modules/strictest/tsconfig.json`",
         ),
         (
             "\"extends\": \"./missing/tsconfig.json\",",
@@ -956,14 +989,23 @@ fn a_tsconfig_that_reaches_another_file_fails() {
             "\"extends\": \"../../../../tsconfig.json\",",
             "`extends` names `../../../../tsconfig.json`",
         ),
+        ("\"extends\": \"./strict\",", "`extends` names `./strict`"),
+        (
+            "\"extends\": \"./strict\\\\tsconfig.json\",",
+            "`extends` names `./strict\\tsconfig.json`",
+        ),
         ("\"extends\": 1,", "`extends` is `1`"),
         (
-            "\"references\": [{ \"path\": \"./strict\" }],",
-            "`references` names `./strict`",
+            "\"references\": [{ \"path\": \"./src\" }],",
+            "`references` names `./src`",
         ),
         (
-            "\"references\": [{ \"path\": \"./tsconfig.base.json\" }],",
-            "`references` names `./tsconfig.base.json`",
+            "\"references\": [{ \"path\": \"./loose.json\" }],",
+            "`references` names `./loose.json`",
+        ),
+        (
+            "\"references\": [{ \"path\": \"strict\" }],",
+            "`references` names `strict`",
         ),
         (
             "\"references\": [\"./strict\"],",
@@ -971,16 +1013,19 @@ fn a_tsconfig_that_reaches_another_file_fails() {
         ),
         (
             "\"extends\": ./strict/tsconfig.json,",
-            "This file isn't JSON with comments",
+            "TypeScript could read this file otherwise than as JSON with comments",
         ),
     ] {
         let project = Project::new();
         project.write("crates/demo/web/tsconfig.json", &web_tsconfig(reaches));
         project.write("crates/demo/web/strict/tsconfig.json", &web_tsconfig(""));
-        project.write(
-            "crates/demo/web/tsconfig.base.json",
-            "{ \"compilerOptions\": { \"strict\": false } }\n",
-        );
+        project.write("crates/demo/web/src/main.ts", "export {};\n");
+        for loose in ["loose.json", "jsconfig.json"] {
+            project.write(
+                &format!("crates/demo/web/{loose}"),
+                "{ \"compilerOptions\": { \"strict\": false } }\n",
+            );
+        }
         project.write(
             "crates/demo/web/node_modules/strictest/tsconfig.json",
             &web_tsconfig(""),
@@ -988,6 +1033,106 @@ fn a_tsconfig_that_reaches_another_file_fails() {
         project.check().assert_reports(
             1,
             &format!("error: [config_files] crates/demo/web/tsconfig.json: {problem}"),
+        );
+    }
+}
+
+#[test]
+fn a_tsconfig_file_of_any_name_that_reaches_another_file_fails() {
+    let project = Project::new();
+    project.write(
+        "crates/demo/web/tsconfig.json",
+        &web_tsconfig("\"extends\": \"./tsconfig.base.json\","),
+    );
+    project.write(
+        "crates/demo/web/tsconfig.base.json",
+        &web_tsconfig("\"extends\": \"./loose.json\","),
+    );
+    project.write(
+        "crates/demo/web/loose.json",
+        "{ \"compilerOptions\": { \"strict\": false } }\n",
+    );
+    project.check().assert_reports(
+        1,
+        "error: [config_files] crates/demo/web/tsconfig.base.json: `extends` names `./loose.json`",
+    );
+}
+
+#[test]
+fn a_tsconfig_file_that_is_a_symbolic_link_fails() {
+    let project = Project::new();
+    project.write(
+        "web/tsconfig.json",
+        &web_tsconfig("\"extends\": \"./tsconfig.base.json\","),
+    );
+    project.write(
+        "crates/demo/web/loose.json",
+        "{ \"compilerOptions\": { \"strict\": false } }\n",
+    );
+    symbolic_link(
+        "../crates/demo/web/loose.json",
+        &project.path().join("web/tsconfig.base.json"),
+    );
+    project.check().assert_reports(
+        1,
+        "error: [config_files] web/tsconfig.base.json: This is a symbolic link",
+    );
+}
+
+/// TypeScript ends a `//` comment at a carriage return, a line separator (U+2028) or a paragraph
+/// separator (U+2029) as well as at a line feed, and reads the rest of the line. It also reads a
+/// file whose syntax it reports as wrong, so whatever could read two ways fails.
+#[test]
+fn a_tsconfig_typescript_could_read_otherwise_fails() {
+    for (text, why) in [
+        (
+            "{\n    \"include\": [\"src\"] // see tsconfig.base.json\r, \"extends\": \"./loose.json\"\n}\n",
+            "a comment that ends at a carriage return",
+        ),
+        (
+            "{\n    \"include\": [\"src\"] // see\u{2028}, \"extends\": \"./loose.json\"\n}\n",
+            "a comment that ends at a line separator",
+        ),
+        (
+            "{\n    \"include\": [\"src\"] // see\u{2029}, \"extends\": \"./loose.json\"\n}\n",
+            "a comment that ends at a paragraph separator",
+        ),
+        (
+            "{\n    \"include\": [\"src\u{2028}\"]\n}\n",
+            "a line separator in a string, which TypeScript ends there",
+        ),
+        (
+            "{\n    \"extends\": \"./loose.json\",\n    \"extends\": \"./strict/tsconfig.json\"\n}\n",
+            "a key given twice",
+        ),
+        (
+            "{\n    \"references\": [{ \"path\": \"./loose.json\", \"path\": \"./strict\" }]\n}\n",
+            "a key given twice in a reference",
+        ),
+        (
+            "{\n    \"include\": [\"src\"]\n}\n/* never closed\n",
+            "a block comment never closed",
+        ),
+        ("{ , }\n", "a comma with nothing before it"),
+        (
+            "{ \"include\": [ , ] }\n",
+            "a comma with nothing before it in a list",
+        ),
+    ] {
+        let project = Project::new();
+        project.write("crates/demo/web/tsconfig.json", text);
+        project.write("crates/demo/web/strict/tsconfig.json", &web_tsconfig(""));
+        project.write(
+            "crates/demo/web/loose.json",
+            "{ \"compilerOptions\": { \"strict\": false } }\n",
+        );
+        let run = project.check();
+        assert!(
+            run.code == Some(1)
+                && run.stdout.lines().any(|line| {
+                    line.starts_with("error: [config_files] crates/demo/web/tsconfig.json: ")
+                }),
+            "{why} should fail: {run:#?}"
         );
     }
 }
@@ -2021,38 +2166,43 @@ fn a_member_directory_windows_reads_as_another_fails() {
     }
 }
 
-/// Git tracks each pair under both spellings, as it does after a clone on any system. A file
-/// system that ignores case holds one file for the pair, so the second spelling is written with
-/// the first one's contents and added with `core.ignorecase` off, which makes git keep both names.
+/// Has git track `respelled`, another spelling of the file `tracked` in `project`, as it does
+/// after a clone on any system. A file system that ignores case can hold one file for both, so
+/// `respelled` is written with `tracked`'s contents and added with `core.ignorecase` off, which
+/// makes git keep both names, and with `core.precomposeunicode` off, which keeps git on macOS from
+/// rewriting a decomposed name.
+fn track_respelled(project: &Project, tracked: &str, respelled: &str) {
+    let contents =
+        fs::read_to_string(project.path().join(tracked)).expect("the tracked file should be read");
+    project.write(respelled, &contents);
+    project.git(&[
+        "-c",
+        "core.ignorecase=false",
+        "-c",
+        "core.precomposeunicode=false",
+        "update-index",
+        "--add",
+        "--",
+        respelled,
+    ]);
+}
+
 #[test]
 fn paths_a_case_insensitive_file_system_reads_as_one_fail() {
     let project = Project::new();
     project.git(&["init", "--quiet"]);
     project.git(&["add", "--all"]);
-    for (tracked, respelled) in [
-        (
-            "crates/demo_core/src/lib.rs",
-            "crate\u{17f}/demo_core/src/lib.rs",
-        ),
-        ("docs/install.md", "docs/INSTALL.md"),
-    ] {
-        let contents = fs::read_to_string(project.path().join(tracked))
-            .expect("the tracked file should be read");
-        project.write(respelled, &contents);
-        project.git(&[
-            "-c",
-            "core.ignorecase=false",
-            "update-index",
-            "--add",
-            "--",
-            respelled,
-        ]);
-    }
+    track_respelled(
+        &project,
+        "crates/demo_core/src/lib.rs",
+        "crate\u{17f}/demo_core/src/lib.rs",
+    );
+    track_respelled(&project, "docs/install.md", "docs/INSTALL.md");
     let run = project.check();
     run.assert_reports(
         1,
         "error: [workspace_shape] crate\u{17f}: `crates` and `crate\u{17f}` are one path to a \
-         file system that ignores case, as macOS's and Windows' do,",
+         file system that ignores case,",
     );
     run.assert_reports(
         1,
@@ -2063,6 +2213,50 @@ fn paths_a_case_insensitive_file_system_reads_as_one_fail() {
         run.stdout.matches("are one path").count(),
         2,
         "each collision is reported once, at its shortest path: {run:#?}"
+    );
+}
+
+/// Letters outside ASCII merge in either case, as `É` and `é` do on macOS and Windows, and an
+/// accented letter written as one character merges with the letter and a combining accent on
+/// macOS. A letter and the same letter with an accent stay apart.
+#[test]
+fn paths_that_differ_in_a_letter_outside_ascii_fail() {
+    let project = Project::new();
+    project.write("crates/demo_core/data/\u{e9}.txt", "accented\n");
+    project.write("crates/demo_core/data/e.txt", "plain\n");
+    project.write("crates/demo_core/src/\u{c9}.rs", "//! Seen by the lints.\n");
+    project.write("\u{414}/x.txt", "x\n");
+    project.write("docs/\u{3a3}.md", "# Sigma\n\nA page.\n");
+    project.git(&["init", "--quiet"]);
+    project.git(&["add", "--all"]);
+    let pairs = [
+        (
+            "crates/demo_core/src/\u{c9}.rs",
+            "crates/demo_core/src/\u{e9}.rs",
+        ),
+        ("docs/\u{3a3}.md", "docs/\u{3c3}.md"),
+        ("\u{414}/x.txt", "\u{434}/x.txt"),
+        (
+            "crates/demo_core/data/\u{e9}.txt",
+            "crates/demo_core/data/e\u{301}.txt",
+        ),
+    ];
+    for (tracked, respelled) in pairs {
+        track_respelled(&project, tracked, respelled);
+    }
+    let run = project.check();
+    for reported in [
+        "`crates/demo_core/src/\u{c9}.rs` and `crates/demo_core/src/\u{e9}.rs`",
+        "`docs/\u{3a3}.md` and `docs/\u{3c3}.md`",
+        "`\u{414}` and `\u{434}`",
+        "`crates/demo_core/data/e\u{301}.txt` and `crates/demo_core/data/\u{e9}.txt`",
+    ] {
+        run.assert_reports(1, &format!("{reported} are one path"));
+    }
+    assert_eq!(
+        run.stdout.matches("are one path").count(),
+        4,
+        "`e.txt` stays apart from `\u{e9}.txt`: {run:#?}"
     );
 }
 

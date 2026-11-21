@@ -10,21 +10,23 @@ use toml::{Table, Value};
 use crate::head::Head;
 use crate::policy_error::PolicyError;
 use crate::tool_config::ToolConfig;
-use crate::{agent_files, case_insensitive, git, lint_expectations, source_path, toml_file};
+use crate::{
+    agent_files, case_insensitive, config_files, git, lint_expectations, source_path, toml_file,
+};
 
 /// Directories whose every file is a rule: the workflows.
 const RULE_DIRECTORIES: [&str; 1] = [".github/"];
 
 /// File names that are rules in any directory: the check recipes, and the settings files tools
 /// read from the directory they check and its ancestors. An ignore file hides files from git,
-/// `typos` and the checks that list the repository's files, and the TypeScript, Bun and npm
-/// settings change what a web UI's check and install do.
-const RULE_NAMES: [&str; 7] = [
+/// `typos` and the checks that list the repository's files, and the Bun and npm settings change
+/// what a web UI's check and install do. TypeScript's settings files, which
+/// [`config_files::is_tsconfig`] names, are rules in any directory too.
+const RULE_NAMES: [&str; 6] = [
     "justfile",
     ".justfile",
     ".gitignore",
     ".ignore",
-    "tsconfig.json",
     "bunfig.toml",
     ".npmrc",
 ];
@@ -385,6 +387,7 @@ fn role(path: &str) -> Role {
         || RULE_NAMES
             .iter()
             .any(|rule| case_insensitive::eq(name, rule))
+        || config_files::is_tsconfig(name)
         || RULE_FILES
             .iter()
             .any(|rule| case_insensitive::eq(path, rule))
@@ -779,10 +782,10 @@ impl Side<'_> {
 ///   git, no crate moved whole.
 ///
 /// A working-tree head is judged at `HEAD`, and no crate moved whole while a path below
-/// `crates/<old>` or `crates/<new>`, or a file named `.gitattributes` in any letters, is staged,
+/// `crates/<old>` or `crates/<new>`, or a file named `.gitattributes`, in any letters, is staged,
 /// changed in the working tree or untracked, so the working tree is never looser than the commit
-/// it makes. A path below either directory in other letters isn't left out, so it is judged as
-/// any other.
+/// it makes: `HEAD` doesn't hold an uncommitted entry of `crates/` that spells either name in
+/// other letters.
 ///
 /// The directory's name is all that changes, but a file in the crate that reads its own location,
 /// such as a build script that reads `CARGO_MANIFEST_DIR`, or that names `crates/<new>` by a
@@ -830,7 +833,12 @@ fn moved_crates(top: &Path, merge_base: &str, head: &Head) -> Result<Vec<String>
         };
         let old_directory = format!("crates/{}", old.name);
         let new_directory = format!("crates/{}", new.name);
-        let touched = |directory: &str| uncommitted.iter().any(|path| is_below(path, directory));
+        let touched = |directory: &str| {
+            let below = format!("{directory}/");
+            uncommitted
+                .iter()
+                .any(|path| case_insensitive::strip_prefix(path, &below).is_some())
+        };
         let eligible = old.name != new.name
             && plain_name(&old.name)
             && plain_name(&new.name)
@@ -1063,6 +1071,10 @@ mod tests {
             "crates/app/web/.npmrc",
             "crates/app/web/.GitIgnore",
             "crates/app/web/TSConfig.json",
+            "crates/app/web/tsconfig.base.json",
+            "crates/app/web/tsconfig.app.json",
+            "crates/app/web/TSCONFIG.Node.JSON",
+            "crates/app/web/tsconfig.json.json",
         ] {
             assert_eq!(role(path), Role::Rule, "{path} should be a rule");
         }
@@ -1142,6 +1154,10 @@ mod tests {
             "crates/app/web/package.json",
             "crates/app/web/bun.lock",
             "crates/app/web/src/main.ts",
+            "crates/app/web/jsconfig.json",
+            "crates/app/web/mytsconfig.json",
+            "crates/app/web/tsconfig.jsonc",
+            "crates/app/web/tsconfig",
             "docs/notes.rs",
             "src/main.rs",
             "tools/x/y.rs",

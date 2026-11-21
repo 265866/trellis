@@ -1,6 +1,6 @@
 //! The workspace keeps the shape the other checks rely on.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeSet, HashMap};
 use std::fs;
 use std::io::ErrorKind;
 use std::path::Path;
@@ -22,9 +22,11 @@ use crate::{case_insensitive, repository_files, source_path, toml_file, upstream
 ///   one Windows reads as written, with no `:` or `\` and no dot or space at its end;
 /// - no two paths in the repository, the files git tracks or would add, the directories that
 ///   hold them and the entries of `crates/`, are one path to a file system that ignores case, as
-///   macOS's and Windows' do. A checkout there writes only one of them, so it builds other files
-///   than the checks read: a directory spelled `crates` with a long s (U+017F) for its last
-///   letter replaces the files of `crates/` that it also holds;
+///   macOS's and Windows' do, in any script, or that ignores whether an accented letter is one
+///   character or a letter and a combining accent, as macOS's does. A checkout there writes only
+///   one of them, so it builds other files than the checks read: a directory spelled `crates`
+///   with a long s (U+017F) for its last letter replaces the files of `crates/` that it also
+///   holds. The comparison errs toward calling two paths one;
 /// - `exclude` in `[workspace]` is missing or empty, so no crate under the root escapes the
 ///   workspace lints;
 /// - every crate pulled in by path is a workspace member, so no excluded crate or crate outside
@@ -197,9 +199,10 @@ fn member_places(
     merged_paths(workspace, &entries, violations)
 }
 
-/// Reports each set of paths that a case-insensitive file system reads as one path, among the
-/// files git tracks or would add, the directories that hold them, and `crate_entries`. A set
-/// under two such directories isn't reported again, since everything below them merges too.
+/// Reports each set of paths that a file system on macOS or Windows may read as one path, among
+/// the files git tracks or would add, the directories that hold them, and `crate_entries`. Each
+/// name is compared by [`case_insensitive::merge_key`]. A set under two such directories isn't
+/// reported again, since everything below them merges too.
 ///
 /// # Errors
 ///
@@ -210,42 +213,84 @@ fn merged_paths(
     violations: &mut Vec<Violation>,
 ) -> Result<(), PolicyError> {
     let files = repository_files::list(workspace.root())?;
-    let mut spellings: BTreeMap<String, BTreeSet<&str>> = BTreeMap::new();
+    let mut entries: Vec<MergedEntry<'_>> = Vec::new();
+    let mut ids: HashMap<(Option<usize>, String), usize> = HashMap::new();
+    let mut previous: Vec<(&str, usize)> = Vec::new();
     for path in files.iter().chain(crate_entries) {
-        let folded = case_insensitive::folded(path);
-        let ends = |text: &str| -> Vec<usize> {
-            let mut ends: Vec<usize> = text.match_indices('/').map(|(end, _)| end).collect();
-            ends.push(text.len());
-            ends
-        };
-        for (end, folded_end) in ends(path).into_iter().zip(ends(&folded)) {
-            spellings
-                .entry(folded[..folded_end].to_owned())
-                .or_default()
-                .insert(&path[..end]);
+        let names: Vec<&str> = path.split('/').collect();
+        let shared = previous
+            .iter()
+            .zip(&names)
+            .take_while(|((before, _), name)| before == *name)
+            .count();
+        previous.truncate(shared);
+        for &name in &names[shared..] {
+            let parent = previous.last().map(|&(_, id)| id);
+            let key = (parent, case_insensitive::merge_key(name));
+            let id = *ids.entry(key).or_insert_with(|| {
+                entries.push(MergedEntry {
+                    parent,
+                    names: BTreeSet::new(),
+                    merged_above: false,
+                });
+                entries.len() - 1
+            });
+            entries[id].names.insert(name);
+            previous.push((name, id));
         }
     }
-    for (folded, names) in &spellings {
-        let merged_above = folded.rsplit_once('/').is_some_and(|(parent, _)| {
-            spellings.get(parent).is_some_and(|parent| parent.len() > 1)
-        });
-        let Some(last) = names.last().filter(|_| names.len() > 1 && !merged_above) else {
+    for id in 0..entries.len() {
+        let Some(parent) = entries[id].parent else {
             continue;
         };
-        let quoted: Vec<String> = names.iter().map(|name| format!("`{name}`")).collect();
-        let (others, final_name) = quoted.split_at(quoted.len() - 1);
+        entries[id].merged_above = entries[parent].merged_above || entries[parent].names.len() > 1;
+    }
+    for entry in &entries {
+        if entry.names.len() < 2 || entry.merged_above {
+            continue;
+        }
+        let mut above: Vec<&str> = Vec::new();
+        let mut parent = entry.parent;
+        while let Some(id) = parent {
+            above.extend(entries[id].names.first());
+            parent = entries[id].parent;
+        }
+        let mut prefix = String::new();
+        for name in above.iter().rev() {
+            prefix.push_str(name);
+            prefix.push('/');
+        }
+        let paths: Vec<String> = entry
+            .names
+            .iter()
+            .map(|name| format!("{prefix}{name}"))
+            .collect();
+        let quoted: Vec<String> = paths.iter().map(|path| format!("`{path}`")).collect();
+        let (others, last) = quoted.split_at(quoted.len() - 1);
         violations.push(Violation::new(
-            (*last).to_owned(),
+            paths.last().cloned().unwrap_or_default(),
             format!(
                 "{} and {} are one path to a file system that ignores case, as macOS's and \
-                 Windows' do, so a checkout there holds only one of them and builds other files \
-                 than the checks read. Rename all but one.",
+                 Windows' do, or how a letter with an accent is written, as macOS's does, so a \
+                 checkout there holds only one of them and builds other files than the checks \
+                 read. Rename all but one.",
                 others.join(", "),
-                final_name.concat()
+                last.concat()
             ),
         ));
     }
     Ok(())
+}
+
+/// A file or directory in the repository, as [`merged_paths`] finds it: every spelling of one
+/// name, in one directory, that a file system may read as one.
+struct MergedEntry<'path> {
+    /// The directory that holds it, by its index, or `None` at the root.
+    parent: Option<usize>,
+    /// Its names, as the paths spell them.
+    names: BTreeSet<&'path str>,
+    /// Whether a directory above it has more than one name, so it is reported there.
+    merged_above: bool,
 }
 
 /// What is wrong with `exclude` in `[workspace]` of the root manifest `manifest`, if anything.

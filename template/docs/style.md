@@ -137,13 +137,16 @@ Beyond the Google guide, the workspace also turns on:
   and a rule change. Nothing removes a stale entry, and it lets whichever crate later takes the name
   have a build script, though that script still lands in a rule change. It checks that tool
   configuration files exist only at the root, with no variant name that would override them, and
-  that each `tsconfig.json` extends and references only other `tsconfig.json` files in the
-  repository, by a path that starts with `./` or `../`, so every file TypeScript reads its settings
-  from is a rule; that the workspace's members are exactly the packages one directory below
+  that each TypeScript settings file, a `.json` file whose name starts with `tsconfig`, reads only
+  one way and extends and references only other such files in the repository, by a path that
+  starts with `./` or `../`, so every file a `tsconfig.json` reaches is a rule, though a web UI's
+  `check` script, which is code, still picks the settings file and flags `tsc` runs with; that the
+  workspace's members are exactly the packages one directory below
   `crates/`, each in a directory with an ASCII name that Windows reads as written, with no symbolic
   link for `crates` or a crate's directory, since which changes are rules depends on that place;
-  that no two paths in the repository are one path to a file system that ignores case, as macOS's
-  and Windows' do, since a checkout there holds only one of them; that the workspace excludes
+  that no two paths in the repository are one path on macOS or Windows, whose file systems ignore
+  letter case in any script and, on macOS, whether an accented letter is one character or two,
+  since a checkout there holds only one of them; that the workspace excludes
   nothing, pulls in no non-member crate by path, and loads only the trellis lints as its dylint
   library; that each crate's `Cargo.toml` holds only allowed keys (no `test = false`,
   `harness = false` outside a `[[bench]]`, `auto*` or `required-features`), inherits `edition`,
@@ -167,8 +170,8 @@ Beyond the Google guide, the workspace also turns on:
   renamed with no file in it changed, is neither rule nor code, so a crate can move beside the
   `path` of each dependency on it. A file in the crate that reads its own location, such as a build
   script that reads `CARGO_MANIFEST_DIR`, can then do something else, as a code change can change
-  what a listed build script emits. `.gitignore`, `.ignore`, `tsconfig.json`, `bunfig.toml` and
-  `.npmrc` are rules in any directory, since they change what a check sees, and so is a git
+  what a listed build script emits. `.gitignore`, `.ignore`, `bunfig.toml`, `.npmrc` and every
+  TypeScript settings file are rules in any directory, since they change what a check sees, and so is a git
   submodule, whose files no check sees. A path that Windows reads as another path is a rule too: one
   with a part that ends in a dot or a space, or that holds a `:` or a `\`. A web UI's
   `package.json`, its scripts and its sources are code. A proc-macro dependency is code: a rules

@@ -1664,7 +1664,7 @@ fn a_crate_holding_a_symbolic_link_counts() {
 
 #[test]
 fn an_uncommitted_change_in_the_working_tree_stops_the_move() {
-    let uncommitted: [Change; 8] = [
+    let uncommitted: [Change; 11] = [
         Change {
             why: "an unstaged edit",
             make: |repository| {
@@ -1696,6 +1696,32 @@ fn an_uncommitted_change_in_the_working_tree_stops_the_move() {
             why: "an untracked file where the crate was",
             make: |repository| {
                 repository.write("crates/engine/.gitignore", "/src/\n");
+            },
+        },
+        Change {
+            why: "a staged file below the new directory in other letters",
+            make: |repository| {
+                repository.write("crates/MOTOR/src/lib.rs", "pub fn x() {}\n");
+                repository.git(&[
+                    "-c",
+                    "core.ignorecase=false",
+                    "update-index",
+                    "--add",
+                    "--",
+                    "crates/MOTOR/src/lib.rs",
+                ]);
+            },
+        },
+        Change {
+            why: "an untracked file below the new directory in other letters",
+            make: |repository| {
+                repository.write("crates/MOTOR/src/lib.rs", "pub fn x() {}\n");
+            },
+        },
+        Change {
+            why: "an untracked file below the old directory in other letters",
+            make: |repository| {
+                repository.write("crates/Engine/src/lib.rs", "pub fn x() {}\n");
             },
         },
         Change {
