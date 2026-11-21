@@ -182,11 +182,11 @@ a `cfg_attr` that only one of the clippy and dylint runs sees can't hide any of 
 - A `cfg_attr` around a lint level in any other form than the two above,
   `cfg_attr(dylint_lib = "trellis_lints", expect(lint, reason = "..."))` and
   `cfg_attr(not(test), expect(dead_code, reason = "..."))`.
-- A lint-level attribute on a `mod`, an `impl` block or a trait for a lint that doesn't report at
-  the module or block. An `expect` of `file_named_after_item` or `non_leaf_module_items` may go on
-  a module, but on no item with a module beneath it, in a function body or below a `#[cfg(test)]`
-  module too, whose reports it would cover as well. A `#[cfg(test)]` module that holds no module
-  may be beneath it.
+- A lint-level attribute on a `mod`, other than an `expect` naming only `file_named_after_item` or
+  `non_leaf_module_items`, or on an `impl` block or a trait for a lint that doesn't report at the
+  block. An `expect` of those two lints may go on no item with a module beneath it, in a function
+  body or below a `#[cfg(test)]` module too, whose reports it would cover as well. A `#[cfg(test)]`
+  module that holds no module may be beneath it.
 - A lint attribute built from macro variables or assembled by a macro: a `#` that doesn't start
   an attribute, an attribute that doesn't start with a path (`paste`'s `[<...>]`), or brackets
   after a `$name:tt` variable.
