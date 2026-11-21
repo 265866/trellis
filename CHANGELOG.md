@@ -6,7 +6,49 @@ part lists what a project's owner must do around the update: a rule that can fla
 a setting to change, or a step to do by hand. [CONTRIBUTING.md](CONTRIBUTING.md#release-trellis)
 has the versioning rule.
 
-## Unreleased
+## v0.12.0
+
+### Action required in projects
+
+- **Keep only line-ending settings in the root `.gitattributes`.** `just policy` now fails a root
+  `.gitattributes` that sets any attribute but `text`, `-text`, `text=auto` and `eol=lf`, or that
+  defines an attribute macro (an `[attr]` line), in the working tree or in git's index. It also
+  fails one that is a symbolic link or holds a NUL byte. Other attributes can make a checkout hold
+  other bytes than the diff showed. `working-tree-encoding` can turn characters in a comment of a
+  `tsconfig.json` into a live setting, and `ident` and `filter` rewrite a file on checkout. Others,
+  such as `-diff`, `binary` and `linguist-generated`, hide a diff from review. A project generated
+  from trellis sets only `* text=auto eol=lf`. Before the update, delete every other attribute in
+  a rules pull request of its own that commits only `.gitattributes`; `binary` on a file becomes
+  `-text`. A file that `filter` (such as Git LFS), `ident` or `working-tree-encoding` rewrote then
+  checks out as its blob. In your clone, `git status` lists each such file as changed until
+  `git restore <file>` writes the blob back. If a tool needs the bytes it had, commit them in a
+  later pull request of that file's kind.
+- **Rename any path of the form of a Windows short name.** `just policy` now fails a path with a
+  part of that form: at most eight characters that end in `~` and digits, then at most three after
+  a dot, in any letter case, such as `cargo~1.tom`, `GITIGN~1` or a directory `notes~1`. On a
+  volume that keeps short names, as the system drive of the Windows 11 machine measured did,
+  Windows gives a file whose name is longer a second name of that form, as `CARGO~1.TOM` for
+  `Cargo.toml`, and opens the file under either name. A checkout there of `Cargo.toml` and
+  `cargo~1.tom` holds only `Cargo.toml`, with the other file's contents, and git only warns. A
+  `build` key with such a part fails too. A project generated from trellis has none. Before the
+  update, rename or delete each one. Under `crates/` that is a code pull request, and for a
+  crate's directory it carries the `path` of each dependency on it. A smaller directory there
+  that holds a nested `.gitignore`, `.ignore`, `tsconfig.json`, `bunfig.toml` or `.npmrc` moves in
+  two: its other files in a code pull request, then those files in a rules pull request. For a
+  build script, renaming the file and its `build` key is a rules pull request. Elsewhere it is a
+  rules pull request, or neither for a page under `docs/` other than `docs/style.md`.
+- **Check that `project_name` has at most 55 characters.** Copier now refuses a longer one, so
+  `copier update` stops with `Question "project_name" is required` on such a project, and it
+  can't take this or any later update without a shorter name. Past 55 characters rustfmt wraps
+  lines of the scaffold that hold the crate's name, so the project failed `just ci` as generated.
+- **Run `just check-github` after the update.** It now fails when no repository ruleset named
+  `main` exists, when it is disabled or in evaluate mode, when it applies no rule to `main`, when
+  anything may bypass it or the account running the check can't read who may, and when it leaves
+  the pull request rule or a required check to another ruleset, and it says which. Before, a
+  deleted ruleset in a private repository read as "unavailable" and passed, a disabled one read as
+  `wrong: main's required checks and rules: "; ", expected ...`, and no version read who may
+  bypass the ruleset. If it reports one of these, run `just setup-github`, which sets the ruleset
+  back; an unreadable bypass list needs an account with admin rights instead.
 
 ### Changed
 
@@ -14,6 +56,37 @@ has the versioning rule.
   written as one character in one and as a letter and a combining accent in the other, it also
   prints them with each character outside ASCII as its code point. The two looked the same in the
   message, so it didn't say which file to rename.
+- `just policy` reads the root `.gitattributes` as git 2.47 does: past a UTF-8 byte order mark,
+  with CRLF line endings, a pattern in double quotes as a C string, and `#` as a comment only at
+  the start of a line. A `#` after a pattern makes git ignore the whole line, so it fails too, with
+  a message that says to put the comment on its own line.
+- The message for a path that holds the combining Greek ypogegrammeni (U+0345) says what the
+  rule guards against: a file system whose case table maps the character to the letter iota.
+  Measured, neither APFS nor the one NTFS volume measured, on Windows 11, does, but an NTFS volume
+  compares names by the case table written when it was formatted, so the rule stays.
+- `just ci` passes on a new project with a long name. The scaffold's `main.rs`,
+  `tests/command_line.rs`, `version_line.rs` and a library's `tests/greeting.rs` bind the crate
+  path and the name before they use them, and the usage line names the binary with
+  `CARGO_BIN_NAME`. The lists that hold the crate's name in `Cargo.toml`, `dylint.toml` and
+  `release-plz.toml` have one item per line. Before, a binary or a service whose name had 13 or
+  more characters, or a library whose name had 29 or more, failed `just fmt-check` on the
+  untouched project. Every kind is now formatted as generated for a `project_name` of up to 55
+  characters. The scaffold under `crates/` reaches an existing project only through
+  `copier copy`, so for this fix `copier update` changes only those three settings files.
+- CI caches the custom lints' library and driver on its Linux rows. On the first run after the
+  lints' commit, their nightly, cargo-dylint or the runner image changes, the build job builds
+  them as before and `main` saves them. Every later run restores them, which took the
+  `just dylint` step from about 150 s to 6 s on `ubuntu-24.04`. The project's own crates are
+  linted from scratch on every run. The macOS and Windows rows are not cached yet, since no run
+  measured them. It comes with the update and needs no action.
+- `docs/maintaining.md` says what to do when GitHub refuses to merge a crate move. While another
+  open pull request changes a file in the moved crate, GitHub refuses to merge whichever lands
+  second, and refuses its "Update branch" too. "Rename a crate" now says to merge `origin/main`
+  into that branch locally, which follows the move, and push it.
+- The notes of v0.8.0, v0.10.0 and v0.11.0 say how to turn the `main` ruleset off for one merge:
+  set its enforcement to Disabled, don't delete it, merge only that pull request, then run
+  `just setup-github` and `just check-github`. Both ways of turning it off were run on GitHub, and
+  `just setup-github` set every rule and required check back after each.
 
 ## v0.11.0
 
@@ -31,12 +104,14 @@ has the versioning rule.
   directories that differ only in case, rename one that holds no rule file, such as a `build.rs` or
   a nested `.gitignore`, in a code pull request with the `path` of each dependency on it. Then fix
   its row under Layout in `CONTRIBUTING.md` in a rules pull request. If both hold one,
-  `just rule-changes` refuses the rename, so turn the ruleset off for that one merge and run
-  `just setup-github` afterward.
+  `just rule-changes` refuses the rename. For that one merge, set the `main` ruleset's enforcement
+  to Disabled in Settings, under Rules and then Rulesets; don't delete it. Merge that pull request
+  and nothing else, since nothing protects `main` meanwhile. Then run `just setup-github` and
+  check that `just check-github` reports `ok: main's required checks and rules`.
 - **Rename any path that holds U+0345.** `just policy` now fails a path that holds the combining
-  Greek ypogegrammeni (U+0345), which macOS and Windows fold in different orders. A project
-  generated from trellis has none. Before the update, rename or delete it, in a code pull request
-  under `crates/` and a rules pull request elsewhere.
+  Greek ypogegrammeni (U+0345), which a file system whose case table maps it to the letter iota
+  could read as another path. A project generated from trellis has none. Before the update,
+  rename or delete it, in a code pull request under `crates/` and a rules pull request elsewhere.
 - **Give every crate directory a name Windows reads as written.** `just policy` now fails a
   `crates/<name>` whose name ends in a dot or a space, or holds a `:` or a `\`. A project
   generated from trellis has none. Under the checker before this update, every path in such a
@@ -45,9 +120,12 @@ has the versioning rule.
   request, leaving its entries in `internal_dependencies` and in `changelog_include` of
   `release-plz.toml`. Add it back under a plain name in a code pull request, without any nested
   `.gitignore`, `.ignore`, `tsconfig.json`, `bunfig.toml` or `.npmrc`. Then add those files back,
-  and change its row under Layout in `CONTRIBUTING.md`, in a rules pull request. Otherwise turn
-  the ruleset off for the one merge that renames it and fixes each dependency's `path`, before
-  the update, and run `just setup-github` afterward.
+  and change its row under Layout in `CONTRIBUTING.md`, in a rules pull request. Otherwise,
+  before the update, set the `main` ruleset's enforcement to Disabled in Settings, under Rules and
+  then Rulesets, for the one merge that renames it and fixes each dependency's `path`; don't
+  delete the ruleset. Merge that pull request and nothing else, since nothing protects `main`
+  meanwhile. Then run `just setup-github` and check that `just check-github` reports
+  `ok: main's required checks and rules`.
 - **Point each TypeScript settings file only at other settings files.** Every `.json` file whose
   name starts with `tsconfig`, such as `tsconfig.base.json` or Vite's `tsconfig.app.json`, is now
   a rule wherever it sits. `just policy` fails one whose `extends` or `references` names anything
@@ -107,8 +185,11 @@ has the versioning rule.
   then change its row in the Layout table of `CONTRIBUTING.md` in a rules pull request. A crate
   with a build script can't move that way. Its `build.rs`, or the file its `build` key names, is
   a rule and the rest of the crate is code, so `just rule-changes` refuses the move and the
-  `main` ruleset has no bypass. Turn the ruleset off for that one merge, before the update, and
-  run `just setup-github` afterward.
+  `main` ruleset has no bypass. Before the update, set the ruleset's enforcement to Disabled in
+  Settings, under Rules and then Rulesets, for that one merge; don't delete it. Merge that pull
+  request and nothing else, since nothing protects `main` meanwhile. Then run
+  `just setup-github` and check that `just check-github` reports
+  `ok: main's required checks and rules`.
 - **Name a build script in ASCII, with no part that ends in a dot or a space.** `just policy`
   now fails a crate that `build_script_crates` lists when its `build` key holds a character
   outside ASCII, or a part that ends in a dot or a space, which Windows removes from the end.
@@ -194,8 +275,11 @@ has the versioning rule.
   `crates/<name>` or `crates` that is a symbolic link, and a package in `crates/<name>` that isn't
   a member. A project trellis generated already has this layout. If you added a crate elsewhere,
   moving it changes rules and code in one pull request, which `just rule-changes` refuses and the
-  `main` ruleset has no bypass for. Turn the ruleset off for that one merge, before the update,
-  and run `just setup-github` afterward.
+  `main` ruleset has no bypass for. Before the update, set the ruleset's enforcement to Disabled
+  in Settings, under Rules and then Rulesets, for that one merge; don't delete it. Merge that pull
+  request and nothing else, since nothing protects `main` meanwhile. Then run
+  `just setup-github` and check that `just check-github` reports
+  `ok: main's required checks and rules`.
 - **Land nested settings files as rules.** A `.gitignore`, `.ignore`, `tsconfig.json`,
   `bunfig.toml` or `.npmrc` anywhere in the repository, such as a web UI's `tsconfig.json`, is now
   a rule, so a pull request that changes one can't also change code.
