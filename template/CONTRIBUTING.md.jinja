@@ -246,9 +246,9 @@ whose name starts with `tsconfig`) and git submodule, wherever it sits, and ever
 as another path: one with a part that ends in a dot or a space, or that holds a `:` or a `\`.
 `just policy` fails a TypeScript settings file whose `extends` or `references` names anything but
 another one in the repository, by a path that starts with `./` or `../`, so every file a
-`tsconfig.json`
-reaches is a rule. It also fails one that TypeScript could read another way than `just policy` does,
-such as one with a lone carriage return. A crate whose directory moves whole, renamed with no file
+`tsconfig.json` reaches is a rule. It also fails one that TypeScript could read another way than
+`just policy` does, such as one with a lone carriage return. A crate whose directory moves whole,
+renamed with no file
 in it changed, is neither rule nor code, so a crate's directory can move in one pull request beside
 the `path` of each dependency on it. A file in the crate that reads its own location, such as a
 build script that reads `CARGO_MANIFEST_DIR`, can then do something else, as a code change can

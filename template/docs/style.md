@@ -171,8 +171,8 @@ Beyond the Google guide, the workspace also turns on:
   `path` of each dependency on it. A file in the crate that reads its own location, such as a build
   script that reads `CARGO_MANIFEST_DIR`, can then do something else, as a code change can change
   what a listed build script emits. `.gitignore`, `.ignore`, `bunfig.toml`, `.npmrc` and every
-  TypeScript settings file are rules in any directory, since they change what a check sees, and so is a git
-  submodule, whose files no check sees. A path that Windows reads as another path is a rule too: one
+  TypeScript settings file are rules in any directory, since they change what a check sees, and
+  so is a git submodule, whose files no check sees. A path that Windows reads as another path is a rule too: one
   with a part that ends in a dot or a space, or that holds a `:` or a `\`. A web UI's
   `package.json`, its scripts and its sources are code. A proc-macro dependency is code: a rules
   pull request lists the crate in `proc_macro_crates`, and a code pull request then adds the

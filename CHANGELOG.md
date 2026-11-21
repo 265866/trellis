@@ -6,6 +6,88 @@ part lists what a project's owner must do around the update: a rule that can fla
 a setting to change, or a step to do by hand. [CONTRIBUTING.md](CONTRIBUTING.md#release-trellis)
 has the versioning rule.
 
+## v0.11.0
+
+### Action required in projects
+
+- **Keep every pair of paths apart on macOS and Windows.** `just policy` now fails two paths in
+  the repository that macOS or Windows reads as one, such as `docs/Install.md` beside
+  `docs/install.md`, `É.txt` beside `é.txt`, an `é` written as one character beside one written as
+  `e` and a combining accent, two crate directories whose names differ only in letter case, or a
+  directory spelled `crates` with a long s (U+017F) beside `crates/`. A checkout on a Mac or on
+  Windows holds only one of them, so it can build files no check read. A project generated from
+  trellis has none. Before the update, delete or rename one of each pair. Under `crates/`, or
+  under a `crates` spelled with a long s, that is a code pull request. Elsewhere it is a rules pull
+  request, or neither for a page under `docs/` other than `docs/style.md`. Of two crate
+  directories that differ only in case, rename one that holds no rule file, such as a `build.rs` or
+  a nested `.gitignore`, in a code pull request with the `path` of each dependency on it. Then fix
+  its row under Layout in `CONTRIBUTING.md` in a rules pull request. If both hold one,
+  `just rule-changes` refuses the rename, so turn the ruleset off for that one merge and run
+  `just setup-github` afterward.
+- **Rename any path that holds U+0345.** `just policy` now fails a path that holds the combining
+  Greek ypogegrammeni (U+0345), which macOS and Windows fold in different orders. A project
+  generated from trellis has none. Before the update, rename or delete it, in a code pull request
+  under `crates/` and a rules pull request elsewhere.
+- **Give every crate directory a name Windows reads as written.** `just policy` now fails a
+  `crates/<name>` whose name ends in a dot or a space, or holds a `:` or a `\`. A project
+  generated from trellis has none. Under the checker before this update, every path in such a
+  directory is a rule and every path in the renamed one is code, so the rename always mixes them.
+  If no crate depends on it and it has no build script, delete the directory in a rules pull
+  request, leaving its entries in `internal_dependencies` and in `changelog_include` of
+  `release-plz.toml`. Add it back under a plain name in a code pull request, without any nested
+  `.gitignore`, `.ignore`, `tsconfig.json`, `bunfig.toml` or `.npmrc`. Then add those files back,
+  and change its row under Layout in `CONTRIBUTING.md`, in a rules pull request. Otherwise turn
+  the ruleset off for the one merge that renames it and fixes each dependency's `path`, before
+  the update, and run `just setup-github` afterward.
+- **Point each TypeScript settings file only at other settings files.** Every `.json` file whose
+  name starts with `tsconfig`, such as `tsconfig.base.json` or Vite's `tsconfig.app.json`, is now
+  a rule wherever it sits. `just policy` fails one whose `extends` or `references` names anything
+  but another such file in the repository, by a path that starts with `./` or `../`, holds no `\`
+  and stays outside `node_modules`. A `references` path may also name a directory that holds a
+  `tsconfig.json`. A package such as `@tsconfig/strictest` fails too, as does a settings file that
+  is a symbolic link or that TypeScript could read otherwise. A file TypeScript could read
+  otherwise is one that isn't JSON with comments and trailing commas in UTF-8, such as one with
+  single-quoted strings or unquoted keys, or one that holds a lone carriage return, U+0085,
+  U+2028 or U+2029, a block comment never closed, a comma with nothing before it, or a key given
+  twice. A project generated from trellis has none of these. Before the update, fix them under
+  the checker you have, which counts only a file named `tsconfig.json` as a rule. For a
+  `tsconfig.json` under `crates/`, copy the file `extends` names, or the `compilerOptions` of the
+  package it names, to a `tsconfig.base.json` beside it in a code pull request. Point `extends`
+  at the copy in a rules pull request, then delete the old file in a code pull request. Keep the
+  copy beside the `tsconfig.json`, because TypeScript reads `include`, `files` and the other paths
+  in a settings file relative to that file. For a settings file under `crates/` with another
+  name, such as `tsconfig.app.json`, copy and point in one code pull request. Outside `crates/`
+  the old file is a rule already, so rename it and point `extends` at it in one rules pull
+  request. Fix a settings file's syntax in a rules pull request for a `tsconfig.json`, and in a
+  code pull request for one under `crates/` with another name.
+
+### Changed
+
+- A crate's directory can move in a code pull request. When `crates/<old>` at the base and
+  `crates/<new>` at the head hold the same files, byte for byte, with the same attributes, and no
+  other directory is in the way on any file system, `just rule-changes` counts the crate's files as
+  neither rules nor code. So a crate with a build script or a nested `.gitignore` can move beside
+  the `path` of each dependency on it. Change its row under Layout in `CONTRIBUTING.md` in a rules
+  pull request after it. A crate that root files name, as the `justfile`, `Containerfile`,
+  `.gitignore` and `.dockerignore` name a service's web UI crate, moves with those files in one
+  rules pull request. A file in the crate that reads its own location, such as a build script
+  that reads `CARGO_MANIFEST_DIR`, can then do something else, as a code change can already change
+  what a listed build script emits. The judgment needs git 2.40 or later. With an older git, a
+  move is judged file by file as before.
+- `build_script_crates` may name a package that no crate has, so renaming the package of a crate
+  with a build script takes three pull requests that each pass: a rules pull request that adds the
+  new name beside the old one in `internal_dependencies`, `changelog_include` and
+  `build_script_crates`, a code pull request that renames the package, and a rules pull request
+  that drops the old name. An entry for a member with no build script still fails. Nothing removes
+  a stale entry, and a crate that later takes the name can add a build script in a rules pull
+  request without a list line.
+- `docs/maintaining.md` says how to rename a crate, which root files name a crate's directory,
+  and that renaming the package that carries the project's name still changes rules and code
+  together.
+- Renaming a crate in the layout trellis generates no longer needs the `main` ruleset turned off.
+  That step remains only in the action items above and in those of v0.8.0 and v0.10.0, for
+  layouts that `just policy` now refuses and that trellis never generated.
+
 ## v0.10.0
 
 ### Action required in projects
