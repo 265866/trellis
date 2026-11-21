@@ -6,6 +6,42 @@ part lists what a project's owner must do around the update: a rule that can fla
 a setting to change, or a step to do by hand. [CONTRIBUTING.md](CONTRIBUTING.md#release-trellis)
 has the versioning rule.
 
+## v0.9.0
+
+### Action required in projects
+
+- **Remove any git submodule under `crates/` before the update.** `just policy` now fails a git
+  submodule, or an untracked git repository that `git add` would make one, under `crates/` or in
+  or above a crate's directory. Copy the files you need into the repository, or depend on the
+  repository through Cargo as a git dependency. A project generated from trellis has none. The
+  checker your project pins until the update counts a submodule under `crates/` as code and
+  `.gitmodules` as a rule, so removing both in one pull request fails `just rule-changes`. Remove
+  the submodule in a code pull request with `git rm --cached <path>`, which leaves `.gitmodules`
+  as it is, then drop its entry from `.gitmodules` in a rules pull request.
+- **Keep a build script in its crate's directory.** `just policy` now fails a crate that
+  `build_script_crates` lists when its `build` key names a file outside the crate's directory,
+  such as `build = "../../tools/gen.rs"`, or holds a `\`. Move the file into the crate and write
+  the path with `/`.
+
+### Changed
+
+- `just policy` fails a git submodule, or an untracked git repository, under `crates/`. It lists
+  files through git, which shows none of a submodule's files, and `just rule-changes` counted a
+  submodule under `crates/` as code. So a submodule could hold a crate whose build script,
+  manifest and tool settings changed with no rule seeing them.
+- `just rule-changes` counts a git submodule as a rule wherever it sits, so moving one to another
+  commit can't land beside code. It counted one under `crates/` as code, whatever the new commit
+  changed inside it. It reads the move even when `.gitmodules` or your git settings tell
+  `git diff` to ignore submodules.
+- `just policy` fails a crate in `build_script_crates` whose `build` key leaves the crate's
+  directory. Outside it, the path could pass through a symbolic link back to one of the crate's
+  modules, and a change to that module would then change the build script as code. It also fails a
+  `build` key that holds a `\`, which names one file on Windows and another elsewhere.
+- `just docs` and the doctests fail on a rustdoc warning even when `CARGO_ENCODED_RUSTDOCFLAGS` is
+  set in your shell. Cargo reads that variable before `RUSTDOCFLAGS`, so setting it, even empty,
+  turned the errors back into warnings. The justfile now exports the flag through it. CI never
+  set it.
+
 ## v0.8.0
 
 ### Action required in projects
