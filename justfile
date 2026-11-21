@@ -169,13 +169,16 @@ links:
 # step, that both `[workspace.lints]` tables agree apart from the library-only lints, that the
 # template's two lists of accepted licenses agree, that the versions template/dylint.toml.jinja
 # says trellis read each trusted macro crate at are the ones tests/dependencies/setup.sh pins, and
-# that every tool and runner image has one version wherever it's pinned. A value it can't find or
-# read fails, as does a file it reads that's gone.
+# that every tool and runner image has one version wherever it's pinned in a form the recipe reads,
+# such as `name@version`. A value it can't find or read fails, as does a file it reads that's gone.
 #
 # Checks that pinned versions and the shared config files agree.
 pins:
     #!/usr/bin/env bash
     set -euo pipefail
+    # Sorts by byte: a locale that ignores punctuation could sort another tool between two versions
+    # of one, and hide the pair.
+    export LC_ALL=C
     status=0
     # Prints what a sed script prints from a file, or fails when that's nothing.
     extract() {
@@ -303,12 +306,23 @@ pins:
     # Every file git has or would add is scanned but these: CHANGELOG.md names old versions, and
     # policy/ and the web starter's lockfile hold npm package keys, which aren't pins.
     scan=(. ':!CHANGELOG.md' ':!policy/' ':!*bun.lock.jinja')
-    # Overrides each setting that changes what git grep prints, or stops it.
-    git_grep() { git grep --untracked --no-recurse-submodules --no-color --no-column -I -z -E "$@"; }
+    errors=$(mktemp)
+    # Overrides each setting that changes what git grep prints, or stops it, and reads every file
+    # as text, whatever a git attribute calls it. git grep exits as usual for a file it can't
+    # read, so a message from it fails too.
+    git_grep() {
+      local found=0
+      git grep --untracked --no-recurse-submodules --no-color --no-column -a -z -E "$@" 2> "$errors" || found=$?
+      if [ -s "$errors" ] || [ "$found" -gt 1 ]; then
+        cat "$errors" >&2
+        return 2
+      fi
+      return "$found"
+    }
     # A version is one or more numbers, with a pre-release suffix and build metadata if it has them.
     version='([0-9]+([.][0-9]+)*(-[0-9A-Za-z-]+([.][0-9A-Za-z-]+)*)?([+][0-9A-Za-z-]+([.][0-9A-Za-z-]+)*)?)'
     matches=$(mktemp)
-    trap 'rm -f "$matches"' EXIT
+    trap 'rm -f "$matches" "$errors"' EXIT
     # Prints `<tool>@<version> <file>:<line>` for each match of an extended regex whose first group
     # is the version, in the scanned files or the files named after it, and fails when there's none.
     pinned_as() {
