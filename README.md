@@ -10,8 +10,9 @@ generates starts with:
 - **Strict lints.** All of clippy's pedantic group, about 40 more rustc and clippy lints, and the
   custom lints in [`lints/`](lints). The custom lints check the
   [Google Rust Style Guide](https://google.github.io/styleguide/rustguide.html) rules clippy
-  doesn't, and trellis's own rules, which [docs/style.md](docs/style.md#checked-by-tools) lists
-  under "Beyond the Google guide". Every exception is an `expect` with a reason.
+  doesn't, and trellis's own rules, which
+  [template/docs/style.md](template/docs/style.md#checked-by-tools) lists under "Beyond the Google
+  guide". Every exception is an `expect` with a reason.
 - **A structure checker.** [`trellis-policy`](policy) checks crate manifests, the dependencies
   between crates, where config files live, and the docs layout: the files and README sections
   each project keeps, the README's docs index, and how each page opens.
@@ -28,8 +29,8 @@ rule lives in the types or in a check wherever one can hold it, and review is th
 agent copies whatever pattern it finds in the repository, a workaround included. So every exception
 carries a written reason where review sees it.
 
-[docs/style.md](docs/style.md) is the generated projects' style guide. It lists every rule and
-what checks it.
+[template/docs/style.md](template/docs/style.md) is the generated projects' style guide. It lists
+every rule and what checks it.
 
 ## Generate a project
 
@@ -84,7 +85,7 @@ release.
 | [`template/`](template) | The files a generated project gets. [`copier.yml`](copier.yml) has the questions. |
 | [`lints/`](lints) | The custom lints, a [dylint](https://github.com/trailofbits/dylint) library. |
 | [`policy/`](policy) | `trellis-policy`, the structure and rule-change checker. |
-| [`docs/style.md`](docs/style.md) | The generated projects' style guide, which the lints and the checker enforce. It describes a project's checks, not trellis's, and `just pins` keeps it equal to `template/docs/style.md`. |
+| [`template/docs/style.md`](template/docs/style.md) | The generated projects' style guide, which the lints and the checker enforce. Each project gets it as its `docs/style.md`. It describes a project's checks, not trellis's. |
 
 [CONTRIBUTING.md](CONTRIBUTING.md) covers working on trellis itself.
 

@@ -43,7 +43,7 @@ error: `expect` of `suppression_policy`, which has no exceptions
 LL |     #![expect(suppression_policy, reason = "the legacy module predates the policy")]
    |               ^^^^^^^^^^^^^^^^^^
    |
-   = help: fix what the lint reports; if the rule itself is wrong for the workspace, change it in trellis's `lints/` and `docs/style.md`
+   = help: fix what the lint reports; if the rule itself is wrong for the workspace, change it in trellis's `lints/` and `template/docs/style.md`
 note: this attribute sets the level of `suppression_policy`, which only the command line may set, so the lint reports an error
   --> $DIR/suppression_policy_self_suppressed.rs:3:49
    |

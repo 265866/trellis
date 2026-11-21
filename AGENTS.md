@@ -24,8 +24,6 @@ inside `{% raw %}`.
 
 ## Copies that change together
 
-- `docs/style.md` is a copy of `template/docs/style.md`, the generated projects' style guide. It
-  isn't trellis's own rules. Change both.
 - The config files and workflows that the `pins` recipe in the [justfile](justfile) compares with
   their copies in `template/`, and the `[workspace.lints]` tables of `Cargo.toml` and
   `template/Cargo.toml.jinja`.
