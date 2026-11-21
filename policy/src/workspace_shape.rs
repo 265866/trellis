@@ -1,6 +1,6 @@
 //! The workspace keeps the shape the other checks rely on.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 use std::fs;
 use std::io::ErrorKind;
 use std::path::Path;
@@ -10,7 +10,7 @@ use toml::{Table, Value};
 use crate::policy_error::PolicyError;
 use crate::violation::Violation;
 use crate::workspace::Workspace;
-use crate::{toml_file, upstream};
+use crate::{case_insensitive, repository_files, source_path, toml_file, upstream};
 
 /// Checks the shape of the workspace that the other checks rely on:
 ///
@@ -18,7 +18,15 @@ use crate::{toml_file, upstream};
 ///   `rule-changes` judges a crate's `build.rs`, its `LICENSE` files and its manifest by that
 ///   place. Each resolved member is checked, not the `members` key, because Cargo also makes a
 ///   member of every path dependency inside the workspace. Neither `crates` nor `crates/<name>`
-///   may be a symbolic link, which would put the crate's files at another path;
+///   may be a symbolic link, which would put the crate's files at another path, and `<name>` is
+///   one Windows reads as written, with no `:` or `\` and no dot or space at its end;
+/// - no two paths in the repository, the files git tracks or would add, the directories that
+///   hold them and the entries of `crates/`, are one path to a file system that ignores case, as
+///   macOS's and Windows' do, in any script, or that ignores whether an accented letter is one
+///   character or a letter and a combining accent, as macOS's does. A checkout there writes only
+///   one of them, so it builds other files than the checks read: a directory spelled `crates`
+///   with a long s (U+017F) for its last letter replaces the files of `crates/` that it also
+///   holds. The comparison errs toward calling two paths one;
 /// - `exclude` in `[workspace]` is missing or empty, so no crate under the root escapes the
 ///   workspace lints;
 /// - every crate pulled in by path is a workspace member, so no excluded crate or crate outside
@@ -81,9 +89,10 @@ pub fn check(workspace: &Workspace) -> Result<Vec<Violation>, PolicyError> {
     Ok(violations)
 }
 
-/// Reports each member that isn't `crates/<name>`, whose `<name>` isn't ASCII, or whose
-/// `crates/<name>` or `crates` is a symbolic link, and each package `crates/<name>` that isn't a
-/// member.
+/// Reports each member that isn't `crates/<name>`, whose `<name>` isn't ASCII or is one Windows
+/// reads as another, or whose `crates/<name>` or `crates` is a symbolic link, each package
+/// `crates/<name>` that isn't a member, and each two paths a case-insensitive file system reads as
+/// one.
 ///
 /// # Errors
 ///
@@ -107,6 +116,18 @@ fn member_places(
                          character outside ASCII. File systems disagree on which such names are \
                          one directory, so no check can tell which files are the crate's \
                          everywhere. Give the directory an ASCII name.",
+                        member.name()
+                    ),
+                ));
+            }
+            if source_path::windows_reads_as_another(&place) {
+                violations.push(Violation::new(
+                    place.clone(),
+                    format!(
+                        "The workspace member `{}` lives in `{place}`, whose name Windows reads as \
+                         another name. Windows drops a dot or a space from the end of a name and \
+                         reads a `:` or a `\\` as something else, so the crate's files sit at \
+                         another path there. Give the directory a name without them.",
                         member.name()
                     ),
                 ));
@@ -153,13 +174,17 @@ fn member_places(
                 .to_owned(),
         )),
         Ok(_) => {}
-        Err(error) if error.kind() == ErrorKind::NotFound => return Ok(()),
+        Err(error) if error.kind() == ErrorKind::NotFound => {
+            return merged_paths(workspace, &[], violations);
+        }
         Err(error) => return Err(read_error(error)),
     }
+    let mut entries = Vec::new();
     for entry in fs::read_dir(&directory).map_err(read_error)? {
         let entry = entry.map_err(read_error)?;
         let manifest = entry.path().join("Cargo.toml");
         let place = format!("crates/{}", entry.file_name().to_string_lossy());
+        entries.push(place.clone());
         if manifest.is_file() && !places.contains(&place) {
             violations.push(Violation::new(
                 format!("{place}/Cargo.toml"),
@@ -171,7 +196,115 @@ fn member_places(
             ));
         }
     }
+    merged_paths(workspace, &entries, violations)
+}
+
+/// Reports each set of paths that a file system on macOS or Windows may read as one path, among
+/// the files git tracks or would add, the directories that hold them, and `crate_entries`. Each
+/// name is compared by [`case_insensitive::merge_key`]. A set below a directory that is itself
+/// reported isn't reported again, since everything below that directory merges too.
+///
+/// A path that holds the combining Greek ypogegrammeni (U+0345) fails on its own. It is the one
+/// combining mark whose upper case sorts apart from it among the marks on a letter, so macOS and
+/// Windows each merge names with it that the other keeps apart, and no one folding finds both.
+///
+/// # Errors
+///
+/// Fails if the repository's files can't be listed.
+fn merged_paths(
+    workspace: &Workspace,
+    crate_entries: &[String],
+    violations: &mut Vec<Violation>,
+) -> Result<(), PolicyError> {
+    let files = repository_files::list(workspace.root())?;
+    let with_ypogegrammeni = files.iter().filter(|path| path.contains('\u{345}'));
+    for path in with_ypogegrammeni {
+        violations.push(Violation::new(
+            path.clone(),
+            "This path holds the combining Greek ypogegrammeni (U+0345), which macOS and Windows \
+             fold in different orders, so no check can tell which other path a checkout there \
+             reads as this one. Rename it without that character."
+                .to_owned(),
+        ));
+    }
+    let mut entries: Vec<MergedEntry<'_>> = Vec::new();
+    let mut ids: HashMap<(Option<usize>, String), usize> = HashMap::new();
+    let mut previous: Vec<(&str, usize)> = Vec::new();
+    for path in files.iter().chain(crate_entries) {
+        let names: Vec<&str> = path.split('/').collect();
+        let shared = previous
+            .iter()
+            .zip(&names)
+            .take_while(|((before, _), name)| before == *name)
+            .count();
+        previous.truncate(shared);
+        for &name in &names[shared..] {
+            let parent = previous.last().map(|&(_, id)| id);
+            let key = (parent, case_insensitive::merge_key(name));
+            let id = *ids.entry(key).or_insert_with(|| {
+                entries.push(MergedEntry {
+                    parent,
+                    names: BTreeSet::new(),
+                    merged_above: false,
+                });
+                entries.len() - 1
+            });
+            entries[id].names.insert(name);
+            previous.push((name, id));
+        }
+    }
+    for id in 0..entries.len() {
+        let Some(parent) = entries[id].parent else {
+            continue;
+        };
+        entries[id].merged_above = entries[parent].merged_above || entries[parent].names.len() > 1;
+    }
+    for entry in &entries {
+        if entry.names.len() < 2 || entry.merged_above {
+            continue;
+        }
+        let mut above: Vec<&str> = Vec::new();
+        let mut parent = entry.parent;
+        while let Some(id) = parent {
+            above.extend(entries[id].names.first());
+            parent = entries[id].parent;
+        }
+        let mut prefix = String::new();
+        for name in above.iter().rev() {
+            prefix.push_str(name);
+            prefix.push('/');
+        }
+        let paths: Vec<String> = entry
+            .names
+            .iter()
+            .map(|name| format!("{prefix}{name}"))
+            .collect();
+        let quoted: Vec<String> = paths.iter().map(|path| format!("`{path}`")).collect();
+        let (others, last) = quoted.split_at(quoted.len() - 1);
+        violations.push(Violation::new(
+            paths.last().cloned().unwrap_or_default(),
+            format!(
+                "{} and {} are one path to a file system that ignores case, as macOS's and \
+                 Windows' do, or how a letter with an accent is written, as macOS's does, so a \
+                 checkout there holds only one of them and builds other files than the checks \
+                 read. Rename all but one.",
+                others.join(", "),
+                last.concat()
+            ),
+        ));
+    }
     Ok(())
+}
+
+/// A file or directory in the repository, as [`merged_paths`] finds it: every spelling of one
+/// name, in one directory, that a file system may read as one.
+struct MergedEntry<'path> {
+    /// The directory that holds it, by its index, or `None` at the root.
+    parent: Option<usize>,
+    /// Its names, as the paths spell them.
+    names: BTreeSet<&'path str>,
+    /// Whether a directory above it has more than one name, so it is reported there.
+    merged_above: bool,
 }
 
 /// What is wrong with `exclude` in `[workspace]` of the root manifest `manifest`, if anything.

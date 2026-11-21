@@ -153,6 +153,33 @@ the minor version and a `fix` the patch version. To ship:
 Changing a name that [Stability](stability.md#names-that-stay-the-same) lists breaks users'
 scripts, links and the commands they copied from Install and Verify a release.
 {%- endif %}
+
+## Rename a crate
+
+To move a crate to another directory, rename `crates/<old>` to `crates/<new>` with `git mv`,
+change nothing inside it, and fix the `path` of each dependency on it. `just rule-changes` counts
+the moved files as neither rules nor code, so this is a code pull request. Outside `crates/`, only
+the crate's row under Layout in `CONTRIBUTING.md` names its directory. Fix that row in a rules
+pull request after the move.
+{%- if web_ui %} Moving `crates/{{ crate_name }}`, which holds the web UI, also changes the root
+files that name `crates/{{ crate_name }}/web`: `justfile`, `Containerfile`, `.gitignore` and
+`.dockerignore`. They are rules, so that move is a rules pull request, and the Layout rows can go
+in it.
+{%- endif %}
+
+To rename a crate's package, use three pull requests. A rules pull request adds the new name to
+`internal_dependencies` as a key with the old name's list, and beside the old name in each list
+that holds it. It also adds the new name to `changelog_include` in `release-plz.toml`, and to
+`build_script_crates` if the crate has a build script. A code pull request then changes the
+package's `name`, each dependency on it and each path that names it in code. A last rules pull
+request removes the old name's key and the old name from each list. Move the directory and rename
+the package in separate pull requests.
+
+This doesn't cover the package `{{ crate_name }}`, which carries the project's name. Rule files
+name it too: the root `Cargo.toml`, `dylint.toml`, the release configuration
+{%- if kind != 'library' %}, the justfile{% if kind == 'service' %}, the Containerfile{% endif %}
+and the workflows{% endif %}. So renaming it changes rules and code together. To rename it,
+follow "Name and kind" under [Change an answer](#change-an-answer).
 {%- if published %}
 
 ## Add a crate to a published library

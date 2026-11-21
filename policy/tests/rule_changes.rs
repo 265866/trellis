@@ -1,8 +1,8 @@
 //! `ChangedFiles` on real git histories: which branches mix rule changes with code changes.
 
-use std::fs;
 use std::path::Path;
 use std::process::Command;
+use std::{env, fs};
 
 use tempfile::TempDir;
 use trellis_policy::{ChangedFiles, Head};
@@ -1328,5 +1328,644 @@ fn adding_or_removing_a_submodule_is_a_rule_change() {
         repository.changed_files().rules(),
         [format!("crates/sub {NESTED_REPOSITORY_NOTE}")],
         "removing a submodule is a rule change"
+    );
+}
+
+/// The manifest of the crate `engine` that the tests moving a crate give it, with a build script.
+const ENGINE_MANIFEST: &str = "[package]\nname = \"engine\"\n\n[lints]\nworkspace = true\n";
+
+/// The rule files `crates/engine` holds in the tests that move a crate, beside its code: a build
+/// script, a web UI's settings, a nested ignore file and a recipe file.
+const ENGINE_RULES: [(&str, &str); 6] = [
+    ("build.rs", LOOSE_BUILD_SCRIPT),
+    ("web/tsconfig.json", "{ \"include\": [\"src\"] }\n"),
+    ("web/bunfig.toml", "[install]\nexact = true\n"),
+    ("web/.npmrc", "save-exact=true\n"),
+    (".gitignore", "/generated/\n"),
+    ("justfile", "check:\n    cargo check\n"),
+];
+
+/// A repository whose `base` holds the crate `crates/engine`, with the rule files of
+/// [`ENGINE_RULES`] and code, and the crate `crates/app`, which depends on it by path.
+fn repository_with_an_engine() -> Repository {
+    let repository = Repository::new();
+    repository.write("crates/engine/Cargo.toml", ENGINE_MANIFEST);
+    repository.write("crates/engine/src/lib.rs", "//! The engine.\n");
+    repository.write("crates/engine/web/src/main.ts", "export {};\n");
+    for (path, contents) in ENGINE_RULES {
+        repository.write(&format!("crates/engine/{path}"), contents);
+    }
+    repository.write(
+        "crates/app/Cargo.toml",
+        &format!("{MEMBER_MANIFEST}\n[dependencies]\nengine = {{ path = \"../engine\" }}\n"),
+    );
+    repository.commit("add the engine");
+    repository.git(&["branch", "--force", "base"]);
+    repository
+}
+
+/// A change a test makes to a repository.
+struct Change {
+    /// What it is.
+    why: &'static str,
+    /// Makes it.
+    make: fn(&Repository),
+}
+
+/// Moves `crates/engine` to `crates/<to>` and points the app's dependency at it, uncommitted.
+fn move_the_engine(repository: &Repository, to: &str) {
+    move_the_engine_from(repository, "engine", to);
+}
+
+/// Moves the engine from `crates/<from>` to `crates/<to>` and points the app's dependency at it,
+/// uncommitted.
+fn move_the_engine_from(repository: &Repository, from: &str, to: &str) {
+    repository.git(&["mv", &format!("crates/{from}"), &format!("crates/{to}")]);
+    repository.write(
+        "crates/app/Cargo.toml",
+        &format!("{MEMBER_MANIFEST}\n[dependencies]\nengine = {{ path = \"../{to}\" }}\n"),
+    );
+}
+
+/// Copies every file of the engine at `crates/<from>` to `crates/<to>`.
+fn copy_the_engine(repository: &Repository, from: &str, to: &str) {
+    let code = ["Cargo.toml", "src/lib.rs", "web/src/main.ts"];
+    for path in ENGINE_RULES.map(|(path, _)| path).iter().chain(&code) {
+        let to = repository.path().join("crates").join(to).join(path);
+        fs::create_dir_all(to.parent().expect("a file has a directory"))
+            .expect("the directory should be created");
+        fs::copy(repository.path().join("crates").join(from).join(path), to)
+            .expect("the file should be copied");
+    }
+}
+
+/// Whether the file system under `repository` reads names in any case as one.
+fn ignores_case(repository: &Repository) -> bool {
+    fs::exists(repository.path().join("CRATES/app"))
+        .expect("the file system should say whether the crate is there")
+}
+
+/// Asserts that `changed` lists the rule files of the engine at `crates/<to>` among its rules,
+/// so a move that changed something besides the directory's name is judged as before.
+fn assert_the_engine_rules_count(changed: &ChangedFiles, to: &str, why: &str) {
+    let build_script = format!("crates/{to}/build.rs");
+    assert!(
+        changed.rules().iter().any(|rule| rule == &build_script),
+        "{why}: the moved build script is a rule again: {:?}",
+        changed.rules()
+    );
+    assert!(
+        changed.mixes_rules_and_code(),
+        "{why}: beside code, it fails"
+    );
+}
+
+#[test]
+fn a_crate_directory_that_moves_whole_is_neither_rule_nor_code() {
+    let repository = repository_with_an_engine();
+    move_the_engine(&repository, "motor");
+    repository.commit("rename the engine's directory");
+
+    let changed = repository.changed_files();
+    assert!(
+        changed.rules().is_empty(),
+        "the moved crate's rule files are the same files: {:?}",
+        changed.rules()
+    );
+    assert_eq!(
+        changed.code(),
+        ["crates/app/Cargo.toml"],
+        "the dependency's new path is code"
+    );
+    let changed = repository.changed_files_to(&Head::WorkingTree);
+    assert!(
+        changed.rules().is_empty(),
+        "a clean working tree after the commit agrees: {:?}",
+        changed.rules()
+    );
+}
+
+/// The rename goes through another name, since `git mv crates/engine crates/Engine` on a file
+/// system that ignores case finds the destination there already and moves the crate into it.
+#[test]
+fn a_crate_directory_renamed_only_in_letter_case_moves_whole() {
+    let repository = repository_with_an_engine();
+    repository.git(&["mv", "crates/engine", "crates/engine-on-its-way"]);
+    move_the_engine_from(&repository, "engine-on-its-way", "Engine");
+    repository.commit("rename the engine's directory");
+
+    assert!(
+        repository.changed_files().rules().is_empty(),
+        "the same crate in a directory a case-insensitive file system already called that: {:?}",
+        repository.changed_files().rules()
+    );
+}
+
+#[test]
+fn a_move_that_changes_anything_in_the_crate_is_judged_as_before() {
+    let edits: [Change; 6] = [
+        Change {
+            why: "a byte in a rule file",
+            make: |repository| {
+                repository.write("crates/motor/web/tsconfig.json", "{ \"include\": [] }\n");
+                repository.git(&["add", "--all"]);
+            },
+        },
+        Change {
+            why: "a byte in a code file",
+            make: |repository| {
+                repository.write("crates/motor/src/lib.rs", "//! The motor.\n");
+                repository.git(&["add", "--all"]);
+            },
+        },
+        Change {
+            why: "an added file",
+            make: |repository| {
+                repository.write("crates/motor/src/extra.rs", "//! More.\n");
+                repository.git(&["add", "--all"]);
+            },
+        },
+        Change {
+            why: "a removed file",
+            make: |repository| {
+                repository.git(&["rm", "--quiet", "--force", "crates/motor/web/src/main.ts"]);
+            },
+        },
+        Change {
+            why: "a file renamed inside the crate",
+            make: |repository| {
+                repository.git(&["mv", "crates/motor/src/lib.rs", "crates/motor/src/core.rs"]);
+            },
+        },
+        Change {
+            why: "a file made executable",
+            make: |repository| {
+                repository.git(&["update-index", "--chmod=+x", "crates/motor/src/lib.rs"]);
+            },
+        },
+    ];
+    for Change { why, make } in edits {
+        let repository = repository_with_an_engine();
+        move_the_engine(&repository, "motor");
+        repository.git(&["add", "--all"]);
+        make(&repository);
+        repository.git(&["commit", "--quiet", "--no-verify", "--message", why]);
+        assert_the_engine_rules_count(&repository.changed_files(), "motor", why);
+    }
+}
+
+#[test]
+fn a_rule_edit_in_a_second_commit_after_the_move_counts() {
+    let repository = repository_with_an_engine();
+    move_the_engine(&repository, "motor");
+    repository.commit("rename the engine's directory");
+    repository.write("crates/motor/.gitignore", "/generated/\n/src/\n");
+    repository.commit("ignore the sources");
+
+    assert_the_engine_rules_count(&repository.changed_files(), "motor", "the ends differ");
+}
+
+#[test]
+fn a_move_whose_files_check_out_differently_counts() {
+    let repository = repository_with_an_engine();
+    repository.write(".gitattributes", "crates/motor/** ident\n");
+    repository.commit("expand $Id$ in a directory that doesn't exist yet");
+    repository.git(&["branch", "--force", "base"]);
+    move_the_engine(&repository, "motor");
+    repository.commit("rename the engine's directory");
+
+    assert_the_engine_rules_count(
+        &repository.changed_files(),
+        "motor",
+        "the same blobs check out as other bytes at the new place",
+    );
+}
+
+#[test]
+fn a_move_into_a_directory_another_crate_held_counts() {
+    let repository = repository_with_an_engine();
+    repository.write(
+        "crates/motor/Cargo.toml",
+        "[package]\nname = \"motor\"\n\n[lints]\nworkspace = true\n",
+    );
+    repository.write("crates/motor/src/lib.rs", "//! The motor.\n");
+    repository.commit("add the motor");
+    repository.git(&["branch", "--force", "base"]);
+    repository.git(&["rm", "--quiet", "-r", "crates/motor"]);
+    move_the_engine(&repository, "motor");
+    repository.commit("replace the motor with the engine");
+
+    assert_the_engine_rules_count(&repository.changed_files(), "motor", "the place was taken");
+}
+
+#[test]
+fn a_crate_copied_or_swapped_counts() {
+    let repository = repository_with_an_engine();
+    repository.git(&["mv", "crates/engine", "crates/motor"]);
+    repository.git(&["mv", "crates/app", "crates/engine"]);
+    repository.git(&["mv", "crates/motor", "crates/app"]);
+    repository.commit("swap the crates");
+    let changed = repository.changed_files();
+    assert!(
+        changed
+            .rules()
+            .iter()
+            .any(|rule| rule == "crates/app/build.rs"),
+        "a swap keeps both directories, so it isn't a move: {:?}",
+        changed.rules()
+    );
+
+    let repository = repository_with_an_engine();
+    fs::create_dir_all(repository.path().join("crates/motor/src"))
+        .expect("the directory should be created");
+    for path in ["Cargo.toml", "src/lib.rs", "build.rs"] {
+        fs::copy(
+            repository.path().join("crates/engine").join(path),
+            repository.path().join("crates/motor").join(path),
+        )
+        .expect("the file should be copied");
+    }
+    repository.commit("copy part of the engine");
+    let changed = repository.changed_files();
+    assert!(
+        changed
+            .rules()
+            .iter()
+            .any(|rule| rule == "crates/motor/build.rs"),
+        "a copy keeps the old directory: {:?}",
+        changed.rules()
+    );
+}
+
+#[test]
+fn a_move_beside_a_directory_that_differs_only_in_case_counts() {
+    let repository = repository_with_an_engine();
+    if ignores_case(&repository) {
+        return;
+    }
+    repository.write("crates/MOTOR/src/lib.rs", "//! Another crate.\n");
+    repository.write(
+        "crates/MOTOR/Cargo.toml",
+        "[package]\nname = \"other\"\n\n[lints]\nworkspace = true\n",
+    );
+    move_the_engine(&repository, "motor");
+    repository.commit("move the engine beside a directory a Mac merges with it");
+    assert_the_engine_rules_count(&repository.changed_files(), "motor", "MOTOR at the head");
+
+    let repository = repository_with_an_engine();
+    repository.write("crates/MOTOR/src/lib.rs", "//! Another crate.\n");
+    repository.commit("add a directory a Mac reads as motor");
+    repository.git(&["branch", "--force", "base"]);
+    repository.git(&["rm", "--quiet", "-r", "crates/MOTOR"]);
+    move_the_engine(&repository, "motor");
+    repository.commit("move the engine where MOTOR was");
+    assert_the_engine_rules_count(&repository.changed_files(), "motor", "MOTOR at the base");
+}
+
+#[cfg(unix)]
+#[test]
+fn a_move_to_a_name_windows_reads_as_another_counts() {
+    let repository = repository_with_an_engine();
+    move_the_engine(&repository, "motor.");
+    repository.commit("move the engine to a name Windows reads as motor");
+    let changed = repository.changed_files();
+    assert!(
+        changed
+            .rules()
+            .iter()
+            .any(|rule| rule == "crates/engine/build.rs"),
+        "the move isn't one: {:?}",
+        changed.rules()
+    );
+}
+
+#[test]
+fn a_crate_holding_a_symbolic_link_counts() {
+    if env::consts::OS == "windows" {
+        return;
+    }
+    let repository = repository_with_an_engine();
+    let output = Command::new("ln")
+        .args(["-s", "../app/Cargo.toml"])
+        .arg(repository.path().join("crates/engine/link"))
+        .output()
+        .expect("ln should run");
+    assert!(output.status.success(), "the link should be made");
+    repository.commit("link to a sibling");
+    repository.git(&["branch", "--force", "base"]);
+    move_the_engine(&repository, "motor");
+    repository.commit("rename the engine's directory");
+    assert_the_engine_rules_count(
+        &repository.changed_files(),
+        "motor",
+        "a relative link can point elsewhere from the new place",
+    );
+}
+
+#[test]
+fn an_uncommitted_change_in_the_working_tree_stops_the_move() {
+    let uncommitted: [Change; 11] = [
+        Change {
+            why: "an unstaged edit",
+            make: |repository| {
+                repository.write("crates/motor/web/tsconfig.json", "{ \"include\": [] }\n");
+            },
+        },
+        Change {
+            why: "a staged edit",
+            make: |repository| {
+                repository.write("crates/motor/justfile", "check:\n");
+                repository.git(&["add", "crates/motor/justfile"]);
+            },
+        },
+        Change {
+            why: "a staged edit that the working tree undoes",
+            make: |repository| {
+                repository.write("crates/motor/build.rs", "fn main() {}\n");
+                repository.git(&["add", "crates/motor/build.rs"]);
+                repository.write("crates/motor/build.rs", LOOSE_BUILD_SCRIPT);
+            },
+        },
+        Change {
+            why: "an untracked file",
+            make: |repository| {
+                repository.write("crates/motor/web/.npmrc.local", "x\n");
+            },
+        },
+        Change {
+            why: "an untracked file where the crate was",
+            make: |repository| {
+                repository.write("crates/engine/.gitignore", "/src/\n");
+            },
+        },
+        Change {
+            why: "a staged file below the new directory in other letters",
+            make: |repository| {
+                repository.write("crates/MOTOR/src/lib.rs", "pub fn x() {}\n");
+                repository.git(&[
+                    "-c",
+                    "core.ignorecase=false",
+                    "update-index",
+                    "--add",
+                    "--",
+                    "crates/MOTOR/src/lib.rs",
+                ]);
+            },
+        },
+        Change {
+            why: "an untracked file below the new directory in other letters",
+            make: |repository| {
+                repository.write("crates/MOTOR/src/lib.rs", "pub fn x() {}\n");
+            },
+        },
+        Change {
+            why: "an untracked file below the old directory in other letters",
+            make: |repository| {
+                repository.write("crates/Engine/src/lib.rs", "pub fn x() {}\n");
+            },
+        },
+        Change {
+            why: "an uncommitted attributes file",
+            make: |repository| {
+                repository.write(".gitattributes", "crates/motor/** ident\n");
+            },
+        },
+        Change {
+            why: "an uncommitted attributes file in other letters",
+            make: |repository| {
+                repository.write(".GitAttributes", "crates/motor/** ident\n");
+            },
+        },
+        Change {
+            why: "a staged attributes file that the working tree lacks",
+            make: |repository| {
+                repository.write(".gitattributes", "crates/motor/** ident\n");
+                repository.git(&["add", ".gitattributes"]);
+                fs::remove_file(repository.path().join(".gitattributes"))
+                    .expect("the attributes file should be deleted");
+            },
+        },
+    ];
+    let mut missed = Vec::new();
+    for Change { why, make } in uncommitted {
+        let repository = repository_with_an_engine();
+        move_the_engine(&repository, "motor");
+        repository.commit("rename the engine's directory");
+        make(&repository);
+        let changed = repository.changed_files_to(&Head::WorkingTree);
+        if !changed
+            .rules()
+            .iter()
+            .any(|rule| rule == "crates/motor/build.rs")
+        {
+            missed.push(format!("{why}: {:?}", changed.rules()));
+        }
+    }
+    assert!(
+        missed.is_empty(),
+        "the working tree judges the move as before, but these let it through: {missed:#?}"
+    );
+}
+
+#[test]
+fn two_identical_directories_that_become_one_count() {
+    let repository = repository_with_an_engine();
+    repository.git(&["rm", "--quiet", "-r", "crates/app"]);
+    copy_the_engine(&repository, "engine", "spare");
+    repository.commit("hold the engine twice");
+    repository.git(&["branch", "--force", "base"]);
+    repository.git(&["rm", "--quiet", "-r", "crates/spare"]);
+    repository.git(&["mv", "crates/engine", "crates/motor"]);
+    repository.commit("keep one, moved");
+    let changed = repository.changed_files();
+    assert!(
+        changed
+            .rules()
+            .iter()
+            .any(|rule| rule == "crates/spare/.gitignore"),
+        "deleting the second copy's rule files still counts: {:?}",
+        changed.rules()
+    );
+}
+
+#[test]
+fn a_directory_that_holds_no_package_counts() {
+    let repository = Repository::new();
+    repository.write("crates/assets/justfile", "check:\n    true\n");
+    repository.write("crates/assets/logo.txt", "logo\n");
+    repository.commit("add assets");
+    repository.git(&["branch", "--force", "base"]);
+    repository.git(&["mv", "crates/assets", "crates/media"]);
+    repository.write("crates/app/src/lib.rs", "//! The app, with media.\n");
+    repository.commit("move the assets");
+    let changed = repository.changed_files();
+    assert!(
+        changed
+            .rules()
+            .iter()
+            .any(|rule| rule == "crates/media/justfile"),
+        "only a package's directory moves whole: {:?}",
+        changed.rules()
+    );
+}
+
+#[test]
+fn a_submodule_that_moves_in_crates_still_counts() {
+    let repository = repository_with_a_submodule("crates/sub");
+    repository.git(&["mv", "crates/sub", "crates/moved"]);
+    repository.write("crates/app/src/lib.rs", "//! The app, changed.\n");
+    repository.commit("move the submodule");
+    let changed = repository.changed_files();
+    assert!(
+        changed
+            .rules()
+            .contains(&format!("crates/moved {NESTED_REPOSITORY_NOTE}")),
+        "a submodule isn't a directory of this repository: {:?}",
+        changed.rules()
+    );
+}
+
+#[test]
+fn a_move_whose_files_check_out_differently_where_case_is_ignored_counts() {
+    for (path, contents) in [
+        (".gitattributes", "CRATES/MOTOR/** ident\n"),
+        (".GitAttributes", "crates/motor/** ident\n"),
+    ] {
+        let repository = repository_with_an_engine();
+        repository.write(path, contents);
+        repository.commit("expand $Id$ where macOS and Windows match names in any case");
+        repository.git(&["branch", "--force", "base"]);
+        move_the_engine(&repository, "motor");
+        repository.commit("rename the engine's directory");
+
+        assert_the_engine_rules_count(
+            &repository.changed_files(),
+            "motor",
+            &format!("{path} with {contents:?} applies on a case-insensitive checkout"),
+        );
+    }
+}
+
+#[test]
+fn a_move_whose_files_check_out_differently_where_case_counts() {
+    let repository = repository_with_an_engine();
+    repository.write(
+        ".gitattributes",
+        "crates/motor/** ident\nCRATES/MOTOR/** !ident\n",
+    );
+    repository.commit("expand $Id$ only where git matches names exactly");
+    repository.git(&["branch", "--force", "base"]);
+    move_the_engine(&repository, "motor");
+    repository.commit("rename the engine's directory");
+
+    assert_the_engine_rules_count(
+        &repository.changed_files(),
+        "motor",
+        "a checkout that matches names exactly, as on Linux, expands $Id$ at the new place",
+    );
+}
+
+#[test]
+fn a_misspelled_attributes_file_at_either_end_stops_the_move() {
+    let repository = repository_with_an_engine();
+    repository.write("crates/.GitAttributes", "engine/** ident\n");
+    repository.commit("expand $Id$ in the engine where case is ignored");
+    repository.git(&["branch", "--force", "base"]);
+    repository.git(&["rm", "--quiet", "crates/.GitAttributes"]);
+    move_the_engine(&repository, "motor");
+    repository.commit("rename the engine's directory and stop expanding");
+    assert_the_engine_rules_count(
+        &repository.changed_files(),
+        "motor",
+        "the merge base held the misspelled file",
+    );
+
+    let repository = repository_with_an_engine();
+    move_the_engine(&repository, "motor");
+    repository.write("crates/.GitAttributes", "motor/** ident\n");
+    repository.commit("rename the engine's directory and expand $Id$ where case is ignored");
+    assert_the_engine_rules_count(
+        &repository.changed_files(),
+        "motor",
+        "the head holds the misspelled file",
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn a_move_from_a_name_windows_reads_as_another_counts() {
+    let repository = repository_with_an_engine();
+    move_the_engine(&repository, "engine.");
+    repository.commit("move the engine to a name Windows reads as engine");
+    repository.git(&["branch", "--force", "base"]);
+    move_the_engine_from(&repository, "engine.", "motor");
+    repository.commit("move the engine out of it");
+    assert_the_engine_rules_count(
+        &repository.changed_files(),
+        "motor",
+        "the merge base's directory isn't one name everywhere",
+    );
+}
+
+#[test]
+fn a_crate_copied_to_two_places_counts() {
+    let repository = repository_with_an_engine();
+    repository.git(&["mv", "crates/engine", "crates/motor"]);
+    copy_the_engine(&repository, "motor", "spare");
+    repository.commit("move the engine and copy it");
+    assert_the_engine_rules_count(
+        &repository.changed_files(),
+        "motor",
+        "two places hold the tree at the head, so neither is the engine's",
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn a_git_that_cant_read_attributes_from_a_revision_moves_nothing() {
+    use std::fs::Permissions;
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let repository = repository_with_an_engine();
+    move_the_engine(&repository, "motor");
+    repository.commit("rename the engine's directory");
+    let tools = TempDir::new().expect("the temporary directory should be created");
+    let old_git = tools.path().join("git");
+    fs::write(
+        &old_git,
+        "#!/bin/sh\nfor argument in \"$@\"; do\n  case \"$argument\" in\n    --source=*) \
+         echo \"error: unknown option \\`source'\" >&2; exit 129 ;;\n  esac\ndone\n\
+         exec \"$REAL_GIT\" \"$@\"\n",
+    )
+    .expect("the script should be written");
+    fs::set_permissions(&old_git, Permissions::from_mode(0o755))
+        .expect("the script should be made executable");
+    let real_git = Command::new("sh")
+        .args(["-c", "command -v git"])
+        .output()
+        .expect("sh should run");
+    let path = env::var_os("PATH").expect("the tests run with a PATH");
+    let mut paths = vec![tools.path().to_owned()];
+    paths.extend(env::split_paths(&path));
+    let output = Command::new(env!("CARGO_BIN_EXE_trellis-policy"))
+        .args(["rule-changes", "base", "--head", "HEAD"])
+        .current_dir(repository.path())
+        .env(
+            "PATH",
+            env::join_paths(paths).expect("the paths should join"),
+        )
+        .env("REAL_GIT", String::from_utf8_lossy(&real_git.stdout).trim())
+        .output()
+        .expect("trellis-policy should run");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(
+        output.status.code(),
+        Some(1),
+        "git before 2.40 can't compare attributes, so the move is judged as before: {stdout}{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        stdout.contains("crates/motor/build.rs"),
+        "the moved build script is a rule again: {stdout}"
     );
 }

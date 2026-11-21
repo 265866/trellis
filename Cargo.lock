@@ -450,12 +450,14 @@ name = "trellis-policy"
 version = "0.1.0"
 dependencies = [
  "cargo_metadata",
+ "caseless",
  "comrak",
  "proc-macro2",
  "serde_json",
  "spdx",
  "tempfile",
  "toml",
+ "unicode-normalization",
 ]
 
 [[package]]

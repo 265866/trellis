@@ -10,21 +10,23 @@ use toml::{Table, Value};
 use crate::head::Head;
 use crate::policy_error::PolicyError;
 use crate::tool_config::ToolConfig;
-use crate::{agent_files, case_insensitive, git, lint_expectations, source_path, toml_file};
+use crate::{
+    agent_files, case_insensitive, config_files, git, lint_expectations, source_path, toml_file,
+};
 
 /// Directories whose every file is a rule: the workflows.
 const RULE_DIRECTORIES: [&str; 1] = [".github/"];
 
 /// File names that are rules in any directory: the check recipes, and the settings files tools
 /// read from the directory they check and its ancestors. An ignore file hides files from git,
-/// `typos` and the checks that list the repository's files, and the TypeScript, Bun and npm
-/// settings change what a web UI's check and install do.
-const RULE_NAMES: [&str; 7] = [
+/// `typos` and the checks that list the repository's files, and the Bun and npm settings change
+/// what a web UI's check and install do. TypeScript's settings files, which
+/// [`config_files::is_tsconfig`] names, are rules in any directory too.
+const RULE_NAMES: [&str; 6] = [
     "justfile",
     ".justfile",
     ".gitignore",
     ".ignore",
-    "tsconfig.json",
     "bunfig.toml",
     ".npmrc",
 ];
@@ -69,9 +71,9 @@ const OTHER_FILES: [&str; 5] = [
 /// or other git repository inside this one, whose files no check sees, and any file the lists
 /// here don't know, which the listing marks when it is only untracked; the code is every
 /// other change under `crates/` and every Rust file elsewhere, except a Rust file whose change
-/// only adds, removes, moves or changes lint expectations, which is neither. A pull request
-/// changes one or the other, so review sees every loosened rule apart from the code that might
-/// have needed it.
+/// only adds, removes, moves or changes lint expectations, which is neither, and every file of a
+/// crate whose directory moved whole, which is neither too. A pull request changes one or the
+/// other, so review sees every loosened rule apart from the code that might have needed it.
 #[derive(Debug, Default)]
 pub struct ChangedFiles {
     /// The changed rule files.
@@ -110,7 +112,8 @@ impl ChangedFiles {
         };
         let merge_base = git::run(&top, &["merge-base", base, head_revision])?;
         let merge_base = merge_base.trim();
-        let changed_paths = ChangedPaths::between(&top, merge_base, head)?;
+        let mut changed_paths = ChangedPaths::between(&top, merge_base, head)?;
+        changed_paths.leave_out(&moved_crates(&top, merge_base, head)?);
         let mut changed = Self {
             rules: changed_paths.nested_repository_rules(),
             code: Vec::new(),
@@ -295,6 +298,15 @@ impl ChangedPaths {
         })
     }
 
+    /// Leaves out every path below one of `directories`.
+    fn leave_out(&mut self, directories: &[String]) {
+        self.paths.retain(|path| {
+            !directories
+                .iter()
+                .any(|directory| is_below(path, directory))
+        });
+    }
+
     /// The rule line of each nested repository the change touches.
     fn nested_repository_rules(&self) -> Vec<String> {
         self.nested_repositories
@@ -375,6 +387,7 @@ fn role(path: &str) -> Role {
         || RULE_NAMES
             .iter()
             .any(|rule| case_insensitive::eq(name, rule))
+        || config_files::is_tsconfig(name)
         || RULE_FILES
             .iter()
             .any(|rule| case_insensitive::eq(path, rule))
@@ -746,6 +759,267 @@ impl Side<'_> {
     }
 }
 
+/// The directories of the crates that moved whole, `crates/<old>` at `merge_base` and
+/// `crates/<new>` at the head, whose files are neither rules nor code. A crate moved whole when:
+///
+/// - `crates/<old>` at `merge_base` and `crates/<new>` at the head are the same git tree, so every
+///   file in it has the same bytes, name and mode at both ends, its manifest included, so the
+///   package keeps its name, its build script and its build dependencies;
+/// - `<old>` and `<new>` differ, and are ASCII names every system reads as written;
+/// - at `merge_base`, `crates/<old>` is the one entry of `crates/` that a case-insensitive file
+///   system reads as `<old>` or `<new>`, and at the head `crates/<new>` is, so nothing else held
+///   the new place or holds the old one, on any file system;
+/// - no other entry of `crates/` is that tree at either end, so the move pairs one directory with
+///   one;
+/// - `crates/<old>/Cargo.toml` names a package, so `crates/<old>` is a directory;
+/// - the tree holds no symbolic link or submodule, whose target or contents would depend on where
+///   it sits;
+/// - git gives every file the same attributes at both ends, read from each end's own
+///   `.gitattributes` files, both where git matches names exactly and where it matches them in
+///   any case, as on macOS and Windows, so a checkout writes the same bytes at the new place on
+///   every system; and neither end holds a `.gitattributes` spelled in other letters, which a
+///   case-insensitive file system can read as one. This needs git 2.40 or later; with an older
+///   git, no crate moved whole.
+///
+/// A working-tree head is judged at `HEAD`, and no crate moved whole while a path below
+/// `crates/<old>` or `crates/<new>`, or a file named `.gitattributes`, in any letters, is staged,
+/// changed in the working tree or untracked, so the working tree is never looser than the commit
+/// it makes: `HEAD` doesn't hold an uncommitted entry of `crates/` that spells either name in
+/// other letters.
+///
+/// The directory's name is all that changes, but a file in the crate that reads its own location,
+/// such as a build script that reads `CARGO_MANIFEST_DIR`, or that names `crates/<new>` by a
+/// relative path, can mean something else after the move. A code change can already change what
+/// such a file does by filling a path it names, so review weighs that file when it lands.
+///
+/// # Errors
+///
+/// Fails if git fails, other than when it can't read attributes.
+fn moved_crates(top: &Path, merge_base: &str, head: &Head) -> Result<Vec<String>, PolicyError> {
+    let head_revision = match head {
+        Head::Commit(revision) => revision.as_str(),
+        Head::WorkingTree => "HEAD",
+    };
+    let uncommitted = match head {
+        Head::Commit(_) => Vec::new(),
+        Head::WorkingTree => uncommitted_paths(top)?,
+    };
+    let attributes_changed = uncommitted.iter().any(|path| {
+        let name = path.rsplit('/').next().unwrap_or(path);
+        case_insensitive::eq(name, ".gitattributes")
+    });
+    if attributes_changed {
+        return Ok(Vec::new());
+    }
+    let before = crate_entries(top, merge_base)?;
+    let after = crate_entries(top, head_revision)?;
+    let mut moved = Vec::new();
+    for old in &before {
+        let Some(new) = only(after.iter().filter(|entry| entry.id == old.id)) else {
+            continue;
+        };
+        if only(before.iter().filter(|entry| entry.id == old.id)).is_none() {
+            continue;
+        }
+        let near = |entries: &[CrateEntry]| -> Vec<String> {
+            entries
+                .iter()
+                .filter(|entry| {
+                    case_insensitive::eq(&entry.name, &old.name)
+                        || case_insensitive::eq(&entry.name, &new.name)
+                })
+                .map(|entry| entry.name.clone())
+                .collect()
+        };
+        let old_directory = format!("crates/{}", old.name);
+        let new_directory = format!("crates/{}", new.name);
+        let touched = |directory: &str| {
+            let below = format!("{directory}/");
+            uncommitted
+                .iter()
+                .any(|path| case_insensitive::strip_prefix(path, &below).is_some())
+        };
+        let eligible = old.name != new.name
+            && plain_name(&old.name)
+            && plain_name(&new.name)
+            && near(&before) == [old.name.clone()]
+            && near(&after) == [new.name.clone()]
+            && !touched(&old_directory)
+            && !touched(&new_directory)
+            && names_a_package(top, merge_base, &old_directory);
+        if !eligible {
+            continue;
+        }
+        let Some(files) = plain_files(top, &old.id)? else {
+            continue;
+        };
+        let same_attributes = [false, true].iter().all(|&ignore_case| {
+            let before = attributes(top, merge_base, &old_directory, &files, ignore_case);
+            before.is_some()
+                && before == attributes(top, head_revision, &new_directory, &files, ignore_case)
+        });
+        if same_attributes {
+            moved.push(old_directory);
+            moved.push(new_directory);
+        }
+    }
+    if !moved.is_empty()
+        && (misspells_attributes(top, merge_base)? || misspells_attributes(top, head_revision)?)
+    {
+        return Ok(Vec::new());
+    }
+    Ok(moved)
+}
+
+/// Whether `path` lies below `directory`, matched exactly, as the paths git lists are.
+fn is_below(path: &str, directory: &str) -> bool {
+    path.strip_prefix(directory)
+        .is_some_and(|rest| rest.starts_with('/'))
+}
+
+/// The one item of `items`, or `None` when there are none or several.
+fn only<T>(mut items: impl Iterator<Item = T>) -> Option<T> {
+    match (items.next(), items.next()) {
+        (Some(item), None) => Some(item),
+        _ => None,
+    }
+}
+
+/// Whether `name`, a directory below `crates/`, is ASCII and a name Windows reads as written.
+fn plain_name(name: &str) -> bool {
+    name.is_ascii() && !source_path::windows_reads_as_another(name)
+}
+
+/// An entry of `crates/` at one end of a change.
+struct CrateEntry {
+    /// Its name, without `crates/`.
+    name: String,
+    /// The id of its git object.
+    id: String,
+}
+
+/// The entries of `crates/` in the tree of `revision`.
+///
+/// # Errors
+///
+/// Fails if git fails.
+fn crate_entries(top: &Path, revision: &str) -> Result<Vec<CrateEntry>, PolicyError> {
+    let output = git::run(top, &["ls-tree", "-z", revision, "crates/"])?;
+    let entries = git::paths(&output).filter_map(|entry| {
+        let (metadata, path) = entry.split_once('\t')?;
+        let mut fields = metadata.split(' ');
+        let id = fields.nth(2)?;
+        Some(CrateEntry {
+            name: path.strip_prefix("crates/")?.to_owned(),
+            id: id.to_owned(),
+        })
+    });
+    Ok(entries.collect())
+}
+
+/// Whether `directory/Cargo.toml` at `revision` is a manifest with a package name.
+fn names_a_package(top: &Path, revision: &str, directory: &str) -> bool {
+    show(top, revision, &format!("{directory}/Cargo.toml"))
+        .and_then(|text| toml_file::parse(&text).ok())
+        .is_some_and(|manifest| {
+            toml_file::lookup(&manifest, &["package", "name"]).is_some_and(Value::is_str)
+        })
+}
+
+/// The paths of the files in the git tree `tree`, relative to it, or `None` if it holds a
+/// symbolic link or a submodule.
+///
+/// # Errors
+///
+/// Fails if git fails.
+fn plain_files(top: &Path, tree: &str) -> Result<Option<Vec<String>>, PolicyError> {
+    let output = git::run(top, &["ls-tree", "-r", "-z", tree])?;
+    let mut files = Vec::new();
+    for entry in git::paths(&output) {
+        let Some((metadata, path)) = entry.split_once('\t') else {
+            return Ok(None);
+        };
+        if !["100644", "100755"]
+            .iter()
+            .any(|mode| metadata.starts_with(mode))
+        {
+            return Ok(None);
+        }
+        files.push(path.to_owned());
+    }
+    Ok(Some(files))
+}
+
+/// Every attribute git gives each of `files`, relative to `directory`, as `.gitattributes` files
+/// at `revision` set them, matching names in any case when `ignore_case` holds: one
+/// `<file> NUL <attribute> NUL <value>` line per attribute set, or `None` if git can't say, as
+/// before git 2.40, which can't read attributes from a revision.
+fn attributes(
+    top: &Path,
+    revision: &str,
+    directory: &str,
+    files: &[String],
+    ignore_case: bool,
+) -> Option<Vec<String>> {
+    let mut input = String::new();
+    for file in files {
+        input.extend([directory, "/", file, "\0"]);
+    }
+    let source = format!("--source={revision}");
+    let ignore_case = format!("core.ignorecase={ignore_case}");
+    let arguments = [
+        "-c",
+        &ignore_case,
+        "check-attr",
+        "-z",
+        "-a",
+        "--stdin",
+        &source,
+    ];
+    let output = git::run_with_input(top, &arguments, Some(&input)).ok()?;
+    let mut fields = output.split('\0');
+    let mut lines = Vec::new();
+    while let (Some(path), Some(attribute), Some(value)) =
+        (fields.next(), fields.next(), fields.next())
+    {
+        let file = path.strip_prefix(directory)?;
+        lines.push(format!("{file}\0{attribute}\0{value}"));
+    }
+    Some(lines)
+}
+
+/// Whether the tree of `revision` holds a file named `.gitattributes` in other letters, such as
+/// `.GitAttributes`.
+///
+/// # Errors
+///
+/// Fails if git fails.
+fn misspells_attributes(top: &Path, revision: &str) -> Result<bool, PolicyError> {
+    let output = git::run(top, &["ls-tree", "-r", "-z", "--name-only", revision])?;
+    Ok(git::paths(&output).any(|path| {
+        let name = path.rsplit('/').next().unwrap_or(path);
+        name != ".gitattributes" && case_insensitive::eq(name, ".gitattributes")
+    }))
+}
+
+/// The paths, relative to the root of the repository at `top`, that differ between `HEAD` and
+/// the index or between `HEAD` and the working tree, or that are untracked and not ignored.
+///
+/// # Errors
+///
+/// Fails if git fails.
+fn uncommitted_paths(top: &Path) -> Result<Vec<String>, PolicyError> {
+    let diff = ["diff", "--name-only", "--no-renames", "-z"];
+    let staged = git::run(top, &[&diff[..], &["--cached", "HEAD"]].concat())?;
+    let unstaged = git::run(top, &[&diff[..], &["HEAD"]].concat())?;
+    let untracked = git::run(top, &["ls-files", "-z", "--others", "--exclude-standard"])?;
+    Ok(git::paths(&staged)
+        .chain(git::paths(&unstaged))
+        .chain(git::paths(&untracked))
+        .map(|path| path.trim_end_matches('/').to_owned())
+        .collect())
+}
+
 /// The text of `path` at `revision`, if it exists there.
 fn show(repository: &Path, revision: &str, path: &str) -> Option<String> {
     git::run(repository, &["show", &format!("{revision}:{path}")]).ok()
@@ -797,6 +1071,10 @@ mod tests {
             "crates/app/web/.npmrc",
             "crates/app/web/.GitIgnore",
             "crates/app/web/TSConfig.json",
+            "crates/app/web/tsconfig.base.json",
+            "crates/app/web/tsconfig.app.json",
+            "crates/app/web/TSCONFIG.Node.JSON",
+            "crates/app/web/tsconfig.json.json",
         ] {
             assert_eq!(role(path), Role::Rule, "{path} should be a rule");
         }
@@ -876,6 +1154,10 @@ mod tests {
             "crates/app/web/package.json",
             "crates/app/web/bun.lock",
             "crates/app/web/src/main.ts",
+            "crates/app/web/jsconfig.json",
+            "crates/app/web/mytsconfig.json",
+            "crates/app/web/tsconfig.jsonc",
+            "crates/app/web/tsconfig",
             "docs/notes.rs",
             "src/main.rs",
             "tools/x/y.rs",

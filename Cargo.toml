@@ -22,7 +22,10 @@ publish = false
 # line or syntax highlighting. It reads the `package.json` of each npm package a web UI installs
 # with serde_json, which cargo_metadata already depends on, and judges each one's license with
 # spdx, the crate cargo-about and cargo-deny judge licenses with, at the version cargo-deny uses.
-# Its tests build git repositories in temporary directories.
+# It folds paths with caseless and unicode-normalization, which comrak already depends on, to find
+# two that macOS or Windows reads as one. Its tests build git repositories in temporary
+# directories.
+caseless = "0.2.2"
 cargo_metadata = "0.23.1"
 comrak = { version = "1.0.0", default-features = false }
 proc-macro2 = { version = "1.0.107", default-features = false, features = ["span-locations"] }
@@ -30,6 +33,7 @@ serde_json = "1.0.154"
 spdx = "0.13.6"
 tempfile = "3.27.0"
 toml = { version = "0.9.8", default-features = false, features = ["parse", "serde", "std"] }
+unicode-normalization = "0.1.26"
 
 [workspace.lints.rust]
 rust_2018_idioms = { level = "warn", priority = -1 }
