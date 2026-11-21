@@ -153,7 +153,7 @@ jobs:
 {%- endif %}
 {#- A project generated with `trellis_path` loads the lints from that checkout, whose changes the
     key below can't see, so it caches nothing. #}
-{%- set dylint_cache = not trellis_path and (kind == 'service' or 'linux' in platforms) %}
+{%- set dylint_cache = not trellis_path %}
 {%- raw %}
 
       - run: just lint
@@ -168,9 +168,8 @@ jobs:
       # the cargo-dylint version, and the libraries entry with its pinned trellis commit. It has no
       # restore-keys, so a change to any of them misses. Only the builds are cached: the lint
       # results for the project's own crates, under target/dylint/target, are not, so every run
-      # lints them again. Only the Linux rows have been measured with it, so only they use it.
+      # lints them again.
       - name: Compute the lint build's cache key
-        if: runner.os == 'Linux'
         id: dylint-key
         shell: bash
         run: |
@@ -181,7 +180,6 @@ jobs:
           echo "key=dylint-$RUNNER_OS-$ImageOS-$RUNNER_ARCH-$lints_nightly-${dylint_version##* }-$libraries_hash" >> "$GITHUB_OUTPUT"
 
       - name: Restore the lint library and driver
-        if: runner.os == 'Linux'
         id: dylint-cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -200,7 +198,7 @@ jobs:
 
       # Saved only from main, like rust-cache, and only after `just dylint` passed.
       - name: Save the lint library and driver
-        if: runner.os == 'Linux' && github.ref == 'refs/heads/main' && steps.dylint-cache.outputs.cache-hit != 'true'
+        if: github.ref == 'refs/heads/main' && steps.dylint-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           key: ${{ steps.dylint-key.outputs.key }}
