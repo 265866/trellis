@@ -6,6 +6,140 @@ part lists what a project's owner must do around the update: a rule that can fla
 a setting to change, or a step to do by hand. [CONTRIBUTING.md](CONTRIBUTING.md#release-trellis)
 has the versioning rule.
 
+## v0.8.0
+
+### Action required in projects
+
+- **Run `just install-tools` after the update, then `cargo clean` once.** CI and `install-tools`
+  now pin cargo-dylint and dylint-link 6.4.0. With 6.3.0 installed, `just dylint` can pass on your
+  machine with lint violations present, after any run of the lints without `-D warnings`. A check
+  that 6.3.0 cached stays cached after the upgrade until the crate's sources change, which is what
+  the `cargo clean` clears.
+- **Inherit the workspace license in every crate.** When the root `Cargo.toml` has
+  `[workspace.package] license`, `just policy` now fails a crate whose `[package]` lacks
+  `license.workspace = true` or sets a license of its own. Generated crates have the line, unless
+  the project was generated with license `none` and licensed later. Add it to any crate without
+  it, in a code pull request before the update, since the rule-change check of the update's pull
+  request still runs the old checker.
+- **Keep every crate in `crates/<name>`.** `just policy` now fails a workspace member outside
+  `crates/<name>`, such as `crates/a/b` or a path dependency outside `crates/`. It also fails a
+  `crates/<name>` or `crates` that is a symbolic link, and a package in `crates/<name>` that isn't
+  a member. A project trellis generated already has this layout. If you added a crate elsewhere,
+  moving it changes rules and code in one pull request, which `just rule-changes` refuses and the
+  `main` ruleset has no bypass for. Turn the ruleset off for that one merge, before the update,
+  and run `just setup-github` afterward.
+- **Land nested settings files as rules.** A `.gitignore`, `.ignore`, `tsconfig.json`,
+  `bunfig.toml` or `.npmrc` anywhere in the repository, such as a web UI's `tsconfig.json`, is now
+  a rule, so a pull request that changes one can't also change code.
+- **Install shellcheck, if you haven't.** `just actionlint`, and so `just ci`, now fails without
+  it. The Set up section of `CONTRIBUTING.md` names the version.
+
+### Changed
+
+- A new project's first `just ci` passes before its GitHub repository exists. `just rule-changes`
+  compares with `origin/main`, which doesn't exist until the first push, so it failed with
+  `Not a valid object name origin/main` and trellis's README put creating the repository, setting
+  it up and pushing ahead of any local check. It now says there is nothing to compare yet and passes
+  when its base isn't a commit and the repository has no remote-tracking branches, as with no
+  remote or one that nothing was pushed to. Once any remote branch exists, an unknown base still
+  fails. trellis's README and the steps Copier prints install the tools and run `just ci` before
+  "Before the first push", and the README's generation command pins the Copier version trellis is
+  tested with.
+- `just dylint` fails whenever the code holds a lint violation, whatever ran before it. cargo-dylint
+  6.3.0 passed the recipe's `-D warnings` to the compiler without telling cargo, so after a plain
+  `cargo dylint` or `just _dylint ""` cargo kept that run's checks, and `just dylint` printed their
+  warnings again and passed. cargo-dylint 6.4.0 tells cargo, which reruns the lints when their
+  levels change. CI's fresh checkouts weren't affected; a local `just ci` was. The recipe is
+  unchanged. 6.4.0 also has a download for Windows, so CI's Windows jobs install it in seconds
+  instead of building it for about four minutes.
+- `trellis-policy check` reads `path = "..."` as a module's file only in a `path` attribute
+  (`#[path = ..]`, `#![path = ..]`) or as an attribute a `cfg_attr` applies, and still finds those
+  inside macro arguments and inside other attributes' arguments. A log field such as
+  `tracing::info!(path = "/health", "served")`, a named `format!` argument called `path`,
+  `#[utoipa::path(get, path = "/users")]` or askama's `#[template(path = "hello.html")]` no
+  longer fails `member_sources`.
+- A `[[bench]]` may set `harness = false`, which Criterion and divan need. `just test` runs no
+  bench, and `just lint` and `just dylint` still check it. `harness` stays rejected on `[lib]`,
+  `[[bin]]`, `[[test]]` and `[[example]]`, and `crate-type` stays rejected.
+- `trellis-policy rule-changes` no longer counts a `build.rs` below a crate's `src/`, `tests/`,
+  `benches/` or `examples/` as a build script. A module named `build`, such as
+  `crates/<name>/src/build.rs`, or a test named `tests/build.rs` is code, so it lands with the
+  code that uses it. That holds only while the crate's directory holds no `Cargo.toml` other than
+  its own, anywhere below it and in any letter case, before or after the change, since a package
+  nested there runs its `build.rs` as a build script. Every other `build.rs` is still a rule, and
+  so is the file a crate's `build` key names, such as `build = "gen.rs"`. The modules a build
+  script reads stay code.
+- `trellis-policy rule-changes` counts a crate's `[package] license` as a rule setting, beside
+  `build` and `[build-dependencies]`, so the pull request that changes the license answer to or
+  from `none` carries each crate's line and stays a rule change.
+- An image under `docs/` (`png`, `svg`, `jpg`, `jpeg`, `gif` or `webp`) is neither a rule nor code,
+  like the pages, so a page and its picture land together with code. Other files no list knows
+  are still rules. A web UI's `package.json`, its scripts and its sources stay code, and the
+  generated `CONTRIBUTING.md` says so.
+- When a local `just rule-changes` lists an untracked file that is a rule only because no list
+  knows it, such as a new `.envrc`, it says so and how to fix it:
+  `.envrc (untracked; commit it in a rules pull request, or ignore it in .git/info/exclude)`.
+  The file still counts.
+- `copier update --data publish_crate=true` on a library with no license now refuses until you
+  also pass a license, such as `--data license=MIT`. Before, it switched the license answer to MIT
+  and wrote MIT license files without asking. `copier update --data visibility=private` on a
+  published library now refuses until you also pass `--data publish_crate=false`. Before, it
+  turned publishing off and deleted the crate's license files without asking, though v0.3.0's
+  notes said it refused. Both refusals hold whether the answers come from `--data` or
+  `--data-file`, and an answer you don't pass is never changed to get past them.
+- "Change an answer" in `docs/maintaining.md` says, per answer, what an update can and can't do.
+  It records a new `project_name` or `kind` and rewrites the files outside `crates/`, but the
+  crates keep their names and scaffold. A new `description` reaches the README, `CONTRIBUTING.md`
+  and a service's `Containerfile` label, not the crates. A license to or from `none` needs each
+  crate's line in the same pull request. Turning on a service's `web_ui` needs the app landed
+  first in a code pull request, with its `bun.lock` from `bun install --lockfile-only` and without
+  its `tsconfig.json`, which goes in the update's pull request. Turning it off needs the app's
+  `node_modules` and `dist` deleted before the checks. Adding Linux or Windows to a binary or
+  library takes the default processors unless you pass `architectures` too.
+- `file_named_after_item` no longer names a module after a private helper type. A module of public
+  functions with one private struct, such as a `render.rs` holding `pub fn page` and
+  `struct Buffer`, is one the Google guide lets you name as desired, and the lint now leaves it
+  alone. Only visible types can be a module's primary item.
+- `file_named_after_item` and `non_leaf_module_items` take an `expect` with a reason. The guide
+  lets a leaf module that isn't about one abstraction be named as desired, and allows a little
+  "ties things together" code in a non-leaf module, neither of which a lint can tell. An `expect`
+  of `file_named_after_item` goes on the `mod name;` declaration, and one of
+  `non_leaf_module_items` on the item it reports. `suppression_policy` rejects an `expect` of
+  either on an item with a module beneath it, whose reports it would cover as well; a
+  `#[cfg(test)]` module that holds no module may be beneath it.
+- `doc_after_attribute` is listed with the lints that take no exception. It reads source text, so
+  an `expect` on the item never reached it and failed as unfulfilled; `suppression_policy` now
+  says why.
+- Lint help texts and docs say only what the code does. `disabled_code` says that a plain
+  `cargo test`, and an editor running a module's tests, skip an ignored test, while `just test`
+  and CI run it. `impl_into_params` says trellis applies the rule to library APIs too, where a
+  parameter whose call-site ergonomics are paramount takes an `expect`. `code_comment` says why
+  comments are banned. The `suppression_policy` help for a lint that takes no exception names
+  trellis's `template/docs/style.md`.
+- A new binary gets `tests/command_line.rs`, which a service already had. It runs the built
+  program and checks that `--version` prints the name and the version and exits 0, and that an
+  unknown argument exits 2. The core crate's `tests/version_line.rs`, which only restated the
+  function, is gone. An update never touches `crates/`, so existing projects keep their tests.
+- A published library's release workflow no longer writes its own release-plz config. That step
+  handles a crate added or renamed since the last tag, which only git_only mode trips on, and a
+  published library doesn't use git_only mode.
+- `docs/maintaining.md` says that a pull request merged before the release workflow's Tag job (a
+  library's Release job) finishes can get no release pull request until the next push to `main`.
+  release-plz doesn't propose the same version again, as the page used to say. It also says
+  Renovate opens a trellis update in its weekly run, not as soon as trellis tags. A service's page
+  says that an update that only moves the base images' digests publishes no new image; the new
+  base images ship with the next release.
+- A published library's `docs/stability.md` says its minimum Rust version is the stable Rust the
+  release is built and tested with, raised only in a minor release.
+- `just actionlint` fails when shellcheck isn't installed. actionlint skipped the workflows' shell
+  scripts without a word when shellcheck was missing, so a local `just ci` could pass what CI,
+  which installs shellcheck, fails.
+- Comments now say what the checks do: the trusted-macro note in `dylint.toml` (the versions are
+  the ones trellis's tests pin, and what `just dylint` does and doesn't see after a bump), the
+  header of `rule-changes.yml` (any workflow run in the repository can set the status), and the
+  comments in `rustfmt.toml` and the `justfile` on what the Google guide asks of rustfmt. No
+  setting changed.
+
 ## v0.7.2
 
 ### Changed
