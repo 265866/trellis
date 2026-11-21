@@ -1200,6 +1200,19 @@ fn add_a_build_script_in_the_submodule(repository: &Repository, path: &str) {
     );
 }
 
+/// `path` as the file system of `repository` stores it. Where the file system ignores case,
+/// `CRATES/sub` is the directory `crates/sub`, since `crates` was there first, and git reports
+/// that spelling.
+fn stored_spelling(repository: &Repository, path: &str) -> String {
+    let ignores_case = fs::exists(repository.path().join("CRATES/app"))
+        .expect("the file system should say whether the crate is there");
+    if ignores_case && path.starts_with("CRATES/") {
+        path.to_ascii_lowercase()
+    } else {
+        path.to_owned()
+    }
+}
+
 #[test]
 fn moving_a_submodule_is_a_rule_change() {
     for path in [
@@ -1211,7 +1224,8 @@ fn moving_a_submodule_is_a_rule_change() {
         let repository = repository_with_a_submodule(path);
         add_a_build_script_in_the_submodule(&repository, path);
         repository.write("crates/app/src/lib.rs", "//! The app, changed.\n");
-        let expected = [format!("{path} {NESTED_REPOSITORY_NOTE}")];
+        let stored = stored_spelling(&repository, path);
+        let expected = [format!("{stored} {NESTED_REPOSITORY_NOTE}")];
 
         let changed = repository.changed_files_to(&Head::WorkingTree);
         assert_eq!(
