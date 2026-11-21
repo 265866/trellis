@@ -30,6 +30,11 @@ need admin rights on the repository or the release token, so `just ci` leaves th
 
 Add a row for each crate you add, in the same pull request as the rule change that allows it.
 
+Every crate is a workspace member one directory below `crates/`, as `crates/<name>`. That is a
+rule: `just policy` fails a member anywhere else, a nested one included, a crate directory or
+`crates` that is a symbolic link, and a package there that isn't a member, because which changes
+are rules depends on that place.
+
 ## Set up
 
 Install [rustup](https://rustup.rs/), [cargo-binstall](https://github.com/cargo-bins/cargo-binstall),
@@ -144,8 +149,10 @@ Each crate has one job. `just policy` checks every crate against the rules
 [docs/style.md](docs/style.md#checked-by-tools) lists under `trellis-policy check`. When you add
 one:
 
-- **Place and manifest.** Put it under `crates/`. Its `[lints]` table is exactly
-  `workspace = true`, and it inherits `edition`, `rust-version` and `publish` from the workspace.
+- **Place and manifest.** Put it in `crates/<name>`. Its `[lints]` table is exactly
+  `workspace = true`, and it inherits `edition`, `rust-version`
+{%- if license != 'none' %}, `publish` and `license`{% else %} and `publish`{% endif %} from the
+  workspace.
 - **Settings.** Give it an entry in `internal_dependencies` in `[workspace.metadata.policy]`,
   which lists the workspace crates it may depend on directly, and list it in `changelog_include`
   in `release-plz.toml`, so its commits reach the release notes. A build script needs the crate in
@@ -228,14 +235,19 @@ A pull request changes either the rules or the code, never both. Roughly, code i
 `Cargo.toml` dependency tables, and pages in `docs/` other than `docs/style.md` with their images
 are neither; and anything else is a rule. Every `build.rs` is a rule too, except one below a
 crate's `src/`, `tests/`, `benches/` or `examples/` when the crate's directory holds no other
-`Cargo.toml`, in any letter case, before or after the change. So an untracked file that fits none
-of these, such as an `.envrc`, counts as a rule in `just rule-changes`: commit it in a rules pull
-request, or list it in `.git/info/exclude`. When a new rule would flag existing
-code, either fix the code in one pull request and add the rule in the next, or add the rule
-together with an `expect` and a real reason at each place it flags. A proc-macro dependency
-is code: list the crate in `proc_macro_crates` in one pull request, then add the dependency and
-its first use in the next. Run `just rule-changes` to see how your changes sort: it counts the
-rule and code files, and lists both when a change mixes them.
+`Cargo.toml`, in any letter case, before or after the change. The file a crate's `build` key
+names is a rule as well, as is every `.gitignore`, `.ignore`, `tsconfig.json`, `bunfig.toml` and
+`.npmrc`, wherever it sits.
+{%- if web_ui %} The web UI's `package.json`, its scripts and its sources are code, outside
+the rule split, so a code pull request can change what its `check` script runs.
+{%- endif %}
+So an untracked file that fits none of these, such as an `.envrc`, counts as a rule in
+`just rule-changes`: commit it in a rules pull request, or list it in `.git/info/exclude`. When a
+new rule would flag existing code, either fix the code in one pull request and add the rule in the
+next, or add the rule together with an `expect` and a real reason at each place it flags. A
+proc-macro dependency is code: list the crate in `proc_macro_crates` in one pull request, then add
+the dependency and its first use in the next. Run `just rule-changes` to see how your changes
+sort: it counts the rule and code files, and lists both when a change mixes them.
 {%- if license == 'MIT' %}
 
 ## License

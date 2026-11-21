@@ -202,8 +202,8 @@ whatever platforms CI runs.
 {%- endif %}
 Some answers also change what GitHub needs:
 {% if published %}
-- **Visibility.** The repository stays public while it publishes to crates.io, and the template
-  refuses `visibility=private` until `publish_crate` is off.
+- **Visibility.** The repository stays public while it publishes to crates.io, so the update
+  refuses `--data visibility=private` unless you also pass `--data publish_crate=false`.
 {%- else %}
 - **Visibility.** A private repository costs more to run and lacks some of what a public one
   has. Protecting its `main` needs GitHub Pro or a paid organization plan, and its CI draws on the
@@ -259,10 +259,60 @@ Some answers also change what GitHub needs:
 {%- if kind == 'library' and visibility == 'public' and not publish_crate %}
 - **Publishing.** After turning on `publish_crate`, publish the first version as the updated
   page's "At the first release" says.
-{%- if license == 'none' %} crates.io needs a license, so pass one in the same update,
-  such as `--data license=MIT`.
+{%- if license == 'none' %} crates.io needs a license, so the update refuses
+  `--data publish_crate=true` until you also pass one, such as `--data license=MIT`, and each
+  crate then needs the license line the next list describes.
 {%- endif %}
 {%- endif %}
+
+An update writes nothing into `crates/` apart from a published crate's `LICENSE` files, which it
+adds or deletes as publishing or the license changes. So the answers that the crates' own files
+hold need more than the update, and two can't change this way at all:
+
+- **Name and kind.** An update records a new `project_name` or `kind` and rewrites the files
+  outside `crates/` for it, but the crates keep their names and scaffold, so `just policy` fails,
+  or passes on crates the new answer doesn't describe. To rename the project or change what it
+  ships, generate a new project and move the code into it.
+- **Description.** The update changes `README.md`
+{%- if kind == 'service' %}, `CONTRIBUTING.md` and the image's description label in
+  `Containerfile`{% else %} and `CONTRIBUTING.md`{% endif %}. Each crate's `description` in its
+  `Cargo.toml` and its `//!` crate docs keep the old sentence; change them in a code pull
+  request.
+- **License.** Between `MIT` and `MIT OR Apache-2.0`, the update is all it takes.
+{%- if published %}
+  A published crate needs a license, so the update refuses `license=none` unless you also pass
+  `--data publish_crate=false`.
+{%- else %}
+{%- if license == 'none' %} To license
+  the project, also add `license.workspace = true` to `[package]` in every crate's `Cargo.toml`,
+  in the update's pull request; `just policy` fails until each crate has it.
+{%- else %} To change it
+  to `none`, also remove `license.workspace = true` from every crate's `Cargo.toml`, in the
+  update's pull request; Cargo can't load the workspace until each crate's line is gone.
+{%- endif %}
+  A crate's license line is a rule setting, so the pull request stays a rule change.
+{%- endif %}
+{%- if kind == 'service' %}
+{%- if web_ui %}
+- **Web UI.** Turning `web_ui` off leaves `crates/{{ crate_name }}/web` in place, and
+  `.gitignore` no longer ignores its `node_modules/` and `dist/`. Delete those two directories
+  before you run the checks, or `just policy` fails on the links in `node_modules/.bin` and
+  `just rule-changes` counts every file in them. The app's `tsconfig.json`, and any
+  `.gitignore`, `bunfig.toml` or `.npmrc` in it, are rules: delete them in the update's pull
+  request, and the rest of the app in a code pull request after it.
+{%- else %}
+- **Web UI.** The update doesn't add the app, so land it first, in a code pull request:
+  `crates/{{ crate_name }}/web` with a `package.json` that has `check` and `build` scripts, its
+  `bun.lock` and its sources. Leave out its `tsconfig.json`, and any `.gitignore`, `bunfig.toml`
+  or `.npmrc`, which are rules. Write the `bun.lock` with `bun install --lockfile-only` in the
+  app's directory, and don't run a plain `bun install` or `just web-build` on that branch: until
+  the update merges, `.gitignore` doesn't ignore the app's `node_modules/` and `dist/`, so
+  `just rule-changes` counts what they write. Then run the update with `--data web_ui=true`, and
+  add the app's settings files to its pull request.
+{%- endif %}
+{%- endif %}
+
+The other answers change only files the update writes.
 
 ## Update trellis
 

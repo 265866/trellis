@@ -132,10 +132,13 @@ Beyond the Google guide, the workspace also turns on:
   `[lints]` table is exactly `workspace = true`; that no crate has a build script unless
   `build_script_crates` lists it, since a build script can set a `cfg` that hides code from the
   lint runs; that tool configuration files exist only at the root, with no variant name that would
-  override them; that the workspace excludes nothing, pulls in no non-member crate by path, and
-  loads only the trellis lints as its dylint library; that each crate's `Cargo.toml` holds only
-  allowed keys (no `test = false`, `harness = false` outside a `[[bench]]`, `auto*` or
-  `required-features`), inherits `edition`, `rust-version` and `publish`, and keeps its sources,
+  override them; that the workspace's members are exactly the packages one directory below
+  `crates/`, with no symbolic link for `crates` or a crate's directory, since which changes are
+  rules depends on that place; that the workspace excludes
+  nothing, pulls in no non-member crate by path, and loads only the trellis lints as its dylint
+  library; that each crate's `Cargo.toml` holds only allowed keys (no `test = false`,
+  `harness = false` outside a `[[bench]]`, `auto*` or `required-features`), inherits `edition`,
+  `rust-version` and `publish`, and `license` when the workspace has one, and keeps its sources,
   `#[path]` files included, inside the crate, with no symbolic link in or above its directory;
   that `.cargo/config.toml` holds only the Windows `+crt-static` flags; that a crate depends
   directly only on proc-macro crates
@@ -148,13 +151,17 @@ Beyond the Google guide, the workspace also turns on:
   off, including a per-package or `.cargo/config.toml` override.
 - `trellis-policy rule-changes` (`just rule-changes`): a pull request changes the rules or the code,
   never both, so review sees every loosened rule apart from the code that might have needed it. A
-  crate's `Cargo.toml` is code, except the part of a change that touches its `[build-dependencies]`
-  or its `build` key, which is a rule, so a build script and its dependencies land together. A
-  proc-macro dependency is code: a rules pull request lists the crate in `proc_macro_crates`, and
-  a code pull request then adds the dependency with its first use, since `cargo shear` rejects a
-  dependency nothing uses. A `.rs` change that only adds, removes or moves `expect` attributes is
-  neither, so a new lint lands with the `expect`s it needs, and a code change with the `expect`s
-  it forces elsewhere.
+  crate's `Cargo.toml` is code, except the part of a change that touches its
+  `[build-dependencies]`, its `build` key or its `license`, which is a rule, so a build script and
+  its dependencies land together, and so does a change of license with each crate's line. The
+  file a `build` key names is a rule too, though the modules a build script reads are code.
+  `.gitignore`, `.ignore`, `tsconfig.json`, `bunfig.toml` and `.npmrc` are rules in any
+  directory, since they change what a check sees; a web UI's `package.json`, its scripts and its
+  sources are code. A proc-macro dependency is code: a rules pull request lists the crate in
+  `proc_macro_crates`, and a code pull request then adds the dependency with its first use, since
+  `cargo shear` rejects a dependency nothing uses. A `.rs` change that only adds, removes or moves
+  `expect` attributes is neither, so a new lint lands with the `expect`s it needs, and a code
+  change with the `expect`s it forces elsewhere.
 
 ## Silencing a lint
 
