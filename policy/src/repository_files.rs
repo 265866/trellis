@@ -11,8 +11,9 @@ use crate::policy_error::PolicyError;
 ///
 /// In a git checkout, these are the files git tracks and the untracked files `.gitignore` doesn't
 /// exclude, as `git ls-files --cached --others --exclude-standard` lists them, so a file is found
-/// whatever its directory is called. Another repository inside this one, such as a git worktree,
-/// is left out, and so is a tracked file deleted from the working tree.
+/// whatever its directory is called. None of the files of another repository inside this one,
+/// such as a submodule or a git worktree, is listed; [`nested_repositories`] lists the repository.
+/// A tracked file deleted from the working tree is left out.
 ///
 /// Outside a git checkout, such as in a source archive, every file is listed except those under
 /// Cargo's build output, `target/` at the root.
@@ -21,16 +22,54 @@ use crate::policy_error::PolicyError;
 ///
 /// Fails if git fails in a checkout, or if a directory can't be read outside one.
 pub(crate) fn list(root: &Path) -> Result<Vec<String>, PolicyError> {
-    let git_entry = root.join(".git");
-    let is_checkout = fs::exists(&git_entry).map_err(|source| PolicyError::Read {
-        path: git_entry,
-        source,
-    })?;
-    if is_checkout {
+    if is_checkout(root)? {
         git_files(root)
     } else {
         walk(root)
     }
+}
+
+/// Whether `root` is a git checkout: whether it holds a `.git` directory or file.
+///
+/// # Errors
+///
+/// Fails if whether `.git` exists can't be found out.
+fn is_checkout(root: &Path) -> Result<bool, PolicyError> {
+    let git_entry = root.join(".git");
+    fs::exists(&git_entry).map_err(|source| PolicyError::Read {
+        path: git_entry,
+        source,
+    })
+}
+
+/// The other git repositories inside the checkout at `root`, relative to it: each submodule git
+/// tracks, initialized or not, and each repository among the untracked files, which `git add`
+/// would add as a submodule. [`list`] lists none of their files. Outside a checkout there are
+/// none.
+///
+/// # Errors
+///
+/// Fails if git fails in a checkout.
+pub(crate) fn nested_repositories(root: &Path) -> Result<Vec<String>, PolicyError> {
+    if !is_checkout(root)? {
+        return Ok(Vec::new());
+    }
+    let mut repositories = BTreeSet::new();
+    let staged = git::run(root, &["ls-files", "-z", "--stage"])?;
+    for entry in git::paths(&staged) {
+        if let Some((metadata, path)) = entry.split_once('\t')
+            && metadata.split(' ').next() == Some(git::GITLINK_MODE)
+        {
+            repositories.insert(path.to_owned());
+        }
+    }
+    let untracked = git::run(root, &["ls-files", "-z", "--others", "--exclude-standard"])?;
+    repositories.extend(
+        git::paths(&untracked)
+            .filter_map(|path| path.strip_suffix('/'))
+            .map(str::to_owned),
+    );
+    Ok(repositories.into_iter().collect())
 }
 
 /// The files that git tracks or would add in the checkout at `root`.

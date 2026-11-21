@@ -9,7 +9,7 @@ use toml::Value;
 use crate::policy_error::PolicyError;
 use crate::violation::Violation;
 use crate::workspace::{Workspace, WorkspaceMember};
-use crate::{case_insensitive, toml_file};
+use crate::{case_insensitive, source_path, toml_file};
 
 /// Checks that no member has a `build.rs`, in any case, or a `build` key in its `[package]` table,
 /// unless `build_script_crates` in `[workspace.metadata.policy]` of the root `Cargo.toml` lists
@@ -23,6 +23,12 @@ use crate::{case_insensitive, toml_file};
 /// all of them, and no order of landing needs a stale entry. The modules the script reads and the
 /// crates it calls are code, like the crate's other sources, so once a crate is listed, a code
 /// change can still change what its build script emits; the list entry is what review weighs.
+///
+/// A listed crate's `build` key names a file in the crate's directory. Outside it, the path could
+/// pass through a symbolic link that leads back to one of the crate's modules, and a change to
+/// that module would then change the build script as code. The key holds no `\`, which is a
+/// separator on Windows and part of a file name elsewhere, so that every system and the
+/// rule-change check agree on which file it names.
 ///
 /// `build = false`, which turns off Cargo's automatic `build.rs`, is allowed.
 ///
@@ -45,6 +51,28 @@ pub fn check(workspace: &Workspace) -> Result<Vec<Violation>, PolicyError> {
                         member.name()
                     ),
                 ));
+            }
+            if let Some(path) = build_key.and_then(Value::as_str) {
+                if source_path::escapes(0, path) {
+                    violations.push(Violation::new(
+                        workspace.relative(member.manifest_path()),
+                        format!(
+                            "`build = {path:?}` in `[package]` names a build script outside the \
+                             crate's directory, where no check looks for a symbolic link on the \
+                             way to it. Move the file into the crate's directory."
+                        ),
+                    ));
+                }
+                if path.contains('\\') {
+                    violations.push(Violation::new(
+                        workspace.relative(member.manifest_path()),
+                        format!(
+                            "`build = {path:?}` in `[package]` holds a `\\`, which separates \
+                             directories on Windows and is part of a name elsewhere, so the key \
+                             names different files on different systems. Write the path with `/`."
+                        ),
+                    ));
+                }
             }
             continue;
         }

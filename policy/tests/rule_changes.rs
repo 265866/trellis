@@ -59,29 +59,25 @@ impl Repository {
         self.git(&["commit", "--quiet", "--no-verify", "--message", message]);
     }
 
-    /// Runs git in the repository, with a fixed identity and no signing, so the user's git
-    /// configuration doesn't matter.
+    /// Runs git in the repository, as [`git`] does.
     fn git(&self, arguments: &[&str]) {
-        let output = Command::new("git")
-            .arg("-C")
-            .arg(self.path())
-            .args([
-                "-c",
-                "user.name=Policy Test",
-                "-c",
-                "user.email=policy@example.com",
-                "-c",
-                "commit.gpgsign=false",
-                "-c",
-                "core.autocrlf=false",
-            ])
-            .args(arguments)
-            .output()
-            .expect("git should run");
-        assert!(
-            output.status.success(),
-            "git {arguments:?} failed: {}",
-            String::from_utf8_lossy(&output.stderr)
+        git(self.path(), arguments);
+    }
+
+    /// Makes `path` a git repository of its own with one commit holding the package `sub`, which
+    /// `git add` in this repository adds as a submodule.
+    fn nested_repository(&self, path: &str) {
+        self.write(&format!("{path}/Cargo.toml"), "[package]\nname = \"sub\"\n");
+        self.write(
+            &format!("{path}/src/lib.rs"),
+            "//! A crate in a submodule.\n",
+        );
+        let nested = self.path().join(path);
+        git(&nested, &["init", "--quiet"]);
+        git(&nested, &["add", "--all"]);
+        git(
+            &nested,
+            &["commit", "--quiet", "--no-verify", "--message", "nested"],
         );
     }
 
@@ -103,6 +99,32 @@ impl Repository {
             .expect("an unknown base without remote branches isn't an error")
             .is_none()
     }
+}
+
+/// Runs git in `directory`, with a fixed identity and no signing, so the user's git configuration
+/// doesn't matter.
+fn git(directory: &Path, arguments: &[&str]) {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(directory)
+        .args([
+            "-c",
+            "user.name=Policy Test",
+            "-c",
+            "user.email=policy@example.com",
+            "-c",
+            "commit.gpgsign=false",
+            "-c",
+            "core.autocrlf=false",
+        ])
+        .args(arguments)
+        .output()
+        .expect("git should run");
+    assert!(
+        output.status.success(),
+        "git {arguments:?} failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
 }
 
 #[test]
@@ -497,6 +519,34 @@ const CASE_SPLIT_LAYOUTS: [(&str, &str); 2] = [
     ),
 ];
 
+/// Asserts that `rules` is the one build script written at `build_script` beside the package
+/// manifest at `manifest`. A file system that keeps case reports it at `build_script`, in another
+/// directory than the manifest. One that ignores case stores it under the spelling the manifest's
+/// directory already has, so there the path matches in any case.
+fn assert_the_build_script_is_the_rule(
+    repository: &Repository,
+    manifest: &str,
+    build_script: &str,
+    rules: &[String],
+) {
+    let beside = Path::new(build_script).with_file_name("Cargo.toml");
+    let ignores_case = fs::exists(repository.path().join(beside))
+        .expect("the file system should say whether the manifest is there");
+    if ignores_case {
+        assert!(
+            matches!(rules, [rule] if rule.eq_ignore_ascii_case(build_script)),
+            "a case-insensitive file system puts {build_script} beside {manifest}, but the rules \
+             are {rules:?}"
+        );
+    } else {
+        assert_eq!(
+            rules,
+            [build_script],
+            "a case-sensitive file system keeps {build_script} apart from {manifest}"
+        );
+    }
+}
+
 /// A repository whose `base` adds the nested package manifest at `manifest`.
 fn repository_with_nested_manifest(manifest: &str) -> Repository {
     let repository = Repository::new();
@@ -506,8 +556,6 @@ fn repository_with_nested_manifest(manifest: &str) -> Repository {
     repository
 }
 
-/// A file system that ignores case stores the build script under the spelling its directory
-/// already has, so the path is compared in any case.
 #[test]
 fn a_committed_build_rs_whose_package_directory_differs_in_case_is_a_rule() {
     for (manifest, build_script) in CASE_SPLIT_LAYOUTS {
@@ -517,18 +565,11 @@ fn a_committed_build_rs_whose_package_directory_differs_in_case_is_a_rule() {
         repository.commit("add the build script and change the code");
 
         let changed = repository.changed_files();
-        let rules = changed.rules();
-        assert!(
-            matches!(rules, [rule] if rule.eq_ignore_ascii_case(build_script)),
-            "a case-insensitive file system puts {build_script} beside {manifest}, but the rules \
-             are {rules:?}"
-        );
+        assert_the_build_script_is_the_rule(&repository, manifest, build_script, changed.rules());
         assert!(changed.mixes_rules_and_code(), "beside code, it fails");
     }
 }
 
-/// A file system that ignores case stores the build script under the spelling its directory
-/// already has, so the path is compared in any case.
 #[test]
 fn a_working_tree_build_rs_whose_package_directory_differs_in_case_is_a_rule() {
     for (manifest, build_script) in CASE_SPLIT_LAYOUTS {
@@ -537,12 +578,7 @@ fn a_working_tree_build_rs_whose_package_directory_differs_in_case_is_a_rule() {
         repository.write("crates/app/src/lib.rs", "//! The app, changed.\n");
 
         let changed = repository.changed_files_to(&Head::WorkingTree);
-        let rules = changed.rules();
-        assert!(
-            matches!(rules, [rule] if rule.eq_ignore_ascii_case(build_script)),
-            "a case-insensitive file system puts {build_script} beside {manifest}, but the rules \
-             are {rules:?}"
-        );
+        assert_the_build_script_is_the_rule(&repository, manifest, build_script, changed.rules());
         assert!(changed.mixes_rules_and_code(), "beside code, it fails");
     }
 }
@@ -1132,5 +1168,130 @@ fn a_build_script_module_stays_code() {
         changed.code(),
         ["crates/app/helper.rs"],
         "the module is code"
+    );
+}
+
+/// What the listing adds to a nested repository.
+const NESTED_REPOSITORY_NOTE: &str = "(another git repository, whose files no check sees)";
+
+/// A repository whose `base` holds a submodule at `path`, a package with a manifest and a
+/// library.
+fn repository_with_a_submodule(path: &str) -> Repository {
+    let repository = Repository::new();
+    repository.nested_repository(path);
+    repository.commit("add a submodule");
+    repository.git(&["branch", "--force", "base"]);
+    repository
+}
+
+/// Commits, in the submodule at `path` of `repository`, a build script and the `build` key that
+/// names it, which the superproject sees only as a new commit of the submodule.
+fn add_a_build_script_in_the_submodule(repository: &Repository, path: &str) {
+    repository.write(&format!("{path}/gen.rs"), LOOSE_BUILD_SCRIPT);
+    repository.write(
+        &format!("{path}/Cargo.toml"),
+        "[package]\nname = \"sub\"\nbuild = \"gen.rs\"\n",
+    );
+    let nested = repository.path().join(path);
+    git(&nested, &["add", "--all"]);
+    git(
+        &nested,
+        &["commit", "--quiet", "--no-verify", "--message", "build"],
+    );
+}
+
+/// `path` as the file system of `repository` stores it. Where the file system ignores case,
+/// `CRATES/sub` is the directory `crates/sub`, since `crates` was there first, and git reports
+/// that spelling.
+fn stored_spelling(repository: &Repository, path: &str) -> String {
+    let ignores_case = fs::exists(repository.path().join("CRATES/app"))
+        .expect("the file system should say whether the crate is there");
+    if ignores_case && path.starts_with("CRATES/") {
+        path.to_ascii_lowercase()
+    } else {
+        path.to_owned()
+    }
+}
+
+#[test]
+fn moving_a_submodule_is_a_rule_change() {
+    for path in [
+        "crates/sub",
+        "crates/app/vendor/sub",
+        "tools/sub",
+        "CRATES/sub",
+    ] {
+        let repository = repository_with_a_submodule(path);
+        add_a_build_script_in_the_submodule(&repository, path);
+        repository.write("crates/app/src/lib.rs", "//! The app, changed.\n");
+        let stored = stored_spelling(&repository, path);
+        let expected = [format!("{stored} {NESTED_REPOSITORY_NOTE}")];
+
+        let changed = repository.changed_files_to(&Head::WorkingTree);
+        assert_eq!(
+            changed.rules(),
+            expected,
+            "the working tree moves the submodule at {path} to a commit no check has seen"
+        );
+        assert_eq!(changed.code(), ["crates/app/src/lib.rs"], "{path}");
+
+        repository.commit("move the submodule and change the code");
+        let changed = repository.changed_files();
+        assert_eq!(
+            changed.rules(),
+            expected,
+            "the commit moves the submodule at {path} to a commit no check has seen"
+        );
+        assert!(changed.mixes_rules_and_code(), "beside code, it fails");
+    }
+}
+
+#[test]
+fn a_submodule_git_is_told_to_ignore_still_counts() {
+    let repository = Repository::new();
+    repository.nested_repository("tools/sub");
+    repository.write(
+        ".gitmodules",
+        "[submodule \"sub\"]\n\tpath = tools/sub\n\turl = ./tools/sub\n\tignore = all\n",
+    );
+    repository.commit("add a submodule that diffs leave out");
+    repository.git(&["branch", "--force", "base"]);
+    add_a_build_script_in_the_submodule(&repository, "tools/sub");
+    repository.write("crates/app/src/lib.rs", "//! The app, changed.\n");
+    let expected = [format!("tools/sub {NESTED_REPOSITORY_NOTE}")];
+    assert_eq!(
+        repository.changed_files_to(&Head::WorkingTree).rules(),
+        expected,
+        "`ignore = all` in .gitmodules hides the move from a plain `git diff`"
+    );
+    repository.git(&["add", "--force", "tools/sub", "crates"]);
+    repository.git(&["commit", "--quiet", "--no-verify", "--message", "move it"]);
+    let changed = repository.changed_files();
+    assert_eq!(changed.rules(), expected, "and from a diff of two commits");
+    assert!(changed.mixes_rules_and_code(), "beside code, it fails");
+}
+
+#[test]
+fn adding_or_removing_a_submodule_is_a_rule_change() {
+    let repository = Repository::new();
+    repository.nested_repository("crates/sub");
+    assert_eq!(
+        repository.changed_files_to(&Head::WorkingTree).rules(),
+        [format!("crates/sub {NESTED_REPOSITORY_NOTE}")],
+        "an untracked repository in the working tree is one too"
+    );
+    repository.commit("add a submodule");
+    assert_eq!(
+        repository.changed_files().rules(),
+        [format!("crates/sub {NESTED_REPOSITORY_NOTE}")],
+        "adding a submodule is a rule change"
+    );
+    repository.git(&["branch", "--force", "base"]);
+    repository.git(&["rm", "--quiet", "-r", "--cached", "crates/sub"]);
+    repository.git(&["commit", "--quiet", "--no-verify", "--message", "remove"]);
+    assert_eq!(
+        repository.changed_files().rules(),
+        [format!("crates/sub {NESTED_REPOSITORY_NOTE}")],
+        "removing a submodule is a rule change"
     );
 }

@@ -5,8 +5,9 @@
 # rust-toolchain.toml, and the lints on the nightly in lints/rust-toolchain.toml.
 nightly := "nightly-2026-10-28"
 
-# rustdoc warnings fail `just docs` and the doctests.
-export RUSTDOCFLAGS := "-D warnings"
+# rustdoc warnings fail `just docs` and the doctests. Cargo reads `CARGO_ENCODED_RUSTDOCFLAGS`
+# before `RUSTDOCFLAGS`, so a caller's setting of either, even an empty one, can't drop the flag.
+export CARGO_ENCODED_RUSTDOCFLAGS := "-Dwarnings"
 
 # clippy reads only the root `clippy.toml`, whatever other clippy configuration a directory holds.
 export CLIPPY_CONF_DIR := justfile_directory()

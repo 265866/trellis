@@ -33,6 +33,10 @@ pub(crate) fn run(repository: &Path, arguments: &[&str]) -> Result<String, Polic
     })
 }
 
+/// The mode git gives a submodule's entry, a gitlink: a commit of another repository, whose files
+/// the tree doesn't hold.
+pub(crate) const GITLINK_MODE: &str = "160000";
+
 /// The paths in `output`, git output written with `-z`, without the empty one after the last
 /// separator.
 pub(crate) fn paths(output: &str) -> impl Iterator<Item = &str> {

@@ -249,6 +249,27 @@ impl Project {
         self.git(&["commit", "--quiet", "--no-verify", "--message", message]);
     }
 
+    /// Makes `path` a git repository of its own with one commit holding the package `sub`, which
+    /// `git add` in the project adds as a submodule.
+    fn nested_repository(&self, path: &str) {
+        self.write(&format!("{path}/Cargo.toml"), &member_manifest("sub", ""));
+        self.write(
+            &format!("{path}/src/lib.rs"),
+            "//! A crate in a submodule.\n",
+        );
+        self.git(&["-C", path, "init", "--quiet"]);
+        self.git(&["-C", path, "add", "--all"]);
+        self.git(&[
+            "-C",
+            path,
+            "commit",
+            "--quiet",
+            "--no-verify",
+            "--message",
+            "nested",
+        ]);
+    }
+
     /// Runs `trellis-policy` with `arguments` in the project.
     fn run(&self, arguments: &[&str]) -> Run {
         run(&self.path(), arguments, Ci::Local)
@@ -1957,4 +1978,31 @@ fn a_member_under_a_linked_crates_directory_fails() {
         "error: [workspace_shape] crates: This is a symbolic link, so the crates' files sit \
          elsewhere",
     );
+}
+
+#[test]
+fn a_git_repository_under_crates_fails() {
+    for path in ["crates/demo_core/vendor/sub", "crates/sub"] {
+        let project = Project::new();
+        project.git(&["init", "--quiet"]);
+        project.nested_repository(path);
+        project.lock();
+        let violation = format!(
+            "error: [member_sources] {path}: This is another git repository, such as a \
+             submodule, so the checks can't see its files"
+        );
+        project.check().assert_reports(1, &violation);
+        project.commit("add a submodule");
+        project.check().assert_reports(1, &violation);
+    }
+}
+
+#[test]
+fn a_git_repository_outside_the_crates_passes() {
+    let project = Project::new();
+    project.git(&["init", "--quiet"]);
+    project.nested_repository("tools/sub");
+    project.check().assert_passes();
+    project.commit("add a submodule");
+    project.check().assert_passes();
 }
