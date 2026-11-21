@@ -56,7 +56,76 @@ impl Repository {
     /// Commits every change in the working tree.
     fn commit(&self, message: &str) {
         self.git(&["add", "--all"]);
+        self.commit_index(message);
+    }
+
+    /// Commits git's index as it is, whatever the working tree holds.
+    fn commit_index(&self, message: &str) {
         self.git(&["commit", "--quiet", "--no-verify", "--message", message]);
+    }
+
+    /// Puts `contents` in git's index at `path` with the file mode `mode`, such as `120000` for a
+    /// symbolic link, without writing the working tree, so a path the file system can't hold, such
+    /// as a name in other letters beside one it already holds or a name Windows reads as another,
+    /// is in the next commit on every system.
+    fn stage(&self, mode: &str, path: &str, contents: &str) {
+        let id = git_with_input(self.path(), &["hash-object", "-w", "--stdin"], contents);
+        self.stage_entry(mode, id.trim(), path);
+    }
+
+    /// Puts the git object `id` in git's index at `path` with the file mode `mode`.
+    fn stage_entry(&self, mode: &str, id: &str, path: &str) {
+        self.git(
+            &[
+                &INDEX_AS_WRITTEN[..],
+                &[
+                    "update-index",
+                    "--add",
+                    "--cacheinfo",
+                    &format!("{mode},{id},{path}"),
+                ],
+            ]
+            .concat(),
+        );
+    }
+
+    /// Moves `crates/<from>` to `crates/<to>` in git's index only, and points the app's dependency
+    /// at it there, so the move can go to a name the file system can't hold.
+    fn move_in_index(&self, from: &str, to: &str) {
+        let from = format!("crates/{from}/");
+        let listed = git_with_input(
+            self.path(),
+            &[
+                &INDEX_AS_WRITTEN[..],
+                &["ls-files", "--stage", "-z", "--", &from],
+            ]
+            .concat(),
+            "",
+        );
+        let entries = listed.split('\0').filter(|entry| !entry.is_empty());
+        for entry in entries {
+            let (metadata, path) = entry.split_once('\t').expect("an entry has a path");
+            let mut fields = metadata.split(' ');
+            let (Some(mode), Some(id)) = (fields.next(), fields.next()) else {
+                panic!("an entry has a mode and an id: {entry}");
+            };
+            let rest = path
+                .strip_prefix(&from)
+                .expect("the entry is in the directory");
+            self.stage_entry(mode, id, &format!("crates/{to}/{rest}"));
+            self.git(
+                &[
+                    &INDEX_AS_WRITTEN[..],
+                    &["update-index", "--force-remove", "--", path],
+                ]
+                .concat(),
+            );
+        }
+        self.stage(
+            "100644",
+            "crates/app/Cargo.toml",
+            &format!("{MEMBER_MANIFEST}\n[dependencies]\nengine = {{ path = \"../{to}\" }}\n"),
+        );
     }
 
     /// Runs git in the repository, as [`git`] does.
@@ -125,6 +194,48 @@ fn git(directory: &Path, arguments: &[&str]) {
         "git {arguments:?} failed: {}",
         String::from_utf8_lossy(&output.stderr)
     );
+}
+
+/// The settings that make git keep a path in its index as written: `core.ignorecase` off, so a
+/// name in other letters stays apart, `core.protectNTFS` off, so Windows' git takes a name it
+/// can't write to disk, and `core.precomposeunicode` off, so macOS's git keeps a name's form.
+const INDEX_AS_WRITTEN: [&str; 6] = [
+    "-c",
+    "core.ignorecase=false",
+    "-c",
+    "core.protectNTFS=false",
+    "-c",
+    "core.precomposeunicode=false",
+];
+
+/// Runs git in `directory` with `arguments` and `input` on its standard input, and returns its
+/// output.
+fn git_with_input(directory: &Path, arguments: &[&str], input: &str) -> String {
+    use std::io::Write as _;
+    use std::process::Stdio;
+
+    let mut child = Command::new("git")
+        .arg("-C")
+        .arg(directory)
+        .args(arguments)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("git should run");
+    child
+        .stdin
+        .take()
+        .expect("git's input is piped")
+        .write_all(input.as_bytes())
+        .expect("git should read its input");
+    let output = child.wait_with_output().expect("git should finish");
+    assert!(
+        output.status.success(),
+        "git {arguments:?} failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8(output.stdout).expect("git's output should be UTF-8")
 }
 
 #[test]
@@ -311,8 +422,9 @@ fn an_unknown_base_before_the_first_push_has_nothing_to_compare() {
 }
 
 /// A file whose name ends in a dot is a rule wherever it sits, since Windows reads the name
-/// without the dot. Windows itself stores such a file under that shorter name, so there the test
-/// has no such path to add and stops.
+/// without the dot. An untracked one is read from the working tree, and Windows stores such a file
+/// under the shorter name, so there the test has no such path and stops; Linux and macOS run it.
+/// [`a_committed_path_windows_reads_as_another_is_a_rule_beside_code`] runs everywhere.
 #[test]
 fn a_path_windows_reads_as_another_is_a_rule_beside_code() {
     let repository = Repository::new();
@@ -341,6 +453,21 @@ fn a_path_windows_reads_as_another_is_a_rule_beside_code() {
     repository.commit("add the file and change the code");
     let changed = repository.changed_files();
     assert_eq!(changed.rules(), [path], "a committed one is a rule too");
+    assert_eq!(changed.code(), ["crates/app/src/lib.rs"]);
+    assert!(changed.mixes_rules_and_code(), "beside code, it fails");
+}
+
+/// A committed file whose name ends in a dot is a rule too. The commit is built in git's index, so
+/// the test runs on Windows as well.
+#[test]
+fn a_committed_path_windows_reads_as_another_is_a_rule_beside_code() {
+    let repository = Repository::new();
+    let path = "crates/app/src/notes.txt.";
+    repository.stage("100644", path, "notes\n");
+    repository.stage("100644", "crates/app/src/lib.rs", "//! The app, changed.\n");
+    repository.commit_index("add the file and change the code");
+    let changed = repository.changed_files();
+    assert_eq!(changed.rules(), [path], "a committed one is a rule");
     assert_eq!(changed.code(), ["crates/app/src/lib.rs"]);
     assert!(changed.mixes_rules_and_code(), "beside code, it fails");
 }
@@ -1399,12 +1526,6 @@ fn copy_the_engine(repository: &Repository, from: &str, to: &str) {
     }
 }
 
-/// Whether the file system under `repository` reads names in any case as one.
-fn ignores_case(repository: &Repository) -> bool {
-    fs::exists(repository.path().join("CRATES/app"))
-        .expect("the file system should say whether the crate is there")
-}
-
 /// Asserts that `changed` lists the rule files of the engine at `crates/<to>` among its rules,
 /// so a move that changed something besides the directory's name is judged as before.
 fn assert_the_engine_rules_count(changed: &ChangedFiles, to: &str, why: &str) {
@@ -1597,64 +1718,70 @@ fn a_crate_copied_or_swapped_counts() {
     );
 }
 
+/// The commits are built in git's index, so the test runs on a file system that ignores case too.
 #[test]
 fn a_move_beside_a_directory_that_differs_only_in_case_counts() {
     let repository = repository_with_an_engine();
-    if ignores_case(&repository) {
-        return;
-    }
-    repository.write("crates/MOTOR/src/lib.rs", "//! Another crate.\n");
-    repository.write(
+    repository.stage("100644", "crates/MOTOR/src/lib.rs", "//! Another crate.\n");
+    repository.stage(
+        "100644",
         "crates/MOTOR/Cargo.toml",
         "[package]\nname = \"other\"\n\n[lints]\nworkspace = true\n",
     );
-    move_the_engine(&repository, "motor");
-    repository.commit("move the engine beside a directory a Mac merges with it");
+    repository.move_in_index("engine", "motor");
+    repository.commit_index("move the engine beside a directory a Mac merges with it");
     assert_the_engine_rules_count(&repository.changed_files(), "motor", "MOTOR at the head");
 
     let repository = repository_with_an_engine();
-    repository.write("crates/MOTOR/src/lib.rs", "//! Another crate.\n");
-    repository.commit("add a directory a Mac reads as motor");
+    repository.stage("100644", "crates/MOTOR/src/lib.rs", "//! Another crate.\n");
+    repository.commit_index("add a directory a Mac reads as motor");
     repository.git(&["branch", "--force", "base"]);
-    repository.git(&["rm", "--quiet", "-r", "crates/MOTOR"]);
-    move_the_engine(&repository, "motor");
-    repository.commit("move the engine where MOTOR was");
+    repository.git(
+        &[
+            &INDEX_AS_WRITTEN[..],
+            &[
+                "update-index",
+                "--force-remove",
+                "--",
+                "crates/MOTOR/src/lib.rs",
+            ],
+        ]
+        .concat(),
+    );
+    repository.move_in_index("engine", "motor");
+    repository.commit_index("move the engine where MOTOR was");
     assert_the_engine_rules_count(&repository.changed_files(), "motor", "MOTOR at the base");
 }
 
-#[cfg(unix)]
+/// The commit is built in git's index, so the test runs on Windows too.
 #[test]
 fn a_move_to_a_name_windows_reads_as_another_counts() {
-    let repository = repository_with_an_engine();
-    move_the_engine(&repository, "motor.");
-    repository.commit("move the engine to a name Windows reads as motor");
-    let changed = repository.changed_files();
-    assert!(
-        changed
-            .rules()
-            .iter()
-            .any(|rule| rule == "crates/engine/build.rs"),
-        "the move isn't one: {:?}",
-        changed.rules()
-    );
+    for name in ["motor.", "motor~1"] {
+        let repository = repository_with_an_engine();
+        repository.move_in_index("engine", name);
+        repository.commit_index("move the engine to a name Windows reads as another");
+        let changed = repository.changed_files();
+        assert!(
+            changed
+                .rules()
+                .iter()
+                .any(|rule| rule == "crates/engine/build.rs"),
+            "the move to {name:?} isn't one: {:?}",
+            changed.rules()
+        );
+    }
 }
 
+/// The link is a commit's entry, built in git's index, so the test runs where the file system
+/// can't hold a link, or the user may not make one, as on Windows.
 #[test]
 fn a_crate_holding_a_symbolic_link_counts() {
-    if env::consts::OS == "windows" {
-        return;
-    }
     let repository = repository_with_an_engine();
-    let output = Command::new("ln")
-        .args(["-s", "../app/Cargo.toml"])
-        .arg(repository.path().join("crates/engine/link"))
-        .output()
-        .expect("ln should run");
-    assert!(output.status.success(), "the link should be made");
-    repository.commit("link to a sibling");
+    repository.stage("120000", "crates/engine/link", "../app/Cargo.toml");
+    repository.commit_index("link to a sibling");
     repository.git(&["branch", "--force", "base"]);
-    move_the_engine(&repository, "motor");
-    repository.commit("rename the engine's directory");
+    repository.move_in_index("engine", "motor");
+    repository.commit_index("rename the engine's directory");
     assert_the_engine_rules_count(
         &repository.changed_files(),
         "motor",
@@ -1701,15 +1828,7 @@ fn an_uncommitted_change_in_the_working_tree_stops_the_move() {
         Change {
             why: "a staged file below the new directory in other letters",
             make: |repository| {
-                repository.write("crates/MOTOR/src/lib.rs", "pub fn x() {}\n");
-                repository.git(&[
-                    "-c",
-                    "core.ignorecase=false",
-                    "update-index",
-                    "--add",
-                    "--",
-                    "crates/MOTOR/src/lib.rs",
-                ]);
+                repository.stage("100644", "crates/MOTOR/src/lib.rs", "pub fn x() {}\n");
             },
         },
         Change {
@@ -1891,20 +2010,22 @@ fn a_misspelled_attributes_file_at_either_end_stops_the_move() {
     );
 }
 
-#[cfg(unix)]
+/// The commits are built in git's index, so the test runs on Windows too.
 #[test]
 fn a_move_from_a_name_windows_reads_as_another_counts() {
-    let repository = repository_with_an_engine();
-    move_the_engine(&repository, "engine.");
-    repository.commit("move the engine to a name Windows reads as engine");
-    repository.git(&["branch", "--force", "base"]);
-    move_the_engine_from(&repository, "engine.", "motor");
-    repository.commit("move the engine out of it");
-    assert_the_engine_rules_count(
-        &repository.changed_files(),
-        "motor",
-        "the merge base's directory isn't one name everywhere",
-    );
+    for name in ["engine.", "engine~1"] {
+        let repository = repository_with_an_engine();
+        repository.move_in_index("engine", name);
+        repository.commit_index("move the engine to a name Windows reads as another");
+        repository.git(&["branch", "--force", "base"]);
+        repository.move_in_index(name, "motor");
+        repository.commit_index("move the engine out of it");
+        assert_the_engine_rules_count(
+            &repository.changed_files(),
+            "motor",
+            "the merge base's directory isn't one name everywhere",
+        );
+    }
 }
 
 #[test]
@@ -1920,6 +2041,8 @@ fn a_crate_copied_to_two_places_counts() {
     );
 }
 
+/// An old git is faked by a shell script named `git` early on `PATH`, which Windows can't run in
+/// place of `git.exe`, so the test runs on Linux and macOS only.
 #[cfg(unix)]
 #[test]
 fn a_git_that_cant_read_attributes_from_a_revision_moves_nothing() {

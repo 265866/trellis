@@ -72,6 +72,41 @@ pub(crate) fn nested_repositories(root: &Path) -> Result<Vec<String>, PolicyErro
     Ok(repositories.into_iter().collect())
 }
 
+/// The contents of each entry git's index holds for `path`, relative to `root`: one entry, or one
+/// for each side of a merge conflict. An entry that isn't a regular file, such as a symbolic link,
+/// or that git lists in a shape this doesn't read, has none. Outside a checkout, or when git
+/// doesn't track `path`, there are no entries.
+///
+/// # Errors
+///
+/// Fails if git fails in a checkout.
+pub(crate) fn staged_contents(
+    root: &Path,
+    path: &str,
+) -> Result<Vec<Option<Vec<u8>>>, PolicyError> {
+    if !is_checkout(root)? {
+        return Ok(Vec::new());
+    }
+    let pathspec = format!(":(literal){path}");
+    let staged = git::run(root, &["ls-files", "-z", "--stage", "--", &pathspec])?;
+    let mut contents = Vec::new();
+    for entry in git::paths(&staged) {
+        let (metadata, entry_path) = entry.split_once('\t').unwrap_or((entry, ""));
+        if !entry_path.is_empty() && entry_path != path {
+            continue;
+        }
+        let mut fields = metadata.split(' ');
+        let regular = match (fields.next(), fields.next()) {
+            (Some("100644" | "100755"), Some(id)) => {
+                Some(git::run_bytes(root, &["cat-file", "blob", id])?)
+            }
+            _ => None,
+        };
+        contents.push(regular);
+    }
+    Ok(contents)
+}
+
 /// The files that git tracks or would add in the checkout at `root`.
 fn git_files(root: &Path) -> Result<Vec<String>, PolicyError> {
     let output = git::run(

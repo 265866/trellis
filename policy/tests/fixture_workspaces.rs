@@ -235,6 +235,9 @@ fn a_build_key_windows_reads_as_another_path_fails() {
         ("scripts\\\\x/make.rs", true),
         ("scripts./make.rs", true),
         ("scripts /make.rs", true),
+        ("CUSTOM~1.RS", true),
+        ("script~1/make.rs", true),
+        ("scripts/make~.rs", false),
     ] {
         fixture.write(
             "crates/app/Cargo.toml",

@@ -18,6 +18,7 @@ pub mod config_files;
 pub mod docs_index;
 pub mod docs_layout;
 mod git;
+mod git_attributes;
 mod head;
 mod html;
 pub mod internal_dependencies;
