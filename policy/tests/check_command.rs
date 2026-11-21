@@ -2021,22 +2021,33 @@ fn a_member_directory_windows_reads_as_another_fails() {
     }
 }
 
+/// Git tracks each pair under both spellings, as it does after a clone on any system. A file
+/// system that ignores case holds one file for the pair, so the second spelling is written with
+/// the first one's contents and added with `core.ignorecase` off, which makes git keep both names.
 #[test]
 fn paths_a_case_insensitive_file_system_reads_as_one_fail() {
     let project = Project::new();
-    if fs::exists(project.path().join("crate\u{17f}"))
-        .expect("the file system should say whether the directory is there")
-    {
-        return;
+    project.git(&["init", "--quiet"]);
+    project.git(&["add", "--all"]);
+    for (tracked, respelled) in [
+        (
+            "crates/demo_core/src/lib.rs",
+            "crate\u{17f}/demo_core/src/lib.rs",
+        ),
+        ("docs/install.md", "docs/INSTALL.md"),
+    ] {
+        let contents = fs::read_to_string(project.path().join(tracked))
+            .expect("the tracked file should be read");
+        project.write(respelled, &contents);
+        project.git(&[
+            "-c",
+            "core.ignorecase=false",
+            "update-index",
+            "--add",
+            "--",
+            respelled,
+        ]);
     }
-    project.write(
-        "crate\u{17f}/demo_core/src/lib.rs",
-        "//! The demo's core, where macOS reads it.\n",
-    );
-    project.write(
-        "docs/INSTALL.md",
-        "# Install\n\nFor people who run the demo: how to install it.\n",
-    );
     let run = project.check();
     run.assert_reports(
         1,
