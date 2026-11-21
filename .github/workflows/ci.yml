@@ -133,24 +133,28 @@ jobs:
             target: aarch64-unknown-linux-musl
             recipes: lint dylint test docs build-release notices
             tools: just@1.59.0,cargo-nextest@0.9.150,cargo-dylint@6.4.0,dylint-link@6.4.0,uv@0.13.8,cargo-about@0.9.3
+            checker: "true"
           - name: binary on macOS
             os: macos-26
             kind: binary
             target: aarch64-apple-darwin
             recipes: lint dylint test docs build-release notices
             tools: just@1.59.0,cargo-nextest@0.9.150,cargo-dylint@6.4.0,dylint-link@6.4.0,uv@0.13.8,cargo-about@0.9.3
+            checker: "true"
           - name: binary on Windows
             os: windows-2025
             kind: binary
             target: x86_64-pc-windows-msvc
             recipes: lint dylint test docs build-release notices
             tools: just@1.59.0,cargo-nextest@0.9.150,cargo-dylint@6.4.0,dylint-link@6.4.0,uv@0.13.8,cargo-about@0.9.3
+            checker: "true"
           - name: binary on Windows on ARM64
             os: windows-11-arm
             kind: binary
             target: aarch64-pc-windows-msvc
             recipes: lint dylint test docs build-release notices
             tools: just@1.59.0,cargo-nextest@0.9.150,cargo-dylint@6.4.0,dylint-link@6.4.0,uv@0.13.8,cargo-about@0.9.3
+            checker: "true"
           # The published library's `package` recipe has a PowerShell variant only Windows runs.
           - name: published library on Windows
             os: windows-2025
@@ -195,10 +199,12 @@ jobs:
           TARGET: ${{ matrix.target }}
         run: just template "$KIND" "$RECIPES" "$PUBLISH" "$WEB" "$TARGET"
 
-      # `Policy and custom lints` tests the checker on Linux. This runs its tests on macOS, whose
-      # file system ignores case.
+      # `Policy and custom lints` tests the checker on Linux on x86-64. These entries run its tests
+      # on every other system and processor CI has, since file systems differ in what the checker
+      # reads: letter case, path separators, symbolic links and the names a file may have.
       - name: Test the checker
-        if: runner.os == 'macOS'
+        if: matrix.checker == 'true'
+        shell: bash
         run: just test
 
   dependencies:
