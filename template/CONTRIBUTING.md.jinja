@@ -37,7 +37,10 @@ directory or `crates` that is a symbolic link, and a crate directory whose name 
 that Windows reads as another name: one that ends in a dot or a space, or holds a `:` or a `\`.
 It fails a git submodule, or any other git repository, under `crates/`, since no check sees its
 files, and two paths anywhere in the repository that macOS or Windows reads as one, such as two
-crate directories whose names differ only in letter case.
+crate directories whose names differ only in letter case. It fails any path with a part of the
+form of a Windows short name too, such as `cargo~1.tom` or `demo_c~1`: at most eight characters
+that end in `~` and digits, then at most three after a dot. Windows opens `Cargo.toml` under the
+first, so a checkout of both there can hold one file, with the other's contents.
 
 ## Set up
 
@@ -243,11 +246,15 @@ and anything else is a rule. Every `build.rs` is a rule too, except one below a 
 letter case, before or after the change. The file a crate's `build` key names is a rule as well, as
 is every `.gitignore`, `.ignore`, `bunfig.toml`, `.npmrc`, TypeScript settings file (a `.json` file
 whose name starts with `tsconfig`) and git submodule, wherever it sits, and every path Windows reads
-as another path: one with a part that ends in a dot or a space, or that holds a `:` or a `\`.
+as another path: one with a part that ends in a dot or a space, that holds a `:` or a `\`, or
+that has the form of a short name.
 `just policy` fails a TypeScript settings file whose `extends` or `references` names anything but
 another one in the repository, by a path that starts with `./` or `../`, so every file a
 `tsconfig.json` reaches is a rule. It also fails one that TypeScript could read another way than
-`just policy` does, such as one with a lone carriage return. A crate whose directory moves whole,
+`just policy` does, such as one with a lone carriage return. The root `.gitattributes` may set
+only `text`, `-text`, `text=auto` and `eol=lf`, with no attribute macro, so a checkout holds the
+bytes the diff showed, apart from line endings; `just policy` fails any other attribute, such as
+`working-tree-encoding`, `ident`, `filter` or `binary`. A crate whose directory moves whole,
 renamed with no file in it changed, is neither rule nor code, so a crate's directory can move in one
 pull request beside the `path` of each dependency on it. A file in the crate that reads its own
 location, such as a build script that reads `CARGO_MANIFEST_DIR`, can then do something else, as a

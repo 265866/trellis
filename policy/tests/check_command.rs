@@ -379,9 +379,16 @@ fn symbolic_link(target: impl AsRef<Path>, link: &Path) {
     };
     let output = command.output().expect("the link command should run");
     let is_a_link = fs::symlink_metadata(&link).is_ok_and(|metadata| metadata.is_symlink());
+    let windows_needs = if env::consts::OS == "windows" {
+        " Windows lets a user make one only with Developer Mode on (Settings > System > For \
+         developers) or the \"Create symbolic links\" privilege; without either, this test can't \
+         run here, so it fails rather than pass untested."
+    } else {
+        ""
+    };
     assert!(
         output.status.success() && is_a_link,
-        "{} should be a symbolic link: {output:?}",
+        "{} should be a symbolic link.{windows_needs} {output:?}",
         link.display()
     );
 }
@@ -1135,6 +1142,144 @@ fn a_tsconfig_typescript_could_read_otherwise_fails() {
             "{why} should fail: {run:#?}"
         );
     }
+}
+
+/// The `.gitattributes` every generated project gets.
+const TEMPLATE_ATTRIBUTES: &str = include_str!("../../template/.gitattributes");
+
+/// The start of the violation for line `line` of the root `.gitattributes` setting `attribute`.
+fn sets(line: usize, attribute: &str) -> String {
+    format!("error: [config_files] .gitattributes: Line {line} sets `{attribute}`, but only")
+}
+
+#[test]
+fn the_template_gitattributes_passes_in_the_working_tree_and_in_the_index() {
+    let project = Project::new();
+    project.write(".gitattributes", TEMPLATE_ATTRIBUTES);
+    project.check().assert_passes();
+    project.git(&["init", "--quiet"]);
+    project.commit("generate");
+    project.check().assert_passes();
+}
+
+/// Each of these makes a checkout write other bytes than the blob, hides the diff, or changes what
+/// a merge or an archive writes, except an attribute name in other letters, which git reads as
+/// another attribute and which fails because only the listed spellings pass.
+/// `working-tree-encoding=ISO-2022-JP-3` turns 13 characters in a comment of a `tsconfig.json`
+/// into `*/,"noImplicitAny":false/*`.
+#[test]
+fn a_gitattributes_line_that_can_change_checked_out_bytes_fails() {
+    for attribute in [
+        "working-tree-encoding=ISO-2022-JP-3",
+        "ident",
+        "filter=lfs",
+        "eol=crlf",
+        "!eol",
+        "crlf",
+        "IDENT",
+        "Text",
+        "-diff",
+        "binary",
+        "linguist-generated",
+        "export-subst",
+        "merge=union",
+    ] {
+        let project = Project::new();
+        project.write(
+            ".gitattributes",
+            &format!("* text=auto eol=lf\ncrates/demo/web/tsconfig.json {attribute}\n"),
+        );
+        project.check().assert_reports(1, &sets(2, attribute));
+    }
+}
+
+#[test]
+fn a_gitattributes_macro_fails_where_it_is_defined_and_where_it_is_set() {
+    let project = Project::new();
+    project.write(".gitattributes", "[attr]lf ident\n* text=auto lf\n");
+    let run = project.check();
+    run.assert_reports(
+        1,
+        "error: [config_files] .gitattributes: Line 1 defines the attribute macro `lf`",
+    );
+    run.assert_reports(1, &sets(2, "lf"));
+}
+
+/// Git reads a pattern in double quotes as a C string, with or without a blank after it, splits
+/// the rest at blanks with no escapes, and reads `#` as a comment only at the start of a line.
+#[test]
+fn gitattributes_lines_are_split_as_git_splits_them() {
+    for (text, attribute) in [
+        ("\"docs/my notes.md\"ident\n", "ident"),
+        ("\"docs/my notes.md\" text ident\n", "ident"),
+        ("docs/my\\ notes.md text\n", "notes.md"),
+        ("*.rs text # line endings\n", "#"),
+    ] {
+        let project = Project::new();
+        project.write(".gitattributes", text);
+        project.check().assert_reports(1, &sets(1, attribute));
+    }
+    let project = Project::new();
+    project.write(
+        ".gitattributes",
+        "# A comment that names ident.\n  \"docs/my notes.md\"\ttext\n",
+    );
+    project.check().assert_passes();
+}
+
+#[test]
+fn a_gitattributes_with_crlf_endings_or_a_byte_order_mark_reads_as_git_reads_it() {
+    let project = Project::new();
+    project.write(
+        ".gitattributes",
+        "\u{feff}# Line endings.\r\n* text=auto eol=lf\r\n",
+    );
+    project.check().assert_passes();
+    project.write(".gitattributes", "\u{feff}* text=auto\r\n*.rs ident\r\n");
+    project.check().assert_reports(1, &sets(2, "ident"));
+}
+
+/// A checkout reads the attributes from git's index, so a copy there that the working tree no
+/// longer shows still fails.
+#[test]
+fn a_gitattributes_in_the_index_counts_as_well_as_the_working_tree() {
+    let project = Project::new();
+    project.git(&["init", "--quiet"]);
+    project.write(".gitattributes", "* text=auto eol=lf\n*.rs ident\n");
+    project.git(&["add", "--all"]);
+    project.write(".gitattributes", TEMPLATE_ATTRIBUTES);
+    let run = project.check();
+    run.assert_reports(
+        1,
+        "error: [config_files] .gitattributes: In the copy in git's index, which a checkout \
+         reads and `git add` replaces, line 2 sets `ident`",
+    );
+    assert_eq!(
+        run.stdout.matches("sets `ident`").count(),
+        1,
+        "the line is reported once: {run:#?}"
+    );
+    project.write(".gitattributes", "* text=auto eol=lf\n*.rs ident\n");
+    let run = project.check();
+    run.assert_reports(1, &sets(2, "ident"));
+    assert_eq!(
+        run.stdout.matches("sets `ident`").count(),
+        1,
+        "a line the working tree and the index share is reported once: {run:#?}"
+    );
+}
+
+#[test]
+fn a_gitattributes_that_is_a_symbolic_link_fails() {
+    let project = Project::new();
+    project.write("attributes", TEMPLATE_ATTRIBUTES);
+    fs::remove_file(project.path().join(".gitattributes"))
+        .expect("the attributes file should be removed");
+    symbolic_link("attributes", &project.path().join(".gitattributes"));
+    project.check().assert_reports(
+        1,
+        "error: [config_files] .gitattributes: This is a symbolic link.",
+    );
 }
 
 #[test]
@@ -2145,6 +2290,8 @@ fn a_member_directory_outside_ascii_fails() {
     );
 }
 
+/// `check` finds the members with `cargo metadata`, which reads the working tree, and Windows
+/// can't hold these directories, so the test runs on Linux and macOS only.
 #[cfg(unix)]
 #[test]
 fn a_member_directory_windows_reads_as_another_fails() {
@@ -2164,6 +2311,43 @@ fn a_member_directory_windows_reads_as_another_fails() {
             ),
         );
     }
+}
+
+/// A crate's directory of the form of a Windows short name fails once, as any path of the form
+/// does. Every system can hold the directory, since no longer name beside it has that short name.
+#[test]
+fn a_member_directory_of_the_windows_short_name_form_fails_once() {
+    let project = Project::new();
+    project.write("crates/extra~1/Cargo.toml", &member_manifest("extra", ""));
+    project.write("crates/extra~1/src/lib.rs", "//! Extra.\n");
+    project.lock();
+    let run = project.check();
+    run.assert_reports(
+        1,
+        "error: [workspace_shape] crates/extra~1: This name has the form of a Windows short name",
+    );
+    assert_eq!(
+        run.stdout.matches("] crates/extra~1: ").count(),
+        1,
+        "the directory is reported once: {run:#?}"
+    );
+}
+
+/// Git lists no file of a crate that `.gitignore` excludes, so the directory's name is read from
+/// the entries of `crates/`.
+#[test]
+fn an_ignored_member_directory_of_the_windows_short_name_form_fails() {
+    let project = Project::new();
+    project.write("crates/extra~1/Cargo.toml", &member_manifest("extra", ""));
+    project.write("crates/extra~1/src/lib.rs", "//! Extra.\n");
+    project.lock();
+    project.write(".gitignore", "/crates/extra~1/\n");
+    project.git(&["init", "--quiet"]);
+    project.git(&["add", "--all"]);
+    project.check().assert_reports(
+        1,
+        "error: [workspace_shape] crates/extra~1: This name has the form of a Windows short name",
+    );
 }
 
 /// Has git track `respelled`, another spelling of the file `tracked` in `project`, as it does
@@ -2216,9 +2400,11 @@ fn paths_a_case_insensitive_file_system_reads_as_one_fail() {
     );
 }
 
-/// Windows reads `a`, the ypogegrammeni and an acute accent as the same name as `a`, a small iota
-/// and the accent, and canonical caseless folding keeps them apart, so the character fails by
-/// itself.
+/// A file system whose case table maps the ypogegrammeni to the letter iota, and that doesn't
+/// reorder marks, reads `a`, the ypogegrammeni and an acute accent as the same name as `a`, a
+/// small iota and the accent. Canonical caseless folding keeps them apart, so the character fails
+/// by itself. APFS and the one NTFS volume measured keep the two apart, so the test's file system
+/// holds both.
 #[test]
 fn a_path_with_a_combining_ypogegrammeni_fails() {
     let project = Project::new();
@@ -2230,6 +2416,36 @@ fn a_path_with_a_combining_ypogegrammeni_fails() {
         1,
         "error: [workspace_shape] docs/a\u{345}\u{301}.md: This path holds the combining Greek \
          ypogegrammeni (U+0345)",
+    );
+}
+
+/// Windows gives `Cargo.toml` the short name `CARGO~1.TOM` and opens the file under either name,
+/// in any case, so a tracked `cargo~1.tom` can replace the manifest's contents in a checkout
+/// there. Where the test's directory has short names, the second spelling is the manifest
+/// itself, which is why it is written with the manifest's contents. A directory of the form is
+/// reported once, whatever it holds.
+#[test]
+fn a_path_of_the_windows_short_name_form_fails() {
+    let project = Project::new();
+    project.git(&["init", "--quiet"]);
+    project.git(&["add", "--all"]);
+    track_respelled(&project, "Cargo.toml", "cargo~1.tom");
+    track_respelled(&project, "AGENTS.md", "notes~12/first.txt");
+    track_respelled(&project, "AGENTS.md", "notes~12/second.txt");
+    track_respelled(&project, "AGENTS.md", "notes~/third.txt");
+    let run = project.check();
+    run.assert_reports(
+        1,
+        "error: [workspace_shape] cargo~1.tom: This name has the form of a Windows short name",
+    );
+    run.assert_reports(
+        1,
+        "error: [workspace_shape] notes~12: This name has the form of a Windows short name",
+    );
+    assert_eq!(
+        run.stdout.matches("Windows short name").count(),
+        2,
+        "each name of the form is reported once, and `notes~` isn't one: {run:#?}"
     );
 }
 
@@ -2287,20 +2503,30 @@ fn paths_that_differ_in_a_letter_outside_ascii_fail() {
     );
 }
 
+/// Where the file system keeps case, `crates/DEMO_CORE` is a second member beside
+/// `crates/demo_core`. Where it ignores case, as on macOS and Windows, it can't hold both, so git
+/// tracks the second spelling of the manifest, as after a clone of a repository that holds both.
 #[test]
 fn member_directories_that_differ_only_in_case_fail() {
     let project = Project::new();
-    if fs::exists(project.path().join("crates/DEMO_CORE"))
-        .expect("the file system should say whether the crate is there")
-    {
-        return;
+    let ignores_case = fs::exists(project.path().join("crates/DEMO_CORE"))
+        .expect("the file system should say whether the crate is there");
+    if ignores_case {
+        project.git(&["init", "--quiet"]);
+        project.git(&["add", "--all"]);
+        track_respelled(
+            &project,
+            "crates/demo_core/Cargo.toml",
+            "crates/DEMO_CORE/Cargo.toml",
+        );
+    } else {
+        project.write(
+            "crates/DEMO_CORE/Cargo.toml",
+            &member_manifest("shouting", ""),
+        );
+        project.write("crates/DEMO_CORE/src/lib.rs", "//! The core, louder.\n");
+        project.lock();
     }
-    project.write(
-        "crates/DEMO_CORE/Cargo.toml",
-        &member_manifest("shouting", ""),
-    );
-    project.write("crates/DEMO_CORE/src/lib.rs", "//! The core, louder.\n");
-    project.lock();
     project.check().assert_reports(
         1,
         "error: [workspace_shape] crates/demo_core: `crates/DEMO_CORE` and `crates/demo_core` \

@@ -1,5 +1,6 @@
-//! Tool configuration files exist only where the workspace keeps them, and a TypeScript
-//! project's settings reach only other TypeScript settings files.
+//! Tool configuration files exist only where the workspace keeps them, a TypeScript project's
+//! settings reach only other TypeScript settings files, and the root `.gitattributes` sets only
+//! how git converts line endings.
 
 use std::fs;
 
@@ -9,7 +10,7 @@ use crate::policy_error::PolicyError;
 use crate::tool_config::ToolConfig;
 use crate::violation::Violation;
 use crate::workspace::Workspace;
-use crate::{case_insensitive, repository_files};
+use crate::{case_insensitive, git_attributes, repository_files};
 
 /// Whether `name`, a file's name, is a TypeScript settings file's: one that starts with
 /// `tsconfig` and ends in `.json`, in any case, such as `tsconfig.json`, `tsconfig.base.json` or
@@ -43,13 +44,19 @@ pub(crate) fn is_tsconfig(name: &str) -> bool {
 /// fails: one that holds such a character outside a `\r\n`, a block comment never closed, a comma
 /// with nothing before it, or a key twice in one object.
 ///
+/// It also checks that the root `.gitattributes` sets only `text`, `-text`, `text=auto` and
+/// `eol=lf` and defines no attribute macro, in the working tree and in git's index, since another
+/// attribute, such as `working-tree-encoding`, `ident` or `filter`, can make a checkout hold other
+/// bytes than the diff showed. It isn't a symbolic link, from which git reads no attributes.
+///
 /// It reads the files git tracks and the untracked ones `.gitignore` doesn't exclude, so a
 /// directory's name can't hide a file from it; outside a git checkout it reads every file but
 /// Cargo's build output.
 ///
 /// # Errors
 ///
-/// Fails if the repository's files can't be listed, or a TypeScript settings file can't be read.
+/// Fails if the repository's files can't be listed, a TypeScript settings file or the root
+/// `.gitattributes` can't be read, or git fails.
 pub fn check(workspace: &Workspace) -> Result<Vec<Violation>, PolicyError> {
     let mut violations = Vec::new();
     let files = repository_files::list(workspace.root())?;
@@ -86,6 +93,7 @@ pub fn check(workspace: &Workspace) -> Result<Vec<Violation>, PolicyError> {
             violations.push(Violation::new(relative.clone(), problem));
         }
     }
+    violations.extend(git_attributes::check(workspace.root(), &files)?);
     Ok(violations)
 }
 

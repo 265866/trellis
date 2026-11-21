@@ -1109,10 +1109,19 @@ mod tests {
             "crates/app /src/lib.rs",
             "crates/app\\build.rs",
             "docs/notes.md.",
+            "cargo~1.tom",
+            "GITIGN~1",
+            "crates/app/BUILD~1.RS",
+            "crates/app~1/src/lib.rs",
+            "docs/notes~1.md",
         ] {
             assert_eq!(role(path), Role::Unlisted, "{path:?} should be a rule");
         }
-        for path in ["crates/app/src/lib.rs", "crates/app/src/.hidden.rs"] {
+        for path in [
+            "crates/app/src/lib.rs",
+            "crates/app/src/.hidden.rs",
+            "crates/app/src/notes~.rs",
+        ] {
             assert_eq!(role(path), Role::Code, "{path:?} should be code");
         }
     }

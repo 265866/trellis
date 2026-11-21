@@ -132,7 +132,8 @@ Beyond the Google guide, the workspace also turns on:
   `[lints]` table is exactly `workspace = true`; that no crate has a build script unless
   `build_script_crates` lists it, since a build script can set a `cfg` that hides code from the lint
   runs, and that a listed crate's `build` key names a file in the crate's own directory, in ASCII,
-  with no `\` and no part that ends in a dot or a space. An entry may name a package no crate has,
+  with no `\`, no part that ends in a dot or a space and no part of the form of a Windows short
+  name, such as `CUSTOM~1.RS`. An entry may name a package no crate has,
   so renaming the package of a crate with a build script can land as a rule change, a code change
   and a rule change. Nothing removes a stale entry, and it lets whichever crate later takes the name
   have a build script, though that script still lands in a rule change. It checks that tool
@@ -141,12 +142,19 @@ Beyond the Google guide, the workspace also turns on:
   one way and extends and references only other such files in the repository, by a path that
   starts with `./` or `../`, so every file a `tsconfig.json` reaches is a rule, though a web UI's
   `check` script, which is code, still picks the settings file and flags `tsc` runs with; that the
-  workspace's members are exactly the packages one directory below
+  root `.gitattributes` sets only `text`, `-text`, `text=auto` and `eol=lf` and defines no
+  attribute macro, in the working tree and in git's index, so a checkout holds the bytes the diff
+  showed, apart from line endings, where another attribute such as `working-tree-encoding`,
+  `ident` or `filter` could have git write other bytes; that the workspace's members are exactly
+  the packages one directory below
   `crates/`, each in a directory with an ASCII name that Windows reads as written, with no symbolic
   link for `crates` or a crate's directory, since which changes are rules depends on that place;
   that no two paths in the repository are one path on macOS or Windows, whose file systems ignore
   letter case in any script and, on macOS, whether an accented letter is one character or two,
-  since a checkout there holds only one of them; that the workspace excludes
+  since a checkout there holds only one of them; that no path has a part of the form of a Windows
+  short name, such as `cargo~1.tom`, which is at most eight characters that end in `~` and digits,
+  then at most three after a dot, since Windows opens `Cargo.toml` under that name and a checkout
+  of both there can hold one file, with the other's contents; that the workspace excludes
   nothing, pulls in no non-member crate by path, and loads only the trellis lints as its dylint
   library; that each crate's `Cargo.toml` holds only allowed keys (no `test = false`,
   `harness = false` outside a `[[bench]]`, `auto*` or `required-features`), inherits `edition`,
@@ -172,8 +180,9 @@ Beyond the Google guide, the workspace also turns on:
   script that reads `CARGO_MANIFEST_DIR`, can then do something else, as a code change can change
   what a listed build script emits. `.gitignore`, `.ignore`, `bunfig.toml`, `.npmrc` and every
   TypeScript settings file are rules in any directory, since they change what a check sees, and
-  so is a git submodule, whose files no check sees. A path that Windows reads as another path is a rule too: one
-  with a part that ends in a dot or a space, or that holds a `:` or a `\`. A web UI's
+  so is a git submodule, whose files no check sees. A path that Windows reads as another path is
+  a rule too: one with a part that ends in a dot or a space, that holds a `:` or a `\`, or that
+  has the form of a short name. A web UI's
   `package.json`, its scripts and its sources are code. A proc-macro dependency is code: a rules
   pull request lists the crate in `proc_macro_crates`, and a code pull request then adds the
   dependency with its first use, since `cargo shear` rejects a dependency nothing uses. A `.rs`

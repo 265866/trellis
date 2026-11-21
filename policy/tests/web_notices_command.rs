@@ -137,9 +137,16 @@ fn symbolic_link(target: impl AsRef<Path>, link: &Path) {
     };
     let output = command.output().expect("the link command should run");
     let is_a_link = fs::symlink_metadata(&link).is_ok_and(|metadata| metadata.is_symlink());
+    let windows_needs = if env::consts::OS == "windows" {
+        " Windows lets a user make one only with Developer Mode on (Settings > System > For \
+         developers) or the \"Create symbolic links\" privilege; without either, this test can't \
+         run here, so it fails rather than pass untested."
+    } else {
+        ""
+    };
     assert!(
         output.status.success() && is_a_link,
-        "{} should be a symbolic link: {output:?}",
+        "{} should be a symbolic link.{windows_needs} {output:?}",
         link.display()
     );
 }

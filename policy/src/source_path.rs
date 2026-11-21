@@ -24,14 +24,42 @@ pub(crate) fn escapes(depth: usize, path: &str) -> bool {
     false
 }
 
-/// Whether Windows reads `path`, written with `/` separators, as another path. It drops dots and
-/// spaces from the end of each part, reads a `:` as the start of a stream of the file before it,
-/// and reads a `\` as a separator, so `build.rs.` and `build.rs::$DATA` are `build.rs` there. Git
-/// for Windows refuses to check such a path out, but only while its `core.protectNTFS` setting is
-/// on.
+/// Whether Windows reads `path`, written with `/` separators, as another path: one it rewrites,
+/// as [`windows_rewrites`] says, or one with a part of the short name form, which it reads as the
+/// file that has that short name, as [`is_short_name`] says.
 pub(crate) fn windows_reads_as_another(path: &str) -> bool {
+    windows_rewrites(path) || path.split('/').any(is_short_name)
+}
+
+/// Whether Windows rewrites `path`, written with `/` separators. It drops dots and spaces from the
+/// end of each part, reads a `:` as the start of a stream of the file before it, and reads a `\`
+/// as a separator, so `build.rs.` and `build.rs::$DATA` are `build.rs` there. Git for Windows
+/// refuses to check such a path out, but only while its `core.protectNTFS` setting is on.
+pub(crate) fn windows_rewrites(path: &str) -> bool {
     path.split('/')
         .any(|part| part.contains([':', '\\']) || part.ends_with(['.', ' ']))
+}
+
+/// The most characters before the dot of a short name, and after it.
+const SHORT_NAME_LENGTHS: (usize, usize) = (8, 3);
+
+/// Whether `part`, one name of a path, has the form of the short name Windows gives a file whose
+/// own name doesn't fit eight characters, a dot and three more: at most eight characters that end
+/// in `~` and digits, then at most one dot with at most three characters after it, as `CARGO~1.TOM`
+/// is for `Cargo.toml` and `GITIGN~1` for `.gitignore`. A volume that keeps short names opens the
+/// longer-named file under that name, in any letter case. Git writes both paths there whatever
+/// its settings, in byte order, so when the longer name sorts first, as `Cargo.toml` does before
+/// `cargo~1.tom`, the checkout holds one file with the contents of the other.
+pub(crate) fn is_short_name(part: &str) -> bool {
+    let (base, extension) = part.split_once('.').unwrap_or((part, ""));
+    let numbered = base
+        .trim_end_matches(|character: char| character.is_ascii_digit())
+        .ends_with('~');
+    numbered
+        && !base.ends_with('~')
+        && base.chars().count() <= SHORT_NAME_LENGTHS.0
+        && !extension.contains('.')
+        && extension.chars().count() <= SHORT_NAME_LENGTHS.1
 }
 
 /// Whether `path` names a Rust source file: one whose extension is `rs` in any case, since a
@@ -78,6 +106,44 @@ mod tests {
                 escapes(depth, path),
                 "{path} from depth {depth} leaves the crate"
             );
+        }
+    }
+
+    #[test]
+    fn names_of_the_short_form_are_short_names() {
+        for part in [
+            "CARGO~1.TOM",
+            "cargo~1.tom",
+            "GITIGN~1",
+            "ABCDEF~1.RS",
+            "AB1F2C~1",
+            "ABCD~123",
+            "A~1",
+            "~1",
+            "~1.rs",
+            "abcdef~1.",
+            "\u{e9}t\u{e9}~1.rs",
+        ] {
+            assert!(is_short_name(part), "{part} has the short name form");
+        }
+        for part in [
+            "Cargo.toml",
+            ".gitignore",
+            "build.rs",
+            "notes~",
+            "notes~.md",
+            "~",
+            "a~b",
+            "a~1b",
+            "abcdefg~1",
+            "abcdef~1.toml",
+            "abc~1.d.e",
+            "~1.tar.gz",
+            ".abc~1",
+            "backup.rs~1",
+            "",
+        ] {
+            assert!(!is_short_name(part), "{part} hasn't the short name form");
         }
     }
 

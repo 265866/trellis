@@ -26,6 +26,33 @@ pub(crate) fn run_with_input(
     arguments: &[&str],
     input: Option<&str>,
 ) -> Result<String, PolicyError> {
+    let output = output(repository, arguments, input)?;
+    String::from_utf8(output).map_err(|error| PolicyError::Git {
+        command: format!("git {}", arguments.join(" ")),
+        message: format!("the output isn't UTF-8: {error}"),
+    })
+}
+
+/// Runs git in `repository` with `arguments` and returns its output as bytes, such as a blob's.
+///
+/// # Errors
+///
+/// Fails if git doesn't run or exits with an error.
+pub(crate) fn run_bytes(repository: &Path, arguments: &[&str]) -> Result<Vec<u8>, PolicyError> {
+    output(repository, arguments, None)
+}
+
+/// Runs git in `repository` with `arguments` and `input`, if any, on its standard input, and
+/// returns what it wrote to its standard output.
+///
+/// # Errors
+///
+/// Fails if git doesn't run or exits with an error.
+fn output(
+    repository: &Path,
+    arguments: &[&str],
+    input: Option<&str>,
+) -> Result<Vec<u8>, PolicyError> {
     use std::io::Write as _;
 
     let command = format!("git {}", arguments.join(" "));
@@ -66,10 +93,7 @@ pub(crate) fn run_with_input(
             message: String::from_utf8_lossy(&output.stderr).trim().to_owned(),
         });
     }
-    String::from_utf8(output.stdout).map_err(|error| PolicyError::Git {
-        command,
-        message: format!("the output isn't UTF-8: {error}"),
-    })
+    Ok(output.stdout)
 }
 
 /// The mode git gives a submodule's entry, a gitlink: a commit of another repository, whose files
