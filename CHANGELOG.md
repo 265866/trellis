@@ -56,7 +56,9 @@ has the versioning rule.
   checker your project pins until the update counts a submodule under `crates/` as code and
   `.gitmodules` as a rule, so removing both in one pull request fails `just rule-changes`. Remove
   the submodule in a code pull request with `git rm --cached <path>`, which leaves `.gitmodules`
-  as it is, then drop its entry from `.gitmodules` in a rules pull request.
+  as it is, then drop its entry from `.gitmodules` in a rules pull request. `git rm --cached`
+  leaves the submodule's files on your disk with their `.git`. Delete that `.git`, or the whole
+  directory, or `just policy` fails it as an untracked git repository.
 - **Keep a build script in its crate's directory.** `just policy` now fails a crate that
   `build_script_crates` lists when its `build` key names a file outside the crate's directory,
   such as `build = "../../tools/gen.rs"`, or holds a `\`. Move the file into the crate and write
