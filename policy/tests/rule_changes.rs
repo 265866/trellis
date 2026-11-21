@@ -310,6 +310,41 @@ fn an_unknown_base_before_the_first_push_has_nothing_to_compare() {
     );
 }
 
+/// A file whose name ends in a dot is a rule wherever it sits, since Windows reads the name
+/// without the dot. Windows itself stores such a file under that shorter name, so there the test
+/// has no such path to add and stops.
+#[test]
+fn a_path_windows_reads_as_another_is_a_rule_beside_code() {
+    let repository = Repository::new();
+    let path = "crates/app/src/notes.txt.";
+    repository.write(path, "notes\n");
+    let stored: Vec<_> = fs::read_dir(repository.path().join("crates/app/src"))
+        .expect("the directory should be read")
+        .map(|entry| entry.expect("the entry should be read").file_name())
+        .collect();
+    if !stored.iter().any(|name| name == "notes.txt.") {
+        return;
+    }
+    repository.write("crates/app/src/lib.rs", "//! The app, changed.\n");
+
+    let changed = repository.changed_files_to(&Head::WorkingTree);
+    assert_eq!(
+        changed.rules(),
+        [format!(
+            "{path} (untracked; commit it in a rules pull request, or ignore it in \
+             .git/info/exclude)"
+        )],
+        "an untracked one says how to settle it"
+    );
+    assert!(changed.mixes_rules_and_code(), "beside code, it fails");
+
+    repository.commit("add the file and change the code");
+    let changed = repository.changed_files();
+    assert_eq!(changed.rules(), [path], "a committed one is a rule too");
+    assert_eq!(changed.code(), ["crates/app/src/lib.rs"]);
+    assert!(changed.mixes_rules_and_code(), "beside code, it fails");
+}
+
 #[test]
 fn the_working_tree_counts_staged_unstaged_and_untracked_files() {
     let repository = Repository::new();
