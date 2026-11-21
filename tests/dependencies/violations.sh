@@ -129,7 +129,7 @@ pub const fn two() -> u8 {
 RUST
 check "a block comment" 'code comment'
 
-# cargo-dylint before 6.4.0 hid the recipe's `-D warnings` from cargo, so after a run without it
+# cargo-dylint before 6.3.2 hid the recipe's `-D warnings` from cargo, so after a run without it
 # cargo kept that run's checks, and `just dylint` replayed their warnings and passed. The other two
 # cases also fail if the levels move to `RUSTFLAGS`, which cargo ignores when
 # `CARGO_ENCODED_RUSTFLAGS` is set and doesn't pass to a build script when a target is named.

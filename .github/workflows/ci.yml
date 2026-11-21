@@ -167,9 +167,10 @@ jobs:
         with:
           tool: ${{ matrix.tools }}
 
-      # install-action has no Windows download of cargo-dylint and dylint-link. It builds them from
-      # source, which takes about four minutes, and with `--force`, so an installed copy doesn't
-      # help. The Windows entries leave them out of `tools` and build them on a cache miss only.
+      # cargo-dylint and dylint-link have no download for Windows on ARM64. install-action builds
+      # them from source there, which takes about four minutes, and with `--force`, so an installed
+      # copy doesn't help. The Windows entries leave them out of `tools` and install them on a cache
+      # miss only.
       - name: Restore the dylint tools
         id: dylint-tools
         if: runner.os == 'Windows'
@@ -180,7 +181,7 @@ jobs:
             ~/.cargo/bin/dylint-link.exe
           key: dylint-tools-${{ runner.os }}-${{ runner.arch }}-cargo-dylint@6.4.0/dylint-link@6.4.0
 
-      - name: Build the dylint tools
+      - name: Install the dylint tools
         if: runner.os == 'Windows' && steps.dylint-tools.outputs.cache-hit != 'true'
         uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2.90.5
         with:
