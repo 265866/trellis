@@ -131,8 +131,8 @@ Beyond the Google guide, the workspace also turns on:
   So a new crate or a new edge between crates is a rule change. It also checks that every crate's
   `[lints]` table is exactly `workspace = true`; that no crate has a build script unless
   `build_script_crates` lists it, since a build script can set a `cfg` that hides code from the
-  lint runs, and that a listed crate's `build` key names a file in the crate's own directory; that
-  tool configuration files exist only at the root, with no variant name that would
+  lint runs, and that a listed crate's `build` key names a file in the crate's own directory, with
+  no `\\` in the path; that tool configuration files exist only at the root, with no variant name that would
   override them; that the workspace's members are exactly the packages one directory below
   `crates/`, with no symbolic link for `crates` or a crate's directory, since which changes are
   rules depends on that place; that the workspace excludes
