@@ -205,6 +205,8 @@ jobs:
       - name: Test the checker
         if: matrix.checker == 'true'
         shell: bash
+        env:
+          NEXTEST_PROFILE: ci
         run: just test
 
   dependencies:
