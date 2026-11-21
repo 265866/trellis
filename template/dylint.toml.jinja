@@ -22,9 +22,12 @@ macro_crates = []
 # lists for the crate, and never a group; text alone, such as a `rename` string, passes under lints
 # that never read a literal, and a short path, such as the function in `deserialize_with =
 # "defaults::present"`, under lints that can't fire on one. trellis read the ones below at the
-# versions noted. It lists no crate whose macros write lint groups or `allow`s over the code passed
-# to them, such as `clap_derive`, `tokio_macros`, `tokio` and `tracing_attributes` (see the idioms
-# in `docs/style.md`).
+# versions noted, which its own tests pin. This project's `Cargo.lock` may hold newer ones, and
+# nothing reads those again. At any version, `just dylint` rejects an unlisted lint or a group that
+# a trusted macro writes over code it passes through with the caller's spans, but it doesn't see
+# code a macro re-emits with spans of its own. trellis lists no crate whose macros write lint
+# groups or `allow`s over the code passed to them, such as `clap_derive`, `tokio_macros`, `tokio`
+# and `tracing_attributes` (see the idioms in `docs/style.md`).
 trusted_macro_crates = [
     "alloc",
     "core",

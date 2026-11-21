@@ -16,6 +16,11 @@ Releases are tagged `vX.Y.Z`. Before 1.0, the version numbers mean this:
   dependency updates. It adds nothing and breaks nothing.
 
 From 1.0, only a major release can break things.
+{%- if kind == 'library' and publish_crate %}
+
+The minimum Rust version, `rust-version` in `Cargo.toml`, is the stable Rust that the release is
+built and tested with. A newer one comes only in a minor release, never in a patch release.
+{%- endif %}
 
 Each release's notes, in [CHANGELOG.md](../CHANGELOG.md) and on the GitHub release, say what
 changed and what you must do before you upgrade. Read them before every minor upgrade.

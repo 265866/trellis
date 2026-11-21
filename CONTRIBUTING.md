@@ -124,7 +124,9 @@ To release:
    owner must do before or after the update merges. `just changelog` checks that the heading is
    the version after the newest tag by the rule above, counting those list items as asks. To
    gather notes before you release, head the section `## Unreleased`, which releases nothing, and
-   rename it when you release.
+   rename it when you release. A release that moves the stable toolchain also moves projects'
+   `rust-version`, so list under "Action required in projects" that a published library notes
+   the new minimum Rust version in its changelog and makes its next release a minor one.
 2. Merge it. Once every other CI job passes on that commit, CI's `Release` job tags it with an
    annotated tag and publishes a GitHub release with the section as its notes. Renovate opens the
    update in every project. Only a commit that changes the section gets the tag, so a later
