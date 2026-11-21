@@ -1,11 +1,9 @@
 //! `trellis-policy check` on a small workspace shaped like a project generated from the trellis
 //! template, which passes, and on copies of it that each break one rule.
 
-use std::fs;
-#[cfg(unix)]
-use std::os::unix;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
+use std::{env, fs};
 
 use tempfile::TempDir;
 
@@ -338,6 +336,33 @@ fn run(directory: &Path, arguments: &[&str], ci: Ci) -> Run {
     }
 }
 
+/// Makes `link` a symbolic link to `target`, which is absolute or relative to the link's
+/// directory. `ln` and `mklink` make it, because the standard library has a different function
+/// for it on each system, and a `cfg` here would keep one of them from the lints.
+fn symbolic_link(target: impl AsRef<Path>, link: &Path) {
+    let target: PathBuf = target.as_ref().components().collect();
+    let link: PathBuf = link.components().collect();
+    let directory = link.parent().expect("a link has a directory");
+    let mut command = if env::consts::OS == "windows" {
+        let mut command = Command::new("cmd");
+        command.args(["/C", "mklink"]);
+        if directory.join(&target).is_dir() {
+            command.arg("/D");
+        }
+        command.arg(&link).arg(&target);
+        command
+    } else {
+        let mut command = Command::new("ln");
+        command.arg("-s").arg(&target).arg(&link);
+        command
+    };
+    let output = command.output().expect("the link command should run");
+    assert!(
+        output.status.success(),
+        "the link should be created: {output:?}"
+    );
+}
+
 #[test]
 fn a_generated_project_passes() {
     let run = Project::new().check();
@@ -395,13 +420,12 @@ fn a_lints_library_inside_the_workspace_fails() {
     }
 }
 
-#[cfg(unix)]
 #[test]
 fn a_lints_library_linked_into_the_workspace_fails() {
     let project = Project::new();
     project.lints_manifest("vendored", "trellis_lints");
     let link = project.directory.path().join("link");
-    unix::fs::symlink(project.path().join("vendored"), &link).expect("the link should be created");
+    symbolic_link(project.path().join("vendored"), &link);
     project.root_manifest("", r#"[{ path = "../link" }]"#);
     project.check().assert_reports(
         1,
@@ -409,15 +433,13 @@ fn a_lints_library_linked_into_the_workspace_fails() {
     );
 }
 
-#[cfg(unix)]
 #[test]
 fn a_symbolic_link_in_a_crate_fails() {
     let project = Project::new();
-    unix::fs::symlink(
+    symbolic_link(
         "../../../README.md",
-        project.path().join("crates/demo_core/src/extra.rs"),
-    )
-    .expect("the link should be created");
+        &project.path().join("crates/demo_core/src/extra.rs"),
+    );
     project.check().assert_reports(
         1,
         "error: [member_sources] crates/demo_core/src/extra.rs: This is a symbolic link in or \
@@ -1896,7 +1918,6 @@ fn a_package_under_crates_that_isnt_a_member_fails() {
     );
 }
 
-#[cfg(unix)]
 #[test]
 fn a_member_whose_crate_directory_is_a_symbolic_link_fails() {
     let project = Project::new();
@@ -1906,11 +1927,10 @@ fn a_member_whose_crate_directory_is_a_symbolic_link_fails() {
         project.path().join("tools/demo_core"),
     )
     .expect("the crate should move");
-    unix::fs::symlink(
+    symbolic_link(
         "../tools/demo_core",
-        project.path().join("crates/demo_core"),
-    )
-    .expect("the link should be created");
+        &project.path().join("crates/demo_core"),
+    );
     let run = project.check();
     run.assert_reports(
         1,
@@ -1924,13 +1944,12 @@ fn a_member_whose_crate_directory_is_a_symbolic_link_fails() {
     );
 }
 
-#[cfg(unix)]
 #[test]
 fn a_member_under_a_linked_crates_directory_fails() {
     let project = Project::new();
     fs::rename(project.path().join("crates"), project.path().join("tools"))
         .expect("crates/ should move");
-    unix::fs::symlink("tools", project.path().join("crates")).expect("the link should be created");
+    symbolic_link("tools", &project.path().join("crates"));
     project.check().assert_reports(
         1,
         "error: [workspace_shape] crates: This is a symbolic link, so the crates' files sit \

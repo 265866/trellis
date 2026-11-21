@@ -1,13 +1,11 @@
 //! `trellis-policy web-notices` on `node_modules` directories laid out as Bun installs them.
 
 use std::ffi::OsStr;
-use std::fs;
-#[cfg(unix)]
-use std::os::unix;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt as _;
-use std::path::{Path, PathBuf};
+use std::path::{MAIN_SEPARATOR, Path, PathBuf};
 use std::process::{Command, Output};
+use std::{env, fs};
 
 use tempfile::TempDir;
 
@@ -61,12 +59,11 @@ impl Install {
     }
 
     /// Links `link` to `target`, both relative to the temporary directory.
-    #[cfg(unix)]
     fn link(&self, target: &str, link: &str) {
         let link = self.path(link);
         fs::create_dir_all(link.parent().expect("a link has a directory"))
             .expect("the link's directory should be created");
-        unix::fs::symlink(self.path(target), link).expect("the link should be created");
+        symbolic_link(self.path(target), &link);
     }
 
     /// The names of the entries in the temporary directory, sorted.
@@ -118,12 +115,40 @@ impl Install {
     }
 }
 
+/// Makes `link` a symbolic link to `target`, which is absolute or relative to the link's
+/// directory. `ln` and `mklink` make it, because the standard library has a different function
+/// for it on each system, and a `cfg` here would keep one of them from the lints.
+fn symbolic_link(target: impl AsRef<Path>, link: &Path) {
+    let target: PathBuf = target.as_ref().components().collect();
+    let link: PathBuf = link.components().collect();
+    let directory = link.parent().expect("a link has a directory");
+    let mut command = if env::consts::OS == "windows" {
+        let mut command = Command::new("cmd");
+        command.args(["/C", "mklink"]);
+        if directory.join(&target).is_dir() {
+            command.arg("/D");
+        }
+        command.arg(&link).arg(&target);
+        command
+    } else {
+        let mut command = Command::new("ln");
+        command.arg("-s").arg(&target).arg(&link);
+        command
+    };
+    let output = command.output().expect("the link command should run");
+    assert!(
+        output.status.success(),
+        "the link should be created: {output:?}"
+    );
+}
+
 /// What a run of the command did.
 #[derive(Debug)]
 struct Run {
     /// The exit code.
     code: Option<i32>,
-    /// What it wrote to standard output.
+    /// What it wrote to standard output, with the system's path separator written as `/`. The
+    /// command prints file system paths as the system writes them, so on Windows they hold `\`.
     stdout: String,
     /// What it wrote to standard error.
     stderr: String,
@@ -172,7 +197,7 @@ fn run(directory: &Path, arguments: &[impl AsRef<OsStr>], ci: Ci) -> Run {
     } = command.output().expect("trellis-policy should run");
     Run {
         code: status.code(),
-        stdout: String::from_utf8_lossy(&stdout).into_owned(),
+        stdout: String::from_utf8_lossy(&stdout).replace(MAIN_SEPARATOR, "/"),
         stderr: String::from_utf8_lossy(&stderr).into_owned(),
     }
 }
@@ -352,7 +377,6 @@ fn copies_of_a_package_that_differ_are_each_judged_and_listed() {
     );
 }
 
-#[cfg(unix)]
 #[test]
 fn the_isolated_layout_lists_each_package_once_without_following_links() {
     let install = Install::new();
@@ -397,7 +421,6 @@ fn the_isolated_layout_lists_each_package_once_without_following_links() {
     );
 }
 
-#[cfg(unix)]
 #[test]
 fn a_link_in_a_package_place_must_lead_to_another_package_place() {
     let install = Install::new();
@@ -433,7 +456,6 @@ fn a_link_in_a_package_place_must_lead_to_another_package_place() {
     );
 }
 
-#[cfg(unix)]
 #[test]
 fn a_linked_package_json_is_refused() {
     let install = Install::new();
@@ -451,7 +473,6 @@ fn a_linked_package_json_is_refused() {
     );
 }
 
-#[cfg(unix)]
 #[test]
 fn linked_license_files_are_read_only_from_inside_node_modules() {
     let install = Install::new();
