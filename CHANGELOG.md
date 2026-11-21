@@ -6,6 +6,15 @@ part lists what a project's owner must do around the update: a rule that can fla
 a setting to change, or a step to do by hand. [CONTRIBUTING.md](CONTRIBUTING.md#release-trellis)
 has the versioning rule.
 
+## Unreleased
+
+### Changed
+
+- When `just policy` reports two paths that macOS reads as one because an accented letter is
+  written as one character in one and as a letter and a combining accent in the other, it also
+  prints them with each character outside ASCII as its code point. The two looked the same in the
+  message, so it didn't say which file to rename.
+
 ## v0.11.0
 
 ### Action required in projects

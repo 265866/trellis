@@ -2275,6 +2275,16 @@ fn paths_that_differ_in_a_letter_outside_ascii_fail() {
         4,
         "`e.txt` stays apart from `\u{e9}.txt`: {run:#?}"
     );
+    run.assert_reports(
+        1,
+        "as its code point: `crates/demo_core/data/e\\u{301}.txt` and \
+         `crates/demo_core/data/\\u{e9}.txt`.",
+    );
+    assert_eq!(
+        run.stdout.matches("look the same").count(),
+        1,
+        "only the pair that looks the same is spelled out: {run:#?}"
+    );
 }
 
 #[test]
