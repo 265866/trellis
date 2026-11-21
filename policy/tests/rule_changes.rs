@@ -400,6 +400,76 @@ fn a_module_named_build_is_code() {
 }
 
 #[test]
+fn the_build_script_of_a_package_nested_in_a_crate_is_a_rule() {
+    for directory in ["crates/app/src/gen", "crates/app/tests/gen"] {
+        let repository = Repository::new();
+        repository.write(
+            "Cargo.toml",
+            &ROOT_MANIFEST.replace(
+                "[\"crates/*\"]",
+                &format!("[\"crates/*\", \"{directory}\"]"),
+            ),
+        );
+        repository.write(
+            &format!("{directory}/Cargo.toml"),
+            "[package]\nname = \"gen\"\n\n[lints]\nworkspace = true\n",
+        );
+        repository.write(&format!("{directory}/build.rs"), "fn main() {}\n");
+        repository.write(&format!("{directory}/src/lib.rs"), "//! Generates.\n");
+        repository.write("crates/app/src/lib.rs", "//! The app.\n\nmod build;\n");
+        repository.write("crates/app/src/build.rs", "//! Builds things.\n");
+        repository.commit("add a package inside a crate");
+        repository.git(&["branch", "--force", "base"]);
+        repository.write(
+            &format!("{directory}/build.rs"),
+            "fn main() {\n    println!(\"cargo::rustc-cfg=loose\");\n}\n",
+        );
+        repository.write("crates/app/src/build.rs", "//! Builds more things.\n");
+        repository.write(
+            "crates/app/src/lib.rs",
+            "//! The app, changed.\n\nmod build;\n",
+        );
+        repository.commit("change the build script and the code");
+
+        let changed = repository.changed_files();
+        assert_eq!(
+            changed.rules(),
+            [format!("{directory}/build.rs")],
+            "Cargo runs the `build.rs` beside a package's `Cargo.toml`"
+        );
+        assert_eq!(
+            changed.code(),
+            ["crates/app/src/build.rs", "crates/app/src/lib.rs"],
+            "a module named `build` with no `Cargo.toml` beside it is still code"
+        );
+    }
+}
+
+#[test]
+fn a_manifest_on_either_side_makes_a_nested_build_rs_a_rule() {
+    for manifest in ["Cargo.toml", "cargo.toml"] {
+        let repository = Repository::new();
+        repository.write(&format!("crates/app/src/gen/{manifest}"), MEMBER_MANIFEST);
+        repository.write("crates/app/src/gen/build.rs", "fn main() {}\n");
+        assert_eq!(
+            repository.changed_files_to(&Head::WorkingTree).rules(),
+            ["crates/app/src/gen/build.rs"],
+            "a new package's build script is a rule when its {manifest} is on disk"
+        );
+        repository.commit("add a package inside a crate");
+        repository.git(&["branch", "--force", "base"]);
+        repository.git(&["rm", "--quiet", "-r", "crates/app/src/gen"]);
+        repository.commit("delete the package");
+        assert_eq!(
+            repository.changed_files().rules(),
+            ["crates/app/src/gen/build.rs"],
+            "deleting a package's build script is a rule change when its {manifest} was at the \
+             merge base"
+        );
+    }
+}
+
+#[test]
 fn the_working_tree_root_manifest_is_compared_as_it_is_on_disk() {
     let repository = Repository::new();
     repository.write(

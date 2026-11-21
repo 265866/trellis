@@ -107,7 +107,16 @@ impl ChangedFiles {
             (before, after)
         };
         for path in paths {
-            match role(&path) {
+            let role = match role(&path) {
+                Role::Code
+                    if is_named_build_script(&path)
+                        && has_manifest_beside(&top, merge_base, head, &path) =>
+                {
+                    Role::Rule
+                }
+                role => role,
+            };
+            match role {
                 Role::Unlisted if untracked.contains(&path) => {
                     changed.rules.push(format!("{path} {UNTRACKED_REMEDY}"));
                 }
@@ -239,20 +248,34 @@ fn role(path: &str) -> Role {
     }
 }
 
-/// Whether `path` could be a package's build script: `build.rs` in any case and any directory,
-/// since Cargo runs the `build.rs` beside any package's `Cargo.toml` and no rule pins where
-/// members live. The one exception is a file below a crate's `src/`, `tests/`, `benches/` or
-/// `examples/` directory, `crates/<crate>/src/build.rs` for one, which Cargo's default layout
-/// reads as a module, a test, a benchmark or an example.
+/// Whether `path`, by its shape alone, is a rule as a package's build script: `build.rs` in any
+/// case and any directory, since Cargo runs the `build.rs` beside any package's `Cargo.toml` and
+/// no rule pins where members live. The exception is a file below a crate's `src/`, `tests/`,
+/// `benches/` or `examples/` directory, `crates/<crate>/src/build.rs` for one, which is usually a
+/// module, a test, a benchmark or an example. [`ChangedFiles::between`] still makes such a file a
+/// rule when a `Cargo.toml` sits beside it, since a package nested there runs it as its build
+/// script.
 fn is_build_script(path: &str) -> bool {
-    let (directory, name) = path.rsplit_once('/').unwrap_or(("", path));
+    let directory = path.rsplit_once('/').map_or("", |(directory, _)| directory);
     let mut segments = directory.split('/');
     let in_target_directory = segments.next() == Some("crates")
         && segments.next().is_some_and(|member| !member.is_empty())
         && segments
             .next()
             .is_some_and(|top| ["src", "tests", "benches", "examples"].contains(&top));
-    case_insensitive::eq(name, "build.rs") && !in_target_directory
+    is_named_build_script(path) && !in_target_directory
+}
+
+/// Whether the file at `path` is named `build.rs`, in any case.
+fn is_named_build_script(path: &str) -> bool {
+    let name = path.rsplit('/').next().unwrap_or(path);
+    case_insensitive::eq(name, "build.rs")
+}
+
+/// Whether `name` is a package manifest's file name, in any case, since a case-insensitive file
+/// system finds `cargo.toml` when Cargo looks for `Cargo.toml`.
+fn is_manifest(name: &str) -> bool {
+    case_insensitive::eq(name, "Cargo.toml")
 }
 
 /// Whether the root `Cargo.toml` changed anywhere but in `[workspace.dependencies]` and `[patch]`,
@@ -357,6 +380,27 @@ impl ManifestParts {
         }
         Self { code: table, rules }
     }
+}
+
+/// Whether a package manifest sits beside the file at `path` at `merge_base` or at `head`, in the
+/// working tree for [`Head::WorkingTree`], in the repository at `top`. A directory that isn't
+/// there has none.
+fn has_manifest_beside(top: &Path, merge_base: &str, head: &Head, path: &str) -> bool {
+    let directory = path.rsplit_once('/').map_or("", |(directory, _)| directory);
+    let in_tree = |revision: &str| {
+        let tree = format!("{revision}:{directory}");
+        git::run(top, &["ls-tree", "-z", "--name-only", &tree])
+            .is_ok_and(|output| git::paths(&output).any(is_manifest))
+    };
+    in_tree(merge_base)
+        || match head {
+            Head::WorkingTree => fs::read_dir(top.join(directory)).is_ok_and(|entries| {
+                entries
+                    .flatten()
+                    .any(|entry| entry.file_name().to_str().is_some_and(is_manifest))
+            }),
+            Head::Commit(revision) => in_tree(revision),
+        }
 }
 
 /// The text of `path` at `revision`, if it exists there.
