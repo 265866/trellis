@@ -216,6 +216,8 @@ fn merged_paths(
     crate_entries: &[String],
     violations: &mut Vec<Violation>,
 ) -> Result<(), PolicyError> {
+    use unicode_normalization::UnicodeNormalization as _;
+
     let files = repository_files::list(workspace.root())?;
     let with_ypogegrammeni = files.iter().filter(|path| path.contains('\u{345}'));
     for path in with_ypogegrammeni {
@@ -281,13 +283,31 @@ fn merged_paths(
             .collect();
         let quoted: Vec<String> = paths.iter().map(|path| format!("`{path}`")).collect();
         let (others, last) = quoted.split_at(quoted.len() - 1);
+        let looks_like_another = |path: &&String| {
+            let alike = paths.iter().filter(|other| other.nfc().eq(path.nfc()));
+            alike.count() > 1
+        };
+        let spelled_out: Vec<String> = paths
+            .iter()
+            .filter(looks_like_another)
+            .map(|path| format!("`{}`", path.escape_default()))
+            .collect();
+        let spelling = if spelled_out.is_empty() {
+            String::new()
+        } else {
+            format!(
+                " Some of them look the same, so here they are with each character outside \
+                 ASCII as its code point: {}.",
+                spelled_out.join(" and ")
+            )
+        };
         violations.push(Violation::new(
             paths.last().cloned().unwrap_or_default(),
             format!(
                 "{} and {} are one path to a file system that ignores case, as macOS's and \
                  Windows' do, or how a letter with an accent is written, as macOS's does, so a \
                  checkout there holds only one of them and builds other files than the checks \
-                 read. Rename all but one.",
+                 read. Rename all but one.{spelling}",
                 others.join(", "),
                 last.concat()
             ),
