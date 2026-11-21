@@ -1163,9 +1163,10 @@ fn the_template_gitattributes_passes_in_the_working_tree_and_in_the_index() {
 }
 
 /// Each of these makes a checkout write other bytes than the blob, hides the diff, or changes what
-/// a merge or an archive writes, except an attribute name in other letters, which git reads as another attribute and which fails because
-/// only the listed spellings pass. `working-tree-encoding=ISO-2022-JP-3` turns 13 characters in a
-/// comment of a `tsconfig.json` into `*/,"noImplicitAny":false/*`.
+/// a merge or an archive writes, except an attribute name in other letters, which git reads as
+/// another attribute and which fails because only the listed spellings pass.
+/// `working-tree-encoding=ISO-2022-JP-3` turns 13 characters in a comment of a `tsconfig.json`
+/// into `*/,"noImplicitAny":false/*`.
 #[test]
 fn a_gitattributes_line_that_can_change_checked_out_bytes_fails() {
     for attribute in [
@@ -2399,10 +2400,11 @@ fn paths_a_case_insensitive_file_system_reads_as_one_fail() {
     );
 }
 
-/// A file system that upper-cases a name one character at a time reads `a`, the ypogegrammeni and
-/// an acute accent as the same name as `a`, a small iota and the accent, and canonical caseless
-/// folding keeps them apart, so the character fails by itself. APFS and the NTFS of Windows 11
-/// keep the two apart, so the test's file system holds both.
+/// A file system whose case table maps the ypogegrammeni to the letter iota, and that doesn't
+/// reorder marks, reads `a`, the ypogegrammeni and an acute accent as the same name as `a`, a
+/// small iota and the accent. Canonical caseless folding keeps them apart, so the character fails
+/// by itself. APFS and the one NTFS volume measured keep the two apart, so the test's file system
+/// holds both.
 #[test]
 fn a_path_with_a_combining_ypogegrammeni_fails() {
     let project = Project::new();

@@ -207,10 +207,11 @@ fn member_places(
 /// depends on the order the files were made in.
 ///
 /// The other is a path that holds the combining Greek ypogegrammeni (U+0345). Its upper case is
-/// the letter iota, which sorts apart from it among the marks on a letter, so a file system that
-/// upper-cases a name one character at a time merges names that [`case_insensitive::merge_key`]
-/// keeps apart. APFS doesn't, and neither does the table NTFS gets from Windows 11, but a volume
-/// compares names by the table it was formatted with.
+/// the letter iota, which sorts apart from it among the marks on a letter, so a file system whose
+/// case table maps one to the other, and that doesn't reorder marks, merges names that
+/// [`case_insensitive::merge_key`] keeps apart. APFS keeps such names apart, and so did the one
+/// NTFS volume measured, whose table leaves the character alone, but a volume compares names by
+/// the table it was formatted with.
 fn unpairable_names(files: &[String], crate_entries: &[String], violations: &mut Vec<Violation>) {
     let mut shortest = BTreeSet::new();
     for path in files.iter().chain(crate_entries) {
@@ -243,9 +244,9 @@ fn unpairable_names(files: &[String], crate_entries: &[String], violations: &mut
         violations.push(Violation::new(
             path.clone(),
             "This path holds the combining Greek ypogegrammeni (U+0345), whose upper case is the \
-             letter iota. A file system that upper-cases a name one character at a time reads \
-             this path as another that no check here pairs it with, so a checkout there can hold \
-             one file for both. Rename it without that character."
+             letter iota. A file system whose case table maps one to the other can read this \
+             path as another that this check keeps apart, so a checkout there can hold one file \
+             for both. Rename it without that character."
                 .to_owned(),
         ));
     }
