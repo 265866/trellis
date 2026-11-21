@@ -6,6 +6,18 @@ part lists what a project's owner must do around the update: a rule that can fla
 a setting to change, or a step to do by hand. [CONTRIBUTING.md](CONTRIBUTING.md#release-trellis)
 has the versioning rule.
 
+## v0.13.1
+
+### Changed
+
+- CI caches the custom lints' library and driver on every row, not only the Linux ones, so a
+  project with no Linux row now gets the cache too. With the cache restored, the `just dylint`
+  step took 4 s on `macos-26`, 11 s on `windows-2025` and 14 s on `windows-11-arm`. Without it,
+  that step took 143 to 152 s, 162 to 229 s and 175 to 183 s, over three runs of each. On every
+  row, the first run on `main` after the update builds them as before and saves them, since the
+  update moves the pinned lints commit, which the cache's key holds. The project's own crates
+  are still linted from scratch on every run. It comes with the update and needs no action.
+
 ## v0.13.0
 
 ### Action required in projects
