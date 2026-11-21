@@ -6,6 +6,45 @@ part lists what a project's owner must do around the update: a rule that can fla
 a setting to change, or a step to do by hand. [CONTRIBUTING.md](CONTRIBUTING.md#release-trellis)
 has the versioning rule.
 
+## v0.10.0
+
+### Action required in projects
+
+- **Give every crate directory an ASCII name.** `just policy` now fails a `crates/<name>` whose
+  name holds a character outside ASCII. A project generated from trellis has none. Before the
+  update, rename the directory and the `path` of each dependency on it in a code pull request,
+  then change its row in the Layout table of `CONTRIBUTING.md` in a rules pull request. A crate
+  with a build script can't move that way. Its `build.rs`, or the file its `build` key names, is
+  a rule and the rest of the crate is code, so `just rule-changes` refuses the move and the
+  `main` ruleset has no bypass. Turn the ruleset off for that one merge, before the update, and
+  run `just setup-github` afterward.
+- **Name a build script in ASCII, with no part that ends in a dot or a space.** `just policy`
+  now fails a crate that `build_script_crates` lists when its `build` key holds a character
+  outside ASCII, or a part that ends in a dot or a space, which Windows removes from the end.
+  Rename the file and the key in a rules pull request before the update.
+- **Rename any path Windows reads as another path, before the update.** `just rule-changes` now
+  counts a path with a part that ends in a dot or a space, or that holds a `:` or a `\`, as a
+  rule, so a pull request that changes one can't also change code. After the update, renaming
+  it away changes a rule and code together. Rename it in a code pull request before the update.
+  A project generated from trellis has none.
+
+### Changed
+
+- Rules that go by a file's name match nine more characters that macOS reads as ASCII letters: the
+  sharp s in either case as `ss`, and the ligatures U+FB00 to U+FB06 as `ff`, `fi`, `fl`, `ffi`,
+  `ffl` and `st`. A file whose name spells `rustfmt.toml`, `justfile` or `tsconfig.json` with one
+  of them is that file on a Mac. Under `crates/`, `just rule-changes` counted it as code. Now it
+  is a rule, and `just policy` fails a tool's settings file or an agent instructions file spelled
+  that way, as it fails the plain spelling there.
+- `just rule-changes` counts a path that Windows reads as another path as a rule: one with a part
+  that ends in a dot or a space, or that holds a `:` or a `\`. Git for Windows refuses to check
+  such a path out while its `core.protectNTFS` setting is on, as it is by default, but the path
+  still reaches every other checkout.
+- `just policy` fails a crate directory whose name isn't ASCII, and a `build` key that isn't ASCII
+  on a crate that `build_script_crates` lists. File systems disagree on which non-ASCII names are
+  one name, so no check can tell which files they are everywhere. It also fails a `build` key
+  with a part that ends in a dot or a space, which names another file on Windows.
+
 ## v0.9.0
 
 ### Action required in projects
