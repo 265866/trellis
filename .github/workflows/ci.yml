@@ -144,20 +144,20 @@ jobs:
             kind: binary
             target: x86_64-pc-windows-msvc
             recipes: lint dylint test docs build-release notices
-            tools: just@1.59.0,cargo-nextest@0.9.150,uv@0.13.8,cargo-about@0.9.3
+            tools: just@1.59.0,cargo-nextest@0.9.150,cargo-dylint@6.4.0,dylint-link@6.4.0,uv@0.13.8,cargo-about@0.9.3
           - name: binary on Windows on ARM64
             os: windows-11-arm
             kind: binary
             target: aarch64-pc-windows-msvc
             recipes: lint dylint test docs build-release notices
-            tools: just@1.59.0,cargo-nextest@0.9.150,uv@0.13.8,cargo-about@0.9.3
+            tools: just@1.59.0,cargo-nextest@0.9.150,cargo-dylint@6.4.0,dylint-link@6.4.0,uv@0.13.8,cargo-about@0.9.3
           # The published library's `package` recipe has a PowerShell variant only Windows runs.
           - name: published library on Windows
             os: windows-2025
             kind: library
             publish: "true"
             recipes: package lint dylint test
-            tools: just@1.59.0,cargo-nextest@0.9.150,uv@0.13.8
+            tools: just@1.59.0,cargo-nextest@0.9.150,cargo-dylint@6.4.0,dylint-link@6.4.0,uv@0.13.8
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -166,26 +166,6 @@ jobs:
       - uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2.90.5
         with:
           tool: ${{ matrix.tools }}
-
-      # cargo-dylint and dylint-link have no download for Windows on ARM64. install-action builds
-      # them from source there, which takes about four minutes, and with `--force`, so an installed
-      # copy doesn't help. The Windows entries leave them out of `tools` and install them on a cache
-      # miss only.
-      - name: Restore the dylint tools
-        id: dylint-tools
-        if: runner.os == 'Windows'
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            ~/.cargo/bin/cargo-dylint.exe
-            ~/.cargo/bin/dylint-link.exe
-          key: dylint-tools-${{ runner.os }}-${{ runner.arch }}-cargo-dylint@6.4.0/dylint-link@6.4.0
-
-      - name: Install the dylint tools
-        if: runner.os == 'Windows' && steps.dylint-tools.outputs.cache-hit != 'true'
-        uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2.90.5
-        with:
-          tool: cargo-dylint@6.4.0,dylint-link@6.4.0
 
       - name: Install the pinned toolchains
         shell: bash
