@@ -8,6 +8,18 @@
     "docker:pinDigests"
   ],
   "minimumReleaseAge": "7 days",
+  "ignorePaths": [
+    "**/node_modules/**",
+    "**/bower_components/**",
+    "**/vendor/**",
+    "**/examples/**",
+    "**/__tests__/**",
+    "**/test/**",
+    "**/tests/!(dependencies)/**",
+    "**/__fixtures__/**",
+    "**/.mise/locks/**",
+    "**/.config/mise/locks/**"
+  ],
   "packageRules": [
     {
       "description": "trellis owns the action, image and toolchain pins of the projects it generates, so they move here, in template/, and reach projects through their trellis update.",
@@ -17,13 +29,15 @@
       "groupName": "template pins"
     },
     {
-      "description": "The stable toolchain moves in this repository and in the template together, so `just pins` holds in one PR.",
-      "matchManagers": [
-        "rust-toolchain"
+      "description": "The stable toolchain and `rust-version` move in this repository and in the template together, so `just pins` holds in one PR. A patch release leaves `rust-version` alone.",
+      "matchDatasources": [
+        "rust-version"
       ],
       "matchFileNames": [
         "rust-toolchain.toml",
-        "template/rust-toolchain.toml"
+        "template/rust-toolchain.toml",
+        "Cargo.toml",
+        "template/Cargo.toml.jinja"
       ],
       "groupName": "Rust toolchain"
     },
@@ -35,12 +49,11 @@
       "enabled": false
     },
     {
-      "description": "clippy_utils is pinned to the lints' nightly, and dylint_linting and dylint_testing to the cargo-dylint the workflows install. They move together by hand; see CONTRIBUTING.md.",
+      "description": "dylint_linting and dylint_testing are pinned to the cargo-dylint the workflows install, and move with it by hand; see CONTRIBUTING.md.",
       "matchFileNames": [
         "lints/Cargo.toml"
       ],
       "matchPackageNames": [
-        "clippy_utils",
         "dylint_linting",
         "dylint_testing"
       ],
@@ -62,6 +75,130 @@
       "matchManagers": [
         "github-actions"
       ]
+    },
+    {
+      "description": "A new clippy_utils is the cue to port the lints: `cargo dylint upgrade lints` moves it with the lints' nightly. Alone it can't build, so it waits on the Dependency Dashboard and opens no PR unless approved there.",
+      "matchFileNames": [
+        "lints/Cargo.toml"
+      ],
+      "matchPackageNames": [
+        "clippy_utils"
+      ],
+      "groupName": "clippy_utils",
+      "dependencyDashboardApproval": true
+    },
+    {
+      "description": "Bun moves everywhere together: the image, the workflows' `bun-version:` and the template's CONTRIBUTING.md.",
+      "matchDepNames": [
+        "bun",
+        "docker.io/oven/bun"
+      ],
+      "groupName": "Bun",
+      "prBodyNotes": [
+        "Before merging, move the web UI starter's packages in its `package.json.jinja` and regenerate its `bun.lock.jinja` with this Bun, as \"Update pinned versions\" in CONTRIBUTING.md says."
+      ]
+    },
+    {
+      "description": "A runner image moves in every workflow, CI's matrix and copier.yml's targets together.",
+      "matchDatasources": [
+        "github-runners"
+      ],
+      "groupName": "runner images"
+    },
+    {
+      "description": "The crates `just dependencies` adds move together. `just pins` fails until template/dylint.toml.jinja names the new version of each trusted macro crate, which is the cue to read what its macros write.",
+      "matchFileNames": [
+        "tests/dependencies/setup.sh"
+      ],
+      "groupName": "test dependencies",
+      "prBodyNotes": [
+        "Before merging, read what each trusted macro crate's macros write at its new version and update its comment in `template/dylint.toml.jinja`, as \"Update pinned versions\" in CONTRIBUTING.md says."
+      ]
+    },
+    {
+      "description": "Every base image digest update, Bun's included. A new digest for the same tag often has no release time to age against, as for the unversioned Rust and distroless tags or a registry that gives none, and `timestamp-required` would hold it for good. Where a release time exists, the seven-day wait still applies.",
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchUpdateTypes": [
+        "digest"
+      ],
+      "minimumReleaseAgeBehaviour": "timestamp-optional"
+    }
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "`rust-version`, the stable toolchain's minor version.",
+      "managerFilePatterns": [
+        "/^Cargo\\.toml$/",
+        "/^template/Cargo\\.toml\\.jinja$/"
+      ],
+      "matchStrings": [
+        "\\nrust-version *= *[\"'](?<currentValue>\\d+\\.\\d+)[\"'] *(#[^\\n]*)?\\n"
+      ],
+      "depNameTemplate": "rust",
+      "datasourceTemplate": "rust-version"
+    },
+    {
+      "customType": "regex",
+      "description": "Bun in the template's workflows, which the github-actions manager can't parse, and in its CONTRIBUTING.md.",
+      "managerFilePatterns": [
+        "/^template/\\.github/workflows/[^/]+\\.jinja$/",
+        "/^template/CONTRIBUTING\\.md\\.jinja$/"
+      ],
+      "matchStrings": [
+        "bun-version: *[\"']?(?<currentValue>\\d+\\.\\d+\\.\\d+)[\"']? *(#[^\\n]*)?\\n",
+        "\\[Bun\\]\\([^)]*\\) (?<currentValue>\\d+\\.\\d+\\.\\d+),"
+      ],
+      "depNameTemplate": "bun",
+      "datasourceTemplate": "npm"
+    },
+    {
+      "customType": "regex",
+      "description": "Runner images in the template's workflows, which the github-actions manager can't parse.",
+      "managerFilePatterns": [
+        "/^template/\\.github/workflows/[^/]+\\.jinja$/"
+      ],
+      "matchStrings": [
+        "runs-on: *[\"']?(?<depName>ubuntu|macos|windows)-(?<currentValue>[0-9][\\w.-]*)[\"']? *(#[^\\n]*)?\\n"
+      ],
+      "datasourceTemplate": "github-runners"
+    },
+    {
+      "customType": "regex",
+      "description": "Runner images in CI's matrix, which the github-actions manager doesn't read.",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/ci\\.yml$/"
+      ],
+      "matchStrings": [
+        "os: *[\"']?(?<depName>ubuntu|macos|windows)-(?<currentValue>[0-9][\\w.-]*)[\"']? *(#[^\\n]*)?\\n"
+      ],
+      "datasourceTemplate": "github-runners"
+    },
+    {
+      "customType": "regex",
+      "description": "Runner images in copier.yml's targets, which are quoted strings in a Jinja expression.",
+      "managerFilePatterns": [
+        "/^copier\\.yml$/"
+      ],
+      "matchStrings": [
+        "'(?<depName>ubuntu|macos|windows)-(?<currentValue>[0-9][\\w.-]*)'"
+      ],
+      "datasourceTemplate": "github-runners"
+    },
+    {
+      "customType": "regex",
+      "description": "The crates tests/dependencies/setup.sh pins exactly. config:recommended ignores every tests/ directory; the ignorePaths above keep its other entries and ignore all of tests/ but tests/dependencies/.",
+      "managerFilePatterns": [
+        "/^tests/dependencies/setup\\.sh$/"
+      ],
+      "matchStrings": [
+        "\\n(?<depName>[a-z0-9_-]+) = (\\{ version = )?\"=(?<currentValue>\\d+\\.\\d+\\.\\d+)\"",
+        "--package (?<depName>[a-z0-9_-]+) --precise (?<currentValue>\\d+\\.\\d+\\.\\d+)\\n"
+      ],
+      "datasourceTemplate": "crate",
+      "versioningTemplate": "semver"
     }
   ],
   "github-actions": {
