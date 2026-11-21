@@ -179,6 +179,8 @@ pins:
     # Sorts by byte: a locale that ignores punctuation could sort another tool between two versions
     # of one, and hide the pair.
     export LC_ALL=C
+    # git writes its traces where its errors go, and a message from git grep fails the recipe.
+    unset "${!GIT_TRACE@}"
     status=0
     # Prints what a sed script prints from a file, or fails when that's nothing.
     extract() {
@@ -308,8 +310,9 @@ pins:
     scan=(. ':!CHANGELOG.md' ':!policy/' ':!*bun.lock.jinja')
     errors=$(mktemp)
     # Overrides each setting that changes what git grep prints, or stops it, and reads every file
-    # as text, whatever a git attribute calls it. git grep exits as usual for a file it can't
-    # read, so a message from it fails too.
+    # as text, whatever a git attribute calls it, so an untracked binary file is read too: ignore
+    # or delete one that fails here. git grep exits as usual for a file it can't read, so a
+    # message from it fails too.
     git_grep() {
       local found=0
       git grep --untracked --no-recurse-submodules --no-color --no-column -a -z -E "$@" 2> "$errors" || found=$?
@@ -399,7 +402,7 @@ pins:
       echo "error: $tool is pinned to more than one version:" >&2
       grep "^$tool@" <<< "$versions" | sed -E 's/^[^@]*@([^ ]*) (.*):([0-9]+)$/\1\t\2\t\3/' \
         | sort -t $'\t' -k 1,1 -k 2,2 -k 3,3n | awk -F '\t' '
-          $1 != version { if (NR > 1) print ""; printf "  %s in %s:%s", $1, $2, $3; version = $1; file = $2; next }
+          NR == 1 || $1 "" != version "" { if (NR > 1) print ""; printf "  %s in %s:%s", $1, $2, $3; version = $1; file = $2; next }
           $2 != file { printf ", %s:%s", $2, $3; file = $2; next }
           { printf ",%s", $3 }
           END { print "" }
