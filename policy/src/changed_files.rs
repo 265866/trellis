@@ -77,14 +77,33 @@ pub struct ChangedFiles {
 
 impl ChangedFiles {
     /// The files changed from the merge base of `base` and `head` to `head`, read from the git
-    /// repository that holds `repository`. A rename counts as both of its paths.
+    /// repository that holds `repository`. A rename counts as both of its paths. `None` means
+    /// there is nothing to compare: `base` isn't a commit and the repository has no
+    /// remote-tracking branches, as before its first push.
     ///
     /// # Errors
     ///
-    /// Fails if git fails, such as when `base` or `head` isn't a revision of the repository.
-    pub fn between(repository: &Path, base: &str, head: &Head) -> Result<Self, PolicyError> {
+    /// Fails if git fails, such as when `head` isn't a commit of the repository, or `base` isn't
+    /// one and the repository has a remote-tracking branch.
+    pub fn between(
+        repository: &Path,
+        base: &str,
+        head: &Head,
+    ) -> Result<Option<Self>, PolicyError> {
         let top = git::run(repository, &["rev-parse", "--show-toplevel"])?;
         let top = PathBuf::from(top.trim_end_matches(['\r', '\n']));
+        if let Head::Commit(revision) = head {
+            let head_commit = format!("{revision}^{{commit}}");
+            git::run(&top, &["rev-parse", "--verify", &head_commit])?;
+        }
+        let base_commit = format!("{base}^{{commit}}");
+        let base_resolves =
+            git::run(&top, &["rev-parse", "--verify", "--quiet", &base_commit]).is_ok();
+        if !base_resolves
+            && git::run(&top, &["for-each-ref", "--count=1", "refs/remotes"])?.is_empty()
+        {
+            return Ok(None);
+        }
         let head_revision = match head {
             Head::WorkingTree => "HEAD",
             Head::Commit(revision) => revision.as_str(),
@@ -167,7 +186,7 @@ impl ChangedFiles {
                 Role::Other => {}
             }
         }
-        Ok(changed)
+        Ok(Some(changed))
     }
 
     /// The changed rule files, relative to the repository root.

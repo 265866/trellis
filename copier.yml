@@ -12,12 +12,12 @@ _message_after_copy: |
        git commit -m "chore: generate from trellis"
   2. Install gh (https://cli.github.com/){% if web_ui %}, the Bun version CONTRIBUTING.md names{% endif %} and cargo-binstall (https://github.com/cargo-bins/cargo-binstall), then the just version the project pins:
        cargo binstall just@1.59.0
-  3. Follow "Before the first push" in docs/maintaining.md. It creates {{ github_owner }}/{{ project_name }}
-     as {{ visibility }}, runs `just setup-github`, which on Windows runs in Git Bash, and pushes main.
-  4. Install the tools and toolchains, then run every check:
+  3. Install the tools and toolchains, then run every check:
        just install-tools
        just install-toolchains
        just ci
+  4. Follow "Before the first push" in docs/maintaining.md. It creates {{ github_owner }}/{{ project_name }}
+     as {{ visibility }}, runs `just setup-github`, which on Windows runs in Git Bash, and pushes main.
 _exclude:
   - copier.yml
   - "~*"
