@@ -750,6 +750,38 @@ fn a_usage_or_load_error_exits_with_2() {
 }
 
 #[test]
+fn rule_changes_has_nothing_to_compare_until_a_remote_branch_exists() {
+    let project = Project::new();
+    project.git(&["init", "--quiet"]);
+    project.commit("a generated project");
+    let nothing_to_compare = "Nothing to compare yet: `origin/main` isn't a commit";
+    project
+        .run(&["rule-changes", "origin/main"])
+        .assert_reports(0, nothing_to_compare);
+    project
+        .run(&["rule-changes", "origin/main", "--head", "no-such-commit"])
+        .assert_reports(
+            2,
+            "error: `git rev-parse --verify no-such-commit^{commit}` failed",
+        );
+
+    project.git(&[
+        "remote",
+        "add",
+        "origin",
+        "https://github.com/example/demo.git",
+    ]);
+    project
+        .run(&["rule-changes", "origin/main"])
+        .assert_reports(0, nothing_to_compare);
+
+    project.git(&["update-ref", "refs/remotes/origin/feature", "HEAD"]);
+    project
+        .run(&["rule-changes", "origin/main"])
+        .assert_reports(2, "error: `git merge-base origin/main HEAD` failed");
+}
+
+#[test]
 fn adding_or_removing_a_build_script_is_one_rule_change_that_passes() {
     let project = Project::new();
     project.git(&["init", "--quiet"]);

@@ -6,7 +6,9 @@
 //! - `trellis-policy rule-changes <base> [--head <commit>]` fails when the changes since the merge
 //!   base of `<base>` and the head change both the repository's rules and the code they check,
 //!   which must land in separate pull requests. The head is `<commit>`, or, without `--head`, the
-//!   working tree, uncommitted and untracked files included.
+//!   working tree, uncommitted and untracked files included. It passes with nothing to compare
+//!   when `<base>` isn't a commit and the repository has no remote-tracking branches, as before
+//!   its first push, so a new project's checks run before its repository exists.
 //! - `trellis-policy web-notices <about.toml> <node_modules> <output>` writes to `<output>` the
 //!   license notices of every npm package installed under `<node_modules>`, development and
 //!   transitive ones included. It first removes `<output>` from an earlier run, and fails, writing
@@ -150,7 +152,15 @@ fn check(manifest_path: Option<&Path>, out: &mut impl Write) -> io::Result<ExitC
 fn rule_changes(base: &str, head: &Head, out: &mut impl Write) -> io::Result<ExitCode> {
     let prefix = error_prefix();
     let changed = match ChangedFiles::between(&env::current_dir()?, base, head) {
-        Ok(changed) => changed,
+        Ok(Some(changed)) => changed,
+        Ok(None) => {
+            writeln!(
+                out,
+                "Nothing to compare yet: `{base}` isn't a commit and the repository has no \
+                 remote branches. Once a branch is pushed, the changes are compared with `{base}`."
+            )?;
+            return Ok(ExitCode::SUCCESS);
+        }
         Err(error) => {
             writeln!(out, "{prefix}{error}")?;
             return Ok(ExitCode::from(USAGE_ERROR));

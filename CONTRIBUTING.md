@@ -124,7 +124,8 @@ These move by hand:
   `template/CONTRIBUTING.md.jinja`, and just also in this file's Set up section, `README.md`,
   `copier.yml` and `template/docs/maintaining.md.jinja`; release-plz's `version:` inputs and the
   `tool@x.y.z` mentions in the comments of `template/.github/workflows/`; actionlint's `go install`
-  in `template/justfile.jinja` and the workflows; and copier's version in `justfile`.
+  in `template/justfile.jinja` and the workflows; and copier's version in `justfile` and
+  `README.md`.
 
 `just pins` fails until every copy of a version agrees, including a copy in a file it hasn't seen
 before.

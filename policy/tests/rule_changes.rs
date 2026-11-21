@@ -92,7 +92,16 @@ impl Repository {
 
     /// The files changed from the merge base of `base` and `head` to `head`.
     fn changed_files_to(&self, head: &Head) -> ChangedFiles {
-        ChangedFiles::between(self.path(), "base", head).expect("git should list the changed files")
+        ChangedFiles::between(self.path(), "base", head)
+            .expect("git should list the changed files")
+            .expect("the base branch should resolve")
+    }
+
+    /// Whether comparing with the unknown base `origin/main` finds nothing to compare.
+    fn has_nothing_to_compare(&self) -> bool {
+        ChangedFiles::between(self.path(), "origin/main", &Head::WorkingTree)
+            .expect("an unknown base without remote branches isn't an error")
+            .is_none()
     }
 }
 
@@ -244,13 +253,38 @@ fn changes_on_the_base_branch_after_the_merge_base_dont_count() {
 }
 
 #[test]
-fn an_unknown_base_fails() {
+fn an_unknown_base_fails_once_a_remote_branch_exists() {
     let repository = Repository::new();
+    repository.git(&["update-ref", "refs/remotes/origin/base", "HEAD"]);
     let error =
         ChangedFiles::between(repository.path(), "no-such-branch", &Head::WorkingTree).unwrap_err();
     assert!(
         error.to_string().contains("merge-base"),
         "the error should name the failing git command: {error}"
+    );
+}
+
+#[test]
+fn an_unknown_base_without_a_remote_has_nothing_to_compare() {
+    let repository = Repository::new();
+    assert!(
+        repository.has_nothing_to_compare(),
+        "a repository with no remote has nothing to compare"
+    );
+}
+
+#[test]
+fn an_unknown_base_before_the_first_push_has_nothing_to_compare() {
+    let repository = Repository::new();
+    repository.git(&[
+        "remote",
+        "add",
+        "origin",
+        "https://github.com/example/app.git",
+    ]);
+    assert!(
+        repository.has_nothing_to_compare(),
+        "a remote that nothing was pushed to has no branch to compare with"
     );
 }
 

@@ -720,7 +720,6 @@ template kind recipes="ci" publish="false" web="false" target="":
     git init --quiet --initial-branch main
     git add --all
     git -c user.name=trellis -c user.email=trellis@localhost commit --quiet --message "chore: generate from trellis"
-    git update-ref refs/remotes/origin/main HEAD
     if [ -n "{{ target }}" ]; then
       rustup target add "{{ target }}"
     fi
@@ -731,6 +730,12 @@ template kind recipes="ci" publish="false" web="false" target="":
         just "$recipe"
       fi
     done
+    if [ "{{ recipes }}" = ci ]; then
+      # `ci` ran as a new project's first run does, with no remote branch to compare with. With
+      # one, the checks must have left no change behind.
+      git update-ref refs/remotes/origin/main HEAD
+      just rule-changes
+    fi
     if [ "{{ recipes }}" = ci ] && [ "{{ kind }}" = service ] && command -v docker > /dev/null; then
       # A checkout or a `just notices` under umask 077 leaves the license files 0600, which the
       # image's non-root user can't read unless the image sets their modes.
