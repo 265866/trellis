@@ -98,6 +98,7 @@ impl ChangedFiles {
         untracked.retain(|path| !paths.contains(path));
         paths.extend(untracked.iter().cloned());
         let mut changed = Self::default();
+        let mut nesting = BTreeMap::new();
         let versions = |path: &str| {
             let before = show(&top, merge_base, path);
             let after = match head {
@@ -108,11 +109,12 @@ impl ChangedFiles {
         };
         for path in paths {
             let role = match role(&path) {
-                Role::Code
-                    if is_named_build_script(&path)
-                        && has_manifest_beside(&top, merge_base, head, &path) =>
-                {
-                    Role::Rule
+                Role::Code if is_named_build_script(&path) => {
+                    let member = path.split('/').nth(1).unwrap_or_default();
+                    let nests = *nesting
+                        .entry(member.to_owned())
+                        .or_insert_with(|| nests_a_package(&top, merge_base, head, member));
+                    if nests { Role::Rule } else { Role::Code }
                 }
                 role => role,
             };
@@ -251,10 +253,10 @@ fn role(path: &str) -> Role {
 /// Whether `path`, by its shape alone, is a rule as a package's build script: `build.rs` in any
 /// case and any directory, since Cargo runs the `build.rs` beside any package's `Cargo.toml` and
 /// no rule pins where members live. The exception is a file below a crate's `src/`, `tests/`,
-/// `benches/` or `examples/` directory, `crates/<crate>/src/build.rs` for one, which is usually a
-/// module, a test, a benchmark or an example. [`ChangedFiles::between`] still makes such a file a
-/// rule when a `Cargo.toml` sits beside it, since a package nested there runs it as its build
-/// script.
+/// `benches/` or `examples/` directory, `crates/<crate>/src/build.rs` for one, which is a module,
+/// a test, a benchmark or an example unless a package is nested there. [`ChangedFiles::between`]
+/// still makes such a file a rule when the crate's directory holds any package manifest besides
+/// its own, at either side of the change, or when a side can't be read.
 fn is_build_script(path: &str) -> bool {
     let directory = path.rsplit_once('/').map_or("", |(directory, _)| directory);
     let mut segments = directory.split('/');
@@ -382,25 +384,114 @@ impl ManifestParts {
     }
 }
 
-/// Whether a package manifest sits beside the file at `path` at `merge_base` or at `head`, in the
-/// working tree for [`Head::WorkingTree`], in the repository at `top`. A directory that isn't
-/// there has none.
-fn has_manifest_beside(top: &Path, merge_base: &str, head: &Head, path: &str) -> bool {
-    let directory = path.rsplit_once('/').map_or("", |(directory, _)| directory);
-    let in_tree = |revision: &str| {
-        let tree = format!("{revision}:{directory}");
-        git::run(top, &["ls-tree", "-z", "--name-only", &tree])
-            .is_ok_and(|output| git::paths(&output).any(is_manifest))
+/// Whether the crate directory `crates/<member>` may hold a package other than the crate itself at
+/// `merge_base` or at `head`, in the repository at `top`: whether a package manifest other than
+/// `crates/<member>/Cargo.toml` is anywhere below it, or a side can't be read. Every segment
+/// matches in any case, as a case-insensitive file system merges the directories. A side without
+/// the directory has no manifest there.
+fn nests_a_package(top: &Path, merge_base: &str, head: &Head, member: &str) -> bool {
+    let head = match head {
+        Head::WorkingTree => Side::WorkingTree,
+        Head::Commit(revision) => Side::Revision(revision),
     };
-    in_tree(merge_base)
-        || match head {
-            Head::WorkingTree => fs::read_dir(top.join(directory)).is_ok_and(|entries| {
-                entries
-                    .flatten()
-                    .any(|entry| entry.file_name().to_str().is_some_and(is_manifest))
-            }),
-            Head::Commit(revision) => in_tree(revision),
+    [Side::Revision(merge_base), head]
+        .iter()
+        .any(|side| side.nests_a_package(top, member).unwrap_or(true))
+}
+
+/// One side of a change.
+enum Side<'revision> {
+    /// The tree of a revision.
+    Revision(&'revision str),
+    /// The working tree on disk.
+    WorkingTree,
+}
+
+impl Side<'_> {
+    /// Whether `crates/<member>` holds a package manifest other than its own, in any case, or
+    /// `None` if this side can't be read.
+    fn nests_a_package(&self, top: &Path, member: &str) -> Option<bool> {
+        for crates in self.directories(top, "")? {
+            if !case_insensitive::eq(&crates, "crates") {
+                continue;
+            }
+            for directory in self.directories(top, &crates)? {
+                if !case_insensitive::eq(&directory, member) {
+                    continue;
+                }
+                let nested = self
+                    .files(top, &format!("{crates}/{directory}"))?
+                    .iter()
+                    .filter_map(|file| file.rsplit_once('/'))
+                    .any(|(_, name)| is_manifest(name));
+                if nested {
+                    return Some(true);
+                }
+            }
         }
+        Some(false)
+    }
+
+    /// The names of the directories in `directory`, relative to `top`, or `None` if they can't
+    /// be read or a name in it isn't UTF-8.
+    fn directories(&self, top: &Path, directory: &str) -> Option<Vec<String>> {
+        match self {
+            Self::Revision(revision) => {
+                let output =
+                    git::run(top, &["ls-tree", "-z", &format!("{revision}:{directory}")]).ok()?;
+                let directories = git::paths(&output).filter_map(|entry| {
+                    let (metadata, name) = entry.split_once('\t')?;
+                    let is_tree = metadata.split(' ').nth(1) == Some("tree");
+                    is_tree.then(|| name.to_owned())
+                });
+                Some(directories.collect())
+            }
+            Self::WorkingTree => {
+                let mut directories = Vec::new();
+                for entry in fs::read_dir(top.join(directory)).ok()? {
+                    let entry = entry.ok()?;
+                    let name = entry.file_name().into_string().ok()?;
+                    if entry.file_type().ok()?.is_dir() {
+                        directories.push(name);
+                    }
+                }
+                Some(directories)
+            }
+        }
+    }
+
+    /// The paths of the files below `directory`, relative to it, or `None` if they can't be
+    /// read or a name below it isn't UTF-8.
+    fn files(&self, top: &Path, directory: &str) -> Option<Vec<String>> {
+        match self {
+            Self::Revision(revision) => {
+                let tree = format!("{revision}:{directory}");
+                let output = git::run(top, &["ls-tree", "-r", "-z", "--name-only", &tree]).ok()?;
+                Some(git::paths(&output).map(str::to_owned).collect())
+            }
+            Self::WorkingTree => {
+                let mut files = Vec::new();
+                let mut pending = vec![String::new()];
+                while let Some(relative) = pending.pop() {
+                    for entry in fs::read_dir(top.join(directory).join(&relative)).ok()? {
+                        let entry = entry.ok()?;
+                        let name = entry.file_name().into_string().ok()?;
+                        let path = if relative.is_empty() {
+                            name
+                        } else {
+                            format!("{relative}/{name}")
+                        };
+                        if entry.file_type().ok()?.is_dir() {
+                            pending.push(path);
+                        } else {
+                            files.push(path);
+                        }
+                    }
+                }
+                Some(files)
+            }
+        }
+    }
 }
 
 /// The text of `path` at `revision`, if it exists there.

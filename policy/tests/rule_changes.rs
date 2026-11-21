@@ -377,6 +377,13 @@ fn a_build_script_of_a_member_outside_crates_is_a_rule() {
 #[test]
 fn a_module_named_build_is_code() {
     let repository = Repository::new();
+    repository.write("crates/app_core/Cargo.toml", MEMBER_MANIFEST);
+    repository.write(
+        "crates/app_core/tests/fixtures/proj/Cargo.toml",
+        NESTED_MANIFEST,
+    );
+    repository.commit("add a crate that nests a package");
+    repository.git(&["branch", "--force", "base"]);
     repository.write("crates/app/src/lib.rs", "//! The app.\n\nmod build;\n");
     repository.write("crates/app/src/build.rs", "//! Builds things.\n");
     repository.write("crates/app/tests/build.rs", "//! Tests the build.\n");
@@ -385,7 +392,8 @@ fn a_module_named_build_is_code() {
     let changed = repository.changed_files();
     assert!(
         changed.rules().is_empty(),
-        "only a crate's own `build.rs` is its build script: {:?}",
+        "a crate that nests no package has no build script below `src/` or `tests/`, whatever \
+         another crate nests: {:?}",
         changed.rules()
     );
     assert_eq!(
@@ -416,19 +424,10 @@ fn the_build_script_of_a_package_nested_in_a_crate_is_a_rule() {
         );
         repository.write(&format!("{directory}/build.rs"), "fn main() {}\n");
         repository.write(&format!("{directory}/src/lib.rs"), "//! Generates.\n");
-        repository.write("crates/app/src/lib.rs", "//! The app.\n\nmod build;\n");
-        repository.write("crates/app/src/build.rs", "//! Builds things.\n");
         repository.commit("add a package inside a crate");
         repository.git(&["branch", "--force", "base"]);
-        repository.write(
-            &format!("{directory}/build.rs"),
-            "fn main() {\n    println!(\"cargo::rustc-cfg=loose\");\n}\n",
-        );
-        repository.write("crates/app/src/build.rs", "//! Builds more things.\n");
-        repository.write(
-            "crates/app/src/lib.rs",
-            "//! The app, changed.\n\nmod build;\n",
-        );
+        repository.write(&format!("{directory}/build.rs"), LOOSE_BUILD_SCRIPT);
+        repository.write("crates/app/src/lib.rs", "//! The app, changed.\n");
         repository.commit("change the build script and the code");
 
         let changed = repository.changed_files();
@@ -439,8 +438,129 @@ fn the_build_script_of_a_package_nested_in_a_crate_is_a_rule() {
         );
         assert_eq!(
             changed.code(),
-            ["crates/app/src/build.rs", "crates/app/src/lib.rs"],
-            "a module named `build` with no `Cargo.toml` beside it is still code"
+            ["crates/app/src/lib.rs"],
+            "the crate's own source is code"
+        );
+    }
+}
+
+/// A build script that loosens the code it builds.
+const LOOSE_BUILD_SCRIPT: &str = "fn main() {\n    println!(\"cargo::rustc-cfg=loose\");\n}\n";
+
+/// The manifest of a package nested inside a crate.
+const NESTED_MANIFEST: &str = "[package]\nname = \"gen\"\n";
+
+/// The paths of a nested package's manifest and of a `build.rs` that a case-insensitive file
+/// system puts in the same directory, though their letters differ in the package's directory or
+/// in the crate's.
+const CASE_SPLIT_LAYOUTS: [(&str, &str); 2] = [
+    (
+        "crates/app/src/Gen/Cargo.toml",
+        "crates/app/src/gen/build.rs",
+    ),
+    (
+        "crates/App/src/gen/Cargo.toml",
+        "crates/app/src/gen/build.rs",
+    ),
+];
+
+/// A repository whose `base` adds the nested package manifest at `manifest`.
+fn repository_with_nested_manifest(manifest: &str) -> Repository {
+    let repository = Repository::new();
+    repository.write(manifest, NESTED_MANIFEST);
+    repository.commit("add a package inside a crate");
+    repository.git(&["branch", "--force", "base"]);
+    repository
+}
+
+#[test]
+fn a_committed_build_rs_whose_package_directory_differs_in_case_is_a_rule() {
+    for (manifest, build_script) in CASE_SPLIT_LAYOUTS {
+        let repository = repository_with_nested_manifest(manifest);
+        repository.write(build_script, LOOSE_BUILD_SCRIPT);
+        repository.write("crates/app/src/lib.rs", "//! The app, changed.\n");
+        repository.commit("add the build script and change the code");
+
+        let changed = repository.changed_files();
+        assert_eq!(
+            changed.rules(),
+            [build_script],
+            "a case-insensitive file system puts {build_script} beside {manifest}"
+        );
+        assert!(changed.mixes_rules_and_code(), "beside code, it fails");
+    }
+}
+
+#[test]
+fn a_working_tree_build_rs_whose_package_directory_differs_in_case_is_a_rule() {
+    for (manifest, build_script) in CASE_SPLIT_LAYOUTS {
+        let repository = repository_with_nested_manifest(manifest);
+        repository.write(build_script, LOOSE_BUILD_SCRIPT);
+        repository.write("crates/app/src/lib.rs", "//! The app, changed.\n");
+
+        let changed = repository.changed_files_to(&Head::WorkingTree);
+        assert_eq!(
+            changed.rules(),
+            [build_script],
+            "a case-insensitive file system puts {build_script} beside {manifest}"
+        );
+        assert!(changed.mixes_rules_and_code(), "beside code, it fails");
+    }
+}
+
+#[test]
+fn a_build_module_is_a_rule_in_a_crate_that_nests_a_package_elsewhere() {
+    let repository = repository_with_nested_manifest("crates/app/tests/fixtures/proj/Cargo.toml");
+    repository.write("crates/app/src/lib.rs", "//! The app.\n\nmod build;\n");
+    repository.write("crates/app/src/build.rs", "//! Builds things.\n");
+    repository.commit("add a build module");
+
+    assert_eq!(
+        repository.changed_files().rules(),
+        ["crates/app/src/build.rs"],
+        "a crate that nests a package anywhere may hold a build script anywhere below it"
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn a_build_rs_is_a_rule_when_git_cannot_list_its_crate() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt as _;
+
+    for (manifest, build_script) in [
+        (
+            Some("crates/app/src/gen/Cargo.toml"),
+            "crates/app/src/gen/build.rs",
+        ),
+        (None, "crates/app/src/build.rs"),
+    ] {
+        let repository = Repository::new();
+        if let Some(manifest) = manifest {
+            repository.write(manifest, NESTED_MANIFEST);
+        }
+        repository.write(build_script, "fn main() {}\n");
+        let directory = build_script
+            .rsplit_once('/')
+            .map_or("", |(directory, _)| directory);
+        fs::write(
+            repository
+                .path()
+                .join(directory)
+                .join(OsStr::from_bytes(b"data\xff")),
+            "",
+        )
+        .expect("Linux file systems accept a name that isn't UTF-8");
+        repository.commit("add a build script beside a name that isn't UTF-8");
+        repository.git(&["branch", "--force", "base"]);
+        repository.write(build_script, LOOSE_BUILD_SCRIPT);
+        repository.write("crates/app/src/lib.rs", "//! The app, changed.\n");
+        repository.commit("change the build script and the code");
+
+        assert_eq!(
+            repository.changed_files().rules(),
+            [build_script],
+            "a listing git can't give as UTF-8 counts as a package beside {build_script}"
         );
     }
 }

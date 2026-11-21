@@ -224,10 +224,11 @@ or `fix(config)!: reject unknown keys`. A `!` marks a breaking change.
 A pull request changes either the rules or the code, never both. Roughly, code is what's under
 `crates/` and every `.rs` file; the README, changelog, licenses, `Cargo.lock`, the root
 `Cargo.toml` dependency tables, and pages in `docs/` other than `docs/style.md` with their images
-are neither; and anything else is a rule, as is every `build.rs` beside a `Cargo.toml` or outside
-a crate's `src/`, `tests/`, `benches/` and `examples/`. So an untracked file that fits none of these, such as an
-`.envrc`, counts as a rule in `just rule-changes`: commit it in a rules pull request, or list it
-in `.git/info/exclude`. When a new rule would flag existing
+are neither; and anything else is a rule. Every `build.rs` is a rule too, except one below a
+crate's `src/`, `tests/`, `benches/` or `examples/` when the crate's directory holds no other
+`Cargo.toml`, in any letter case, before or after the change. So an untracked file that fits none
+of these, such as an `.envrc`, counts as a rule in `just rule-changes`: commit it in a rules pull
+request, or list it in `.git/info/exclude`. When a new rule would flag existing
 code, either fix the code in one pull request and add the rule in the next, or add the rule
 together with an `expect` and a real reason at each place it flags. A proc-macro dependency
 is code: list the crate in `proc_macro_crates` in one pull request, then add the dependency and
