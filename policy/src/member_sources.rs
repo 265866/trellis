@@ -2,7 +2,7 @@
 
 use std::fs;
 
-use proc_macro2::{Spacing, TokenStream, TokenTree};
+use proc_macro2::{Delimiter, Ident, Spacing, TokenStream, TokenTree};
 
 use crate::policy_error::PolicyError;
 use crate::token_context::TokenContext;
@@ -14,19 +14,27 @@ use crate::{case_insensitive, repository_files, source_path};
 const REMEDY: &str = "A crate's sources live under its own directory, so that a pull request \
                       that changes them counts as a code change. Move the file into the crate.";
 
-/// Checks that each member reads its Rust sources only from under its own directory, so a file
-/// outside `crates/`, which `trellis-policy rule-changes` might not count as code, can't become
-/// part of a crate:
+/// Checks that each member's module files lie under its own directory, so a file outside
+/// `crates/`, which `trellis-policy rule-changes` might not count as code, can't become a module
+/// of a crate:
 ///
-/// - every `path = ...` in an attribute, such as `#[path = "../../docs/notes.rs"]` or
-///   `#[cfg_attr(unix, path = "...")]`, is a string literal the check can read, not a macro
+/// - every `path` attribute, such as `#[path = "../../docs/notes.rs"]` or `#![path = "..."]`,
+///   and every `path = ...` that a `cfg_attr` applies, such as
+///   `#[cfg_attr(unix, path = "...")]`, holds a string literal the check can read, not a macro
 ///   variable or an expression, that names a `.rs` file inside the crate's directory, so the
-///   check also reads that file;
-/// - every `path = "..."` string in a macro's arguments, which the macro could turn into an
-///   attribute, does the same;
+///   check also reads that file. It finds these attributes inside macro arguments and inside
+///   other attributes' arguments too;
 /// - no file in or above a member's directory is a symbolic link.
 ///
-/// A target's `path` in `Cargo.toml` is checked with the rest of the manifest.
+/// The check doesn't see a `path` attribute that a macro writes, such as `#[$meta] mod a;` called
+/// with `path = "..."`, or built from tokens that never spell `path =`. In a macro the crate
+/// defines, the lints stop it: `macro_definition` lets only the crates `macro_crates` lists define
+/// macros, and `suppression_policy` rejects an attribute whose path is a macro variable. A
+/// declarative macro from a dependency that writes one is seen by neither, since
+/// `proc_macro_crates` limits only procedural macros.
+///
+/// `include!` isn't read here, because the `disabled_code` lint rejects it with no exception. A
+/// target's `path` in `Cargo.toml` is checked with the rest of the manifest.
 ///
 /// # Errors
 ///
@@ -100,60 +108,81 @@ fn problems(text: &str, depth: usize) -> Vec<String> {
     problems
 }
 
-/// Adds a problem to `problems` for each `path = ...` in `tokens`, which are in `context`, that
-/// names a file the crate can't read its sources from, or that the check can't read.
+/// Adds a problem to `problems` for each attribute in `tokens`, which are in `context`, that
+/// names a module's file the crate can't read its sources from, or that the check can't read.
+/// An attribute's own tokens are scanned as code too, so an attribute written inside another
+/// one's arguments is read, while a bare `path = ...` among those arguments isn't.
 fn scan(tokens: TokenStream, context: TokenContext, depth: usize, problems: &mut Vec<String>) {
     let trees: Vec<TokenTree> = tokens.into_iter().collect();
     for (index, tree) in trees.iter().enumerate() {
-        match tree {
-            TokenTree::Group(group) => {
-                scan(
-                    group.stream(),
-                    context.inside(&trees, index),
-                    depth,
-                    problems,
-                );
-            }
-            TokenTree::Ident(ident)
-                if context != TokenContext::Code
-                    && ident.to_string().trim_start_matches("r#") == "path"
-                    && is_assignment(trees.get(index + 1)) =>
-            {
-                if let Some(problem) = value_problem(trees.get(index + 2), context, depth) {
-                    problems.push(format!("line {}: {problem}", ident.span().start().line));
+        if let TokenTree::Group(group) = tree {
+            match context.inside(&trees, index) {
+                TokenContext::Attribute => {
+                    let attribute: Vec<TokenTree> = group.stream().into_iter().collect();
+                    attribute_problems(&attribute, depth, problems);
+                    scan(group.stream(), TokenContext::Code, depth, problems);
                 }
+                inner => scan(group.stream(), inner, depth, problems),
             }
-            TokenTree::Ident(_) | TokenTree::Punct(_) | TokenTree::Literal(_) => {}
         }
     }
 }
 
+/// Adds a problem to `problems` if `attribute`, the tokens inside an attribute's brackets, is a
+/// `path` attribute, or a `cfg_attr` that applies one, whose path the crate can't read its
+/// sources from, or that the check can't read.
+fn attribute_problems(attribute: &[TokenTree], depth: usize, problems: &mut Vec<String>) {
+    match attribute {
+        [TokenTree::Ident(name), TokenTree::Group(arguments)]
+            if is_named(name, "cfg_attr") && arguments.delimiter() == Delimiter::Parenthesis =>
+        {
+            let arguments: Vec<TokenTree> = arguments.stream().into_iter().collect();
+            for applied in arguments.split(is_comma).skip(1) {
+                attribute_problems(applied, depth, problems);
+            }
+        }
+        [TokenTree::Ident(name), equals, value @ ..]
+            if is_named(name, "path") && is_assignment(equals) =>
+        {
+            if let Some(problem) = value_problem(value.first(), depth) {
+                problems.push(format!("line {}: {problem}", name.span().start().line));
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Whether `ident` is `name`, written plainly or as a raw identifier.
+fn is_named(ident: &Ident, name: &str) -> bool {
+    ident.to_string().trim_start_matches("r#") == name
+}
+
+/// Whether `tree` is a `,`.
+fn is_comma(tree: &TokenTree) -> bool {
+    matches!(tree, TokenTree::Punct(punct) if punct.as_char() == ',')
+}
+
 /// Whether `tree` is a lone `=`, rather than part of `==` or `=>`.
-fn is_assignment(tree: Option<&TokenTree>) -> bool {
+fn is_assignment(tree: &TokenTree) -> bool {
     matches!(
         tree,
-        Some(TokenTree::Punct(punct)) if punct.as_char() == '=' && punct.spacing() == Spacing::Alone
+        TokenTree::Punct(punct) if punct.as_char() == '=' && punct.spacing() == Spacing::Alone
     )
 }
 
-/// What is wrong with `value`, the token after `path =` in `context` in a file `depth`
-/// directories below its crate's directory, if anything. In an attribute the value must be a
-/// plain string literal; in macro arguments, which a macro can turn into an attribute, only a
-/// string literal is checked.
-fn value_problem(value: Option<&TokenTree>, context: TokenContext, depth: usize) -> Option<String> {
+/// What is wrong with `value`, the token after `path =` in an attribute in a file `depth`
+/// directories below its crate's directory, if anything.
+fn value_problem(value: Option<&TokenTree>, depth: usize) -> Option<String> {
     let shown = value.map_or_else(|| "nothing".to_owned(), ToString::to_string);
-    let literal = match value {
-        Some(TokenTree::Literal(literal)) => literal.to_string(),
-        _ => String::new(),
+    let path = match value {
+        Some(TokenTree::Literal(literal)) => plain_string(&literal.to_string()),
+        _ => None,
     };
-    let Some(path) = plain_string(&literal) else {
-        let is_string = literal.starts_with('"') || literal.starts_with('r');
-        return (context == TokenContext::Attribute || is_string).then(|| {
-            format!(
-                "`path = {shown}` isn't a plain string literal, so the check can't tell which \
-                 file it names. Write the path as a string literal with no escapes but `\\\\`."
-            )
-        });
+    let Some(path) = path else {
+        return Some(format!(
+            "`path = {shown}` isn't a plain string literal, so the check can't tell which file it \
+             names. Write the path as a string literal with no escapes but `\\\\`."
+        ));
     };
     if source_path::escapes(depth, &path) {
         Some(format!(
@@ -203,7 +232,7 @@ mod tests {
             ("#[path = \"other.rs\"]\nmod a;\n", 1),
             ("#[path = \"../tests/x.rs\"]\nmod a;\n", 1),
             ("#[cfg_attr(unix, path = r\"unix/x.RS\")]\nmod a;\n", 0),
-            ("m!(path = \"../x.rs\");\n", 1),
+            ("m! { #[path = \"../x.rs\"] mod a; }\n", 1),
             ("fn f() { let path = \"../../../notes.txt\"; }\n", 0),
             (
                 "fn f(path: &str) -> bool { let path = path.len(); path == 1 }\n",
@@ -235,16 +264,54 @@ mod tests {
     }
 
     #[test]
+    fn a_path_argument_that_isnt_the_path_attribute_passes() {
+        for source in [
+            "fn f() { tracing::info!(path = \"/health\", \"served\"); }\n",
+            "#[utoipa::path(get, path = \"/users\")]\nfn users() {}\n",
+            "fn f() -> String { format!(\"{path}\", path = \"/etc/hosts\") }\n",
+            "fn f() { m! { let path = \"x.rs\"; } }\n",
+            "fn f() { m! { let path = \"../../../x.md\"; } }\n",
+            "#[cfg_attr(test, some_macro(path = \"/x\"))]\nfn f() {}\n",
+            "#[template(path = \"hello.html\")]\nstruct Hello;\n",
+            "#[tracing::instrument(fields(path = %uri))]\nfn f(uri: &str) {}\n",
+            "m!(path = \"../../../x.rs\");\n",
+            "crate::m! { mod a; path = \"\\x2e\\x2e/x.rs\" }\n",
+        ] {
+            assert_eq!(
+                problems(source, 0),
+                Vec::<String>::new(),
+                "{source:?} names no module's file"
+            );
+        }
+    }
+
+    #[test]
     fn paths_outside_the_crate_fail() {
         for (source, depth) in [
             ("#[path = \"../../../docs/notes.rs\"]\nmod notes;\n", 1),
             ("#[path = \"../../docs/notes.md\"]\nmod notes;\n", 0),
             ("#[cfg_attr(all(), path = \"../../x.rs\")]\nmod a;\n", 1),
+            (
+                "#[cfg_attr(unix, cfg_attr(test, path = \"../x.rs\"))]\nmod a;\n",
+                0,
+            ),
+            ("#[cfg_attr(unix, inline, path = \"../x.rs\")]\nmod a;\n", 0),
             ("mod a {\n    #![path = \"..\\\\..\\\\x.rs\"]\n}\n", 0),
             ("#[path = r#\"/tmp/x.rs\"#]\nmod a;\n", 3),
-            ("m!(path = \"../../../x.rs\");\n", 1),
-            ("crate::m! { mod a; path = \"../x.rs\" }\n", 0),
+            ("m! { #[path = \"../../../x.rs\"] mod a; }\n", 1),
+            (
+                "crate::m! { #[cfg_attr(unix, path = \"../x.rs\")] mod a; }\n",
+                0,
+            ),
             ("#[r#path = \"../x.rs\"]\nmod a;\n", 0),
+            (
+                "#[some_attr { #[path = \"../../../x.rs\"] mod a; }]\npub fn f() {}\n",
+                1,
+            ),
+            (
+                "#[cfg_attr(test, m(#[path = \"../x.rs\"] mod a;))]\nfn f() {}\n",
+                0,
+            ),
         ] {
             let problems = problems(source, depth);
             assert!(
@@ -259,7 +326,7 @@ mod tests {
         for source in [
             "#[path = \"data.txt\"]\nmod data;\n",
             "#[path = \"sub\"]\nmod sub {\n    mod a;\n}\n",
-            "m!(path = \"notes.md\");\n",
+            "m! { #[path = \"notes.md\"] mod notes; }\n",
         ] {
             let problems = problems(source, 0);
             assert!(
@@ -275,7 +342,7 @@ mod tests {
             "macro_rules! m { ($p:literal) => { #[path = $p] mod a; } }\n",
             "#[path = concat!(\"..\", \"/x.rs\")]\nmod a;\n",
             "#[path = \"\\x2e\\x2e/\\x2e\\x2e/x.rs\"]\nmod a;\n",
-            "m!(path = \"\\x2e\\x2e/x.rs\");\n",
+            "#[cfg_attr(unix, path = env!(\"X\"))]\nmod a;\n",
         ] {
             let problems = problems(source, 0);
             assert!(

@@ -134,10 +134,11 @@ Beyond the Google guide, the workspace also turns on:
   lint runs; that tool configuration files exist only at the root, with no variant name that would
   override them; that the workspace excludes nothing, pulls in no non-member crate by path, and
   loads only the trellis lints as its dylint library; that each crate's `Cargo.toml` holds only
-  allowed keys (no `test = false`, `harness = false`, `auto*` or `required-features`), inherits
-  `edition`, `rust-version` and `publish`, and keeps its sources, `#[path]` files included, inside
-  the crate, with no symbolic link in or above its directory; that `.cargo/config.toml` holds
-  only the Windows `+crt-static` flags; that a crate depends directly only on proc-macro crates
+  allowed keys (no `test = false`, `harness = false` outside a `[[bench]]`, `auto*` or
+  `required-features`), inherits `edition`, `rust-version` and `publish`, and keeps its sources,
+  `#[path]` files included, inside the crate, with no symbolic link in or above its directory;
+  that `.cargo/config.toml` holds only the Windows `+crt-static` flags; that a crate depends
+  directly only on proc-macro crates
   listed in `proc_macro_crates`, since a proc macro writes code the custom lints don't check;
   that the root `AGENTS.md` is the only file of instructions for coding agents; that every
   crate's commits reach the release notes through `changelog_include` in `release-plz.toml`; and

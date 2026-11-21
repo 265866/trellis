@@ -67,12 +67,17 @@ const INHERITED_PACKAGE_KEYS: [(&str, &str); 3] = [
 /// stop a target's tests from running or hide it from the checks.
 const TARGET_KEYS: [&str; 2] = ["name", "path"];
 
+/// The keys a `[[bench]]` table may have: a target's, and `harness`, since benchmark crates such
+/// as Criterion need `harness = false`, and `just test` runs no bench, so its harness turns off
+/// no test.
+const BENCH_KEYS: [&str; 3] = ["name", "path", "harness"];
+
 /// The tables a `[target.<platform>]` table may have.
 const PLATFORM_KEYS: [&str; 3] = ["dependencies", "dev-dependencies", "build-dependencies"];
 
 /// Checks that each member's `Cargo.toml` holds only the keys the workspace allows, so that no
 /// setting turns off a crate's tests or doctests (`test = false`, `doctest = false`,
-/// `harness = false`, `autotests = false`), builds code the checks don't see
+/// `harness = false` outside a bench, `autotests = false`), builds code the checks don't see
 /// (`required-features`, `proc-macro`), or reads sources from outside the crate's directory. The
 /// crate's edition, `rust-version` and `publish` come from `[workspace.package]`, and every
 /// target's `path`
@@ -95,11 +100,16 @@ fn problems(manifest: &Table) -> Vec<String> {
     for (key, value) in manifest {
         match key.as_str() {
             "package" => package_problems(value, &mut problems),
-            "lib" => target_problems("[lib]", value, &mut problems),
+            "lib" => target_problems("[lib]", value, &TARGET_KEYS, &mut problems),
             "bin" | "test" | "bench" | "example" => {
                 let name = format!("[[{key}]]");
+                let allowed = if key == "bench" {
+                    &BENCH_KEYS[..]
+                } else {
+                    &TARGET_KEYS[..]
+                };
                 for target in value.as_array().map_or(&[][..], Vec::as_slice) {
-                    target_problems(&name, target, &mut problems);
+                    target_problems(&name, target, allowed, &mut problems);
                 }
             }
             "target" => {
@@ -135,9 +145,10 @@ fn package_problems(package: &Value, problems: &mut Vec<String>) {
     }
 }
 
-/// Adds what is wrong with the target table `target`, written `name`, to `problems`.
-fn target_problems(name: &str, target: &Value, problems: &mut Vec<String>) {
-    unknown_keys(name, target, &TARGET_KEYS, problems);
+/// Adds what is wrong with the target table `target`, written `name`, which may have the keys
+/// `allowed`, to `problems`.
+fn target_problems(name: &str, target: &Value, allowed: &[&str], problems: &mut Vec<String>) {
+    unknown_keys(name, target, allowed, problems);
     if let Some(path) = target.get("path").and_then(Value::as_str)
         && source_path::escapes(0, path)
     {
@@ -200,6 +211,16 @@ mod tests {
     }
 
     #[test]
+    fn a_bench_with_its_own_harness_passes() {
+        let text = format!("{PACKAGE}[[bench]]\nname = \"b\"\nharness = false\n");
+        assert_eq!(
+            problems_in(&text),
+            Vec::<String>::new(),
+            "`just test` runs no bench, so a bench's harness turns off no test"
+        );
+    }
+
+    #[test]
     fn settings_that_turn_off_tests_fail() {
         for (setting, key) in [
             ("[lib]\ntest = false\n", "`[lib] test`"),
@@ -208,6 +229,15 @@ mod tests {
             (
                 "[[test]]\nname = \"t\"\nharness = false\n",
                 "`[[test]] harness`",
+            ),
+            ("[lib]\nharness = false\n", "`[lib] harness`"),
+            (
+                "[[bin]]\nname = \"b\"\nharness = false\n",
+                "`[[bin]] harness`",
+            ),
+            (
+                "[lib]\ncrate-type = [\"cdylib\", \"rlib\"]\n",
+                "`[lib] crate-type`",
             ),
             ("[[test]]\nname = \"t\"\ntest = false\n", "`[[test]] test`"),
             (

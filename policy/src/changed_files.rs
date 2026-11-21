@@ -14,9 +14,17 @@ use crate::{agent_files, case_insensitive, git, lint_expectations, source_path, 
 /// Directories whose every file is a rule: the workflows.
 const RULE_DIRECTORIES: [&str; 1] = [".github/"];
 
-/// File names that are rules in any directory: a crate's build script, which can hide code from
-/// the lints, and the check recipes.
-const RULE_NAMES: [&str; 3] = ["build.rs", "justfile", ".justfile"];
+/// File names that are rules in any directory: the check recipes.
+const RULE_NAMES: [&str; 2] = ["justfile", ".justfile"];
+
+/// The extensions of the images that the pages under `docs/` show, which are neither rules nor
+/// code, like the pages.
+const DOCS_IMAGE_EXTENSIONS: [&str; 6] = ["png", "svg", "jpg", "jpeg", "gif", "webp"];
+
+/// What the listing adds to an untracked file that is a rule only because no list knows it, and
+/// that no diff lists, so ignoring it takes it out of the change.
+const UNTRACKED_REMEDY: &str =
+    "(untracked; commit it in a rules pull request, or ignore it in .git/info/exclude)";
 
 /// Rule files that aren't tool configuration or agent instruction files: the documents that hold
 /// the rules no check decides and the review checklist, and the template answers that
@@ -40,11 +48,11 @@ const OTHER_FILES: [&str; 5] = [
 /// files, such as the lint, format and dependency settings, the build scripts, the check recipes,
 /// the workflows, `CONTRIBUTING.md`, the template answers, every agent instruction file, the root
 /// `Cargo.toml` outside its dependency tables, the part of a member `Cargo.toml` that holds the
-/// build script's settings, and any file the lists here don't know; the code is every other
-/// change under `crates/` and every Rust file elsewhere, except a Rust file whose change only
-/// adds, removes, moves or changes lint expectations, which is neither. A pull request changes
-/// one or the other, so review sees every loosened rule apart from the code that might have
-/// needed it.
+/// build script's settings, and any file the lists here don't know, which the listing marks when
+/// it is only untracked; the code is every other change under `crates/` and every Rust file
+/// elsewhere, except a Rust file whose change only adds, removes, moves or changes lint
+/// expectations, which is neither. A pull request changes one or the other, so review sees every
+/// loosened rule apart from the code that might have needed it.
 #[derive(Debug, Default)]
 pub struct ChangedFiles {
     /// The changed rule files.
@@ -70,20 +78,27 @@ impl ChangedFiles {
         let merge_base = git::run(&top, &["merge-base", base, head_revision])?;
         let merge_base = merge_base.trim();
         let mut paths = BTreeSet::new();
+        let mut untracked = BTreeSet::new();
         let diff = ["diff", "--name-only", "--no-renames", "-z"];
         let listings: Vec<Vec<&str>> = match head {
             Head::Commit(revision) => vec![[&diff[..], &[merge_base, revision.as_str()]].concat()],
-            Head::WorkingTree => vec![
-                [&diff[..], &["--cached", merge_base]].concat(),
-                [&diff[..], &[merge_base]].concat(),
-                vec!["ls-files", "-z", "--others", "--exclude-standard"],
-            ],
+            Head::WorkingTree => {
+                let output = git::run(&top, &["ls-files", "-z", "--others", "--exclude-standard"])?;
+                untracked.extend(git::paths(&output).map(str::to_owned));
+                vec![
+                    [&diff[..], &["--cached", merge_base]].concat(),
+                    [&diff[..], &[merge_base]].concat(),
+                ]
+            }
         };
         for arguments in listings {
             let output = git::run(&top, &arguments)?;
             paths.extend(git::paths(&output).map(str::to_owned));
         }
+        untracked.retain(|path| !paths.contains(path));
+        paths.extend(untracked.iter().cloned());
         let mut changed = Self::default();
+        let mut nesting = BTreeMap::new();
         let versions = |path: &str| {
             let before = show(&top, merge_base, path);
             let after = match head {
@@ -93,8 +108,21 @@ impl ChangedFiles {
             (before, after)
         };
         for path in paths {
-            match role(&path) {
-                Role::Rule => changed.rules.push(path),
+            let role = match role(&path) {
+                Role::Code if is_named_build_script(&path) => {
+                    let member = path.split('/').nth(1).unwrap_or_default();
+                    let nests = *nesting
+                        .entry(member.to_owned())
+                        .or_insert_with(|| nests_a_package(&top, merge_base, head, member));
+                    if nests { Role::Rule } else { Role::Code }
+                }
+                role => role,
+            };
+            match role {
+                Role::Unlisted if untracked.contains(&path) => {
+                    changed.rules.push(format!("{path} {UNTRACKED_REMEDY}"));
+                }
+                Role::Rule | Role::Unlisted => changed.rules.push(path),
                 Role::Code if source_path::is_rust(&path) => {
                     let (before, after) = versions(&path);
                     if !lint_expectations::only_expectations_changed(
@@ -155,6 +183,9 @@ impl ChangedFiles {
 enum Role {
     /// A rule file.
     Rule,
+    /// A file none of the lists know, which is a rule, so a new tool's configuration file can't
+    /// land beside code.
+    Unlisted,
     /// Code that the rules check.
     Code,
     /// The root `Cargo.toml`, which holds rules and the workspace's dependency versions.
@@ -167,10 +198,9 @@ enum Role {
     Other,
 }
 
-/// What the file at `path`, relative to the repository root, is. A file none of the lists know
-/// is a rule, so a new tool's configuration file can't land beside code. Rule names match in any
-/// case, since a case-insensitive file system finds `Clippy.toml` or `Build.rs` for the name a
-/// tool looks for; the names that make a file code or neither match exactly.
+/// What the file at `path`, relative to the repository root, is. Rule names match in any case,
+/// since a case-insensitive file system finds `Clippy.toml` or `Build.rs` for the name a tool
+/// looks for; the names that make a file code or neither match exactly.
 fn role(path: &str) -> Role {
     if path == "Cargo.toml" {
         return Role::RootManifest;
@@ -184,6 +214,7 @@ fn role(path: &str) -> Role {
     }
     let is_rule = ToolConfig::of(path).is_some()
         || agent_files::is_agent_file(path)
+        || is_build_script(path)
         || RULE_NAMES
             .iter()
             .any(|rule| case_insensitive::eq(name, rule))
@@ -198,12 +229,14 @@ fn role(path: &str) -> Role {
             .strip_prefix("crates/")
             .and_then(|rest| rest.split_once('/'))
             .is_some_and(|(_, file)| !file.contains('/') && file.starts_with("LICENSE"));
-    let is_other = path.starts_with("LICENSE")
-        || is_crate_license
-        || (path.starts_with("docs/")
-            && Path::new(path)
-                .extension()
-                .is_some_and(|extension| extension.eq_ignore_ascii_case("md")));
+    let is_docs_file = path.starts_with("docs/")
+        && Path::new(path).extension().is_some_and(|extension| {
+            extension.eq_ignore_ascii_case("md")
+                || DOCS_IMAGE_EXTENSIONS
+                    .iter()
+                    .any(|image| extension.eq_ignore_ascii_case(image))
+        });
+    let is_other = path.starts_with("LICENSE") || is_crate_license || is_docs_file;
     if is_rule {
         Role::Rule
     } else if is_crate_license {
@@ -213,8 +246,38 @@ fn role(path: &str) -> Role {
     } else if is_other {
         Role::Other
     } else {
-        Role::Rule
+        Role::Unlisted
     }
+}
+
+/// Whether `path`, by its shape alone, is a rule as a package's build script: `build.rs` in any
+/// case and any directory, since Cargo runs the `build.rs` beside any package's `Cargo.toml` and
+/// no rule pins where members live. The exception is a file below a crate's `src/`, `tests/`,
+/// `benches/` or `examples/` directory, `crates/<crate>/src/build.rs` for one, which is a module,
+/// a test, a benchmark or an example unless a package is nested there. [`ChangedFiles::between`]
+/// still makes such a file a rule when the crate's directory holds any package manifest besides
+/// its own, at either side of the change, or when a side can't be read.
+fn is_build_script(path: &str) -> bool {
+    let directory = path.rsplit_once('/').map_or("", |(directory, _)| directory);
+    let mut segments = directory.split('/');
+    let in_target_directory = segments.next() == Some("crates")
+        && segments.next().is_some_and(|member| !member.is_empty())
+        && segments
+            .next()
+            .is_some_and(|top| ["src", "tests", "benches", "examples"].contains(&top));
+    is_named_build_script(path) && !in_target_directory
+}
+
+/// Whether the file at `path` is named `build.rs`, in any case.
+fn is_named_build_script(path: &str) -> bool {
+    let name = path.rsplit('/').next().unwrap_or(path);
+    case_insensitive::eq(name, "build.rs")
+}
+
+/// Whether `name` is a package manifest's file name, in any case, since a case-insensitive file
+/// system finds `cargo.toml` when Cargo looks for `Cargo.toml`.
+fn is_manifest(name: &str) -> bool {
+    case_insensitive::eq(name, "Cargo.toml")
 }
 
 /// Whether the root `Cargo.toml` changed anywhere but in `[workspace.dependencies]` and `[patch]`,
@@ -321,6 +384,116 @@ impl ManifestParts {
     }
 }
 
+/// Whether the crate directory `crates/<member>` may hold a package other than the crate itself at
+/// `merge_base` or at `head`, in the repository at `top`: whether a package manifest other than
+/// `crates/<member>/Cargo.toml` is anywhere below it, or a side can't be read. Every segment
+/// matches in any case, as a case-insensitive file system merges the directories. A side without
+/// the directory has no manifest there.
+fn nests_a_package(top: &Path, merge_base: &str, head: &Head, member: &str) -> bool {
+    let head = match head {
+        Head::WorkingTree => Side::WorkingTree,
+        Head::Commit(revision) => Side::Revision(revision),
+    };
+    [Side::Revision(merge_base), head]
+        .iter()
+        .any(|side| side.nests_a_package(top, member).unwrap_or(true))
+}
+
+/// One side of a change.
+enum Side<'revision> {
+    /// The tree of a revision.
+    Revision(&'revision str),
+    /// The working tree on disk.
+    WorkingTree,
+}
+
+impl Side<'_> {
+    /// Whether `crates/<member>` holds a package manifest other than its own, in any case, or
+    /// `None` if this side can't be read.
+    fn nests_a_package(&self, top: &Path, member: &str) -> Option<bool> {
+        for crates in self.directories(top, "")? {
+            if !case_insensitive::eq(&crates, "crates") {
+                continue;
+            }
+            for directory in self.directories(top, &crates)? {
+                if !case_insensitive::eq(&directory, member) {
+                    continue;
+                }
+                let nested = self
+                    .files(top, &format!("{crates}/{directory}"))?
+                    .iter()
+                    .filter_map(|file| file.rsplit_once('/'))
+                    .any(|(_, name)| is_manifest(name));
+                if nested {
+                    return Some(true);
+                }
+            }
+        }
+        Some(false)
+    }
+
+    /// The names of the directories in `directory`, relative to `top`, or `None` if they can't
+    /// be read or a name in it isn't UTF-8.
+    fn directories(&self, top: &Path, directory: &str) -> Option<Vec<String>> {
+        match self {
+            Self::Revision(revision) => {
+                let output =
+                    git::run(top, &["ls-tree", "-z", &format!("{revision}:{directory}")]).ok()?;
+                let directories = git::paths(&output).filter_map(|entry| {
+                    let (metadata, name) = entry.split_once('\t')?;
+                    let is_tree = metadata.split(' ').nth(1) == Some("tree");
+                    is_tree.then(|| name.to_owned())
+                });
+                Some(directories.collect())
+            }
+            Self::WorkingTree => {
+                let mut directories = Vec::new();
+                for entry in fs::read_dir(top.join(directory)).ok()? {
+                    let entry = entry.ok()?;
+                    let name = entry.file_name().into_string().ok()?;
+                    if entry.file_type().ok()?.is_dir() {
+                        directories.push(name);
+                    }
+                }
+                Some(directories)
+            }
+        }
+    }
+
+    /// The paths of the files below `directory`, relative to it, or `None` if they can't be
+    /// read or a name below it isn't UTF-8.
+    fn files(&self, top: &Path, directory: &str) -> Option<Vec<String>> {
+        match self {
+            Self::Revision(revision) => {
+                let tree = format!("{revision}:{directory}");
+                let output = git::run(top, &["ls-tree", "-r", "-z", "--name-only", &tree]).ok()?;
+                Some(git::paths(&output).map(str::to_owned).collect())
+            }
+            Self::WorkingTree => {
+                let mut files = Vec::new();
+                let mut pending = vec![String::new()];
+                while let Some(relative) = pending.pop() {
+                    for entry in fs::read_dir(top.join(directory).join(&relative)).ok()? {
+                        let entry = entry.ok()?;
+                        let name = entry.file_name().into_string().ok()?;
+                        let path = if relative.is_empty() {
+                            name
+                        } else {
+                            format!("{relative}/{name}")
+                        };
+                        if entry.file_type().ok()?.is_dir() {
+                            pending.push(path);
+                        } else {
+                            files.push(path);
+                        }
+                    }
+                }
+                Some(files)
+            }
+        }
+    }
+}
+
 /// The text of `path` at `revision`, if it exists there.
 fn show(repository: &Path, revision: &str, path: &str) -> Option<String> {
     git::run(repository, &["show", &format!("{revision}:{path}")]).ok()
@@ -333,11 +506,18 @@ mod tests {
     #[test]
     fn rule_files_are_rules_at_any_depth() {
         for path in [
+            "build.rs",
             "clippy.toml",
             "crates/app/clippy.toml",
             "crates/app/src/.rustfmt.toml",
             "crates/app/.cargo/config",
             "crates/app/build.rs",
+            "crates/a/b/build.rs",
+            "crates/build.rs",
+            "tools/x/build.rs",
+            "lints/build.rs",
+            "docs/build.rs",
+            "crates/app/SRC/build.rs",
             ".github/workflows/ci.yml",
             ".github/dependabot.yml",
             "justfile",
@@ -367,7 +547,7 @@ mod tests {
             "crates/app/Clippy.toml",
             "crates/app/.Cargo/Config.toml",
             "crates/app/Build.rs",
-            "crates/app/src/BUILD.RS",
+            "BUILD.RS",
             "crates/app/JUSTFILE",
             ".GitHub/workflows/ci.yml",
             ".Config/Nextest.toml",
@@ -405,6 +585,13 @@ mod tests {
             "crates/app/tests/app.rs",
             "crates/app/cargo.toml",
             "crates/app_core/src/lib.rs",
+            "crates/app/src/build.rs",
+            "crates/app/src/BUILD.RS",
+            "crates/app/src/image/build.rs",
+            "crates/app/tests/build.rs",
+            "crates/a/benches/build.rs",
+            "crates/a/examples/build.rs",
+            "crates/a/src/bin/build.rs",
             "crates/app/README.md",
             "docs/notes.rs",
             "src/main.rs",
@@ -540,6 +727,12 @@ mod tests {
             "docs/guides/setup.md",
             "docs/agents-overview.md",
             "docs/claude-setup.md",
+            "docs/img/arch.png",
+            "docs/arch.SVG",
+            "docs/img/photo.jpg",
+            "docs/img/photo.jpeg",
+            "docs/img/demo.gif",
+            "docs/img/demo.webp",
         ] {
             assert_eq!(role(path), Role::Other, "{path} should be neither");
         }
@@ -573,18 +766,21 @@ mod tests {
     }
 
     #[test]
-    fn files_no_list_knows_are_rules() {
+    fn files_no_list_knows_are_unlisted_rules() {
         for path in [
             ".gitignore",
             ".pre-commit-config.yaml",
             "cliff.toml",
             "docs/notes.txt",
+            "docs/img/arch.bmp",
+            "arch.png",
+            "img/arch.svg",
             "tools/check.sh",
             "lints/Cargo.toml",
             "readme.md",
             "notes.md",
         ] {
-            assert_eq!(role(path), Role::Rule, "{path} should be a rule");
+            assert_eq!(role(path), Role::Unlisted, "{path} should be a rule");
         }
     }
 
