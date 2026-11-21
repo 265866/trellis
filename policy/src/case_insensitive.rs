@@ -45,7 +45,53 @@ fn fold(character: char) -> char {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
+    use tempfile::TempDir;
+
     use super::*;
+
+    /// Asks the file system the tests run on which names it reads as an ASCII name, and checks
+    /// that [`eq`] calls each pair the same file. It writes a file for every one-letter and
+    /// two-letter ASCII name, and `ffi` and `ffl`, each holding its own name. Then it reads a
+    /// file named by each non-ASCII character alone: a read that succeeds returns the ASCII name
+    /// the file system chose. It reads `x`, the character, `y` the same way, for a character the
+    /// file system leaves out of a comparison, and a few names with dots and spaces at their ends.
+    #[test]
+    fn every_name_the_file_system_reads_as_an_ascii_name_matches_it() {
+        let directory = TempDir::new().expect("the temporary directory should be created");
+        let letters: Vec<char> = ('a'..='z').chain('0'..='9').collect();
+        let mut names: Vec<String> = letters.iter().map(char::to_string).collect();
+        for first in 'a'..='z' {
+            for second in 'a'..='z' {
+                names.push(format!("{first}{second}"));
+            }
+        }
+        names.extend(["ffi".to_owned(), "ffl".to_owned()]);
+        for name in &names {
+            fs::write(directory.path().join(name), name).expect("the file should be written");
+        }
+        let mut candidates: Vec<String> = Vec::new();
+        for character in '\u{80}'..='\u{1ffff}' {
+            candidates.push(character.to_string());
+            candidates.push(format!("x{character}y"));
+        }
+        for edge in ["xy.", "xy ", "xy..", "xy. ", " xy", "xy\t"] {
+            candidates.push(edge.to_owned());
+        }
+        let mut missed = Vec::new();
+        for candidate in candidates {
+            if let Ok(found) = fs::read_to_string(directory.path().join(&candidate))
+                && !eq(&candidate, &found)
+            {
+                missed.push(format!("{} reads `{found}`", candidate.escape_unicode()));
+            }
+        }
+        assert!(
+            missed.is_empty(),
+            "this file system reads these names as an ASCII name that `eq` tells apart: {missed:#?}"
+        );
+    }
 
     #[test]
     fn names_match_in_any_case() {
