@@ -236,21 +236,23 @@ becomes the commit on `main`. It must be a
 or `fix(config)!: reject unknown keys`. A `!` marks a breaking change.
 
 A pull request changes either the rules or the code, never both. Roughly, code is what's under
-`crates/` and every `.rs` file; the README, changelog, licenses, `Cargo.lock`, the root
-`Cargo.toml` dependency tables, and pages in `docs/` other than `docs/style.md` with their images
-are neither; and anything else is a rule. Every `build.rs` is a rule too, except one below a
-crate's `src/`, `tests/`, `benches/` or `examples/` when the crate's directory holds no other
-`Cargo.toml`, in any letter case, before or after the change. The file a crate's `build` key
-names is a rule as well, as is every `.gitignore`, `.ignore`, `bunfig.toml`, `.npmrc`, TypeScript
-settings file (a `.json` file whose name starts with `tsconfig`) and git submodule, wherever it
-sits, and every path Windows reads as another path: one with a part that ends in a dot or a space,
-or that holds a `:` or a `\`. `just policy` fails a TypeScript settings file whose `extends` or
-`references` names anything but another one in the repository, by a path that starts with `./` or
-`../`, so every file a `tsconfig.json` reaches is a rule. A crate whose directory moves whole,
-renamed with no file in it changed, is neither rule nor code, so a crate's directory can move in
-one pull request beside the `path` of each dependency on it. A file in the crate that reads its own location, such as a build script that reads
-`CARGO_MANIFEST_DIR`, can then do something else, as a code change can change what a listed build
-script emits.
+`crates/` and every `.rs` file; the README, changelog, licenses, `Cargo.lock`, the root `Cargo.toml`
+dependency tables, and pages in `docs/` other than `docs/style.md` with their images are neither;
+and anything else is a rule. Every `build.rs` is a rule too, except one below a crate's `src/`,
+`tests/`, `benches/` or `examples/` when the crate's directory holds no other `Cargo.toml`, in any
+letter case, before or after the change. The file a crate's `build` key names is a rule as well, as
+is every `.gitignore`, `.ignore`, `bunfig.toml`, `.npmrc`, TypeScript settings file (a `.json` file
+whose name starts with `tsconfig`) and git submodule, wherever it sits, and every path Windows reads
+as another path: one with a part that ends in a dot or a space, or that holds a `:` or a `\`.
+`just policy` fails a TypeScript settings file whose `extends` or `references` names anything but
+another one in the repository, by a path that starts with `./` or `../`, so every file a
+`tsconfig.json`
+reaches is a rule. It also fails one that TypeScript could read another way than `just policy` does,
+such as one with a lone carriage return. A crate whose directory moves whole, renamed with no file
+in it changed, is neither rule nor code, so a crate's directory can move in one pull request beside
+the `path` of each dependency on it. A file in the crate that reads its own location, such as a
+build script that reads `CARGO_MANIFEST_DIR`, can then do something else, as a code change can
+change what a listed build script emits.
 {%- if web_ui %} The web UI's `package.json`, its scripts and its sources are code, outside
 the rule split, so a code pull request can change what its `check` script runs, including which
 settings file `tsc` reads and the flags it gets.

@@ -2216,6 +2216,23 @@ fn paths_a_case_insensitive_file_system_reads_as_one_fail() {
     );
 }
 
+/// Windows reads `a`, the ypogegrammeni and an acute accent as the same name as `a`, a small iota
+/// and the accent, and canonical caseless folding keeps them apart, so the character fails by
+/// itself.
+#[test]
+fn a_path_with_a_combining_ypogegrammeni_fails() {
+    let project = Project::new();
+    project.git(&["init", "--quiet"]);
+    project.git(&["add", "--all"]);
+    track_respelled(&project, "docs/install.md", "docs/a\u{345}\u{301}.md");
+    track_respelled(&project, "docs/install.md", "docs/a\u{3b9}\u{301}.md");
+    project.check().assert_reports(
+        1,
+        "error: [workspace_shape] docs/a\u{345}\u{301}.md: This path holds the combining Greek \
+         ypogegrammeni (U+0345)",
+    );
+}
+
 /// Letters outside ASCII merge in either case, as `É` and `é` do on macOS and Windows, and an
 /// accented letter written as one character merges with the letter and a combining accent on
 /// macOS. A letter and the same letter with an accent stay apart.

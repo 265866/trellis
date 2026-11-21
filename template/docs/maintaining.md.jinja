@@ -176,7 +176,7 @@ request removes the old name's key and the old name from each list. Move the dir
 the package in separate pull requests.
 
 This doesn't cover the package `{{ crate_name }}`, which carries the project's name. Rule files
-name it too: the release configuration
+name it too: the root `Cargo.toml`, `dylint.toml`, the release configuration
 {%- if kind != 'library' %}, the justfile{% if kind == 'service' %}, the Containerfile{% endif %}
 and the workflows{% endif %}. So renaming it changes rules and code together. To rename it,
 follow "Name and kind" under [Change an answer](#change-an-answer).

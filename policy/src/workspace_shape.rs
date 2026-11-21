@@ -201,8 +201,12 @@ fn member_places(
 
 /// Reports each set of paths that a file system on macOS or Windows may read as one path, among
 /// the files git tracks or would add, the directories that hold them, and `crate_entries`. Each
-/// name is compared by [`case_insensitive::merge_key`]. A set under two such directories isn't
-/// reported again, since everything below them merges too.
+/// name is compared by [`case_insensitive::merge_key`]. A set below a directory that is itself
+/// reported isn't reported again, since everything below that directory merges too.
+///
+/// A path that holds the combining Greek ypogegrammeni (U+0345) fails on its own. It is the one
+/// combining mark whose upper case sorts apart from it among the marks on a letter, so macOS and
+/// Windows each merge names with it that the other keeps apart, and no one folding finds both.
 ///
 /// # Errors
 ///
@@ -213,6 +217,16 @@ fn merged_paths(
     violations: &mut Vec<Violation>,
 ) -> Result<(), PolicyError> {
     let files = repository_files::list(workspace.root())?;
+    let with_ypogegrammeni = files.iter().filter(|path| path.contains('\u{345}'));
+    for path in with_ypogegrammeni {
+        violations.push(Violation::new(
+            path.clone(),
+            "This path holds the combining Greek ypogegrammeni (U+0345), which macOS and Windows \
+             fold in different orders, so no check can tell which other path a checkout there \
+             reads as this one. Rename it without that character."
+                .to_owned(),
+        ));
+    }
     let mut entries: Vec<MergedEntry<'_>> = Vec::new();
     let mut ids: HashMap<(Option<usize>, String), usize> = HashMap::new();
     let mut previous: Vec<(&str, usize)> = Vec::new();
