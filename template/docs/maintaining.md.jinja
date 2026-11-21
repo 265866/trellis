@@ -188,6 +188,10 @@ or the processors Linux and Windows build for, `x86_64` and `aarch64` (ARM64):
 ```sh
 uvx copier update --defaults --vcs-ref=:current: --data 'architectures=[x86_64]'
 ```
+{%- else %}
+
+Adding Linux or Windows asks for the processors again, and the update takes the default,
+{{ 'x86-64 and ARM64' if visibility == 'public' else 'x86-64' }}. To choose, pass them too, such as `--data 'architectures=[x86_64]'`.
 {%- endif %}
 {%- endif %}
 
@@ -273,15 +277,18 @@ hold need more than the update, and two can't change this way at all:
   outside `crates/` for it, but the crates keep their names and scaffold, so `just policy` fails,
   or passes on crates the new answer doesn't describe. To rename the project or change what it
   ships, generate a new project and move the code into it.
-- **Description.** The update changes `README.md`
-{%- if kind == 'service' %}, `CONTRIBUTING.md` and the image's description label in
-  `Containerfile`{% else %} and `CONTRIBUTING.md`{% endif %}. Each crate's `description` in its
-  `Cargo.toml` and its `//!` crate docs keep the old sentence; change them in a code pull
-  request.
+- **Description.** The update changes `README.md` and `CONTRIBUTING.md`
+{%- if kind == 'service' %}, and the image's
+  description label in `Containerfile`
+{%- endif %}. Each crate's
+  `description` in its `Cargo.toml` and its `//!` crate docs keep the old sentence; change them
+  in a code pull request.
 - **License.** Between `MIT` and `MIT OR Apache-2.0`, the update is all it takes.
 {%- if published %}
   A published crate needs a license, so the update refuses `license=none` unless you also pass
-  `--data publish_crate=false`.
+  `--data publish_crate=false`. Then also remove `license.workspace = true` from every crate's
+  `Cargo.toml`, in the update's pull request; Cargo can't load the workspace until each crate's
+  line is gone. A crate's license line is a rule setting, so the pull request stays a rule change.
 {%- else %}
 {%- if license == 'none' %} To license
   the project, also add `license.workspace = true` to `[package]` in every crate's `Cargo.toml`,

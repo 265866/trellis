@@ -303,11 +303,12 @@ fn role(path: &str) -> Role {
 
 /// Whether `path`, by its shape alone, is a rule as a package's build script: `build.rs` in any
 /// case and any directory, since Cargo runs the `build.rs` beside any package's `Cargo.toml`, and
-/// a change can add a package anywhere before `trellis-policy check` sees it. The exception is a file below a crate's `src/`, `tests/`,
-/// `benches/` or `examples/` directory, `crates/<crate>/src/build.rs` for one, which is a module,
-/// a test, a benchmark or an example unless a package is nested there. [`ChangedFiles::between`]
-/// still makes such a file a rule when the crate's directory holds any package manifest besides
-/// its own, at either side of the change, or when a side can't be read.
+/// a change can add a package anywhere before `trellis-policy check` sees it. The exception is a
+/// file below a crate's `src/`, `tests/`, `benches/` or `examples/` directory,
+/// `crates/<crate>/src/build.rs` for one, which is a module, a test, a benchmark or an example
+/// unless a package is nested there. [`ChangedFiles::between`] still makes such a file a rule
+/// when the crate's directory holds any package manifest besides its own, at either side of the
+/// change, or when a side can't be read.
 fn is_build_script(path: &str) -> bool {
     let directory = path.rsplit_once('/').map_or("", |(directory, _)| directory);
     let mut segments = directory.split('/');
