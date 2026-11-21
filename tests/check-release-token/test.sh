@@ -6,6 +6,7 @@
 # in its last 14 days passes with a warning, and set-release-token stores only a token that passes.
 set -euo pipefail
 cd "$1"
+repo=265866/$(sed -n 's/^project_name: //p' .copier-answers.yml)
 out=$(mktemp -d)
 trap 'rm -rf "$out"' EXIT
 mkdir "$out/bin"
@@ -53,11 +54,11 @@ expect() {
 expect good-token 200 422 422 "$far" 0 "ok: the token can write pull requests"
 expect good-token 200 422 422 '' 0 "ok: the token can write contents"
 expect bad-token 200 422 422 "$far" 1 "error: GitHub rejects the token: it has expired, been revoked or been mistyped. docs/maintaining.md says which access the token needs, under Before the first push, and how to replace it, under Renew the release token."
-expect good-token 404 422 422 "$far" 1 "error: The token has no access to 265866/demo-shape. docs/maintaining.md says which access the token needs, under Before the first push, and how to replace it, under Renew the release token."
-expect good-token 200 422 403 "$far" 1 "error: The token can't write pull requests in 265866/demo-shape. docs/maintaining.md says which access the token needs, under Before the first push, and how to replace it, under Renew the release token."
+expect good-token 404 422 422 "$far" 1 "error: The token has no access to $repo. docs/maintaining.md says which access the token needs, under Before the first push, and how to replace it, under Renew the release token."
+expect good-token 200 422 403 "$far" 1 "error: The token can't write pull requests in $repo. docs/maintaining.md says which access the token needs, under Before the first push, and how to replace it, under Renew the release token."
 expect good-token 200 422 422 "$near" 0 "warning: The release token expires $near. Replace it before then; docs/maintaining.md says which access the token needs, under Before the first push, and how to replace it, under Renew the release token."
-GITHUB_ACTIONS_VALUE=true expect good-token 200 422 403 "$far" 1 "::error::The token can't write pull requests in 265866/demo-shape. docs/maintaining.md says which access the token needs, under Before the first push, and how to replace it, under Renew the release token."
-FAKE_PUSH=false expect good-token 200 422 422 "$far" 1 "error: The token's account can't push to 265866/demo-shape. Create the token with an account that has write access. docs/maintaining.md says which access the token needs, under Before the first push, and how to replace it, under Renew the release token."
+GITHUB_ACTIONS_VALUE=true expect good-token 200 422 403 "$far" 1 "::error::The token can't write pull requests in $repo. docs/maintaining.md says which access the token needs, under Before the first push, and how to replace it, under Renew the release token."
+FAKE_PUSH=false expect good-token 200 422 422 "$far" 1 "error: The token's account can't push to $repo. Create the token with an account that has write access. docs/maintaining.md says which access the token needs, under Before the first push, and how to replace it, under Renew the release token."
 expect '' 200 422 422 "$far" 1 "error: RELEASE_PLZ_TOKEN is empty or missing. docs/maintaining.md says which access the token needs, under Before the first push, and how to replace it, under Renew the release token."
 
 secret="$out/secret"

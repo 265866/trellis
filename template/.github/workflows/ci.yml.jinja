@@ -151,10 +151,66 @@ jobs:
           sudo apt-get install --yes --no-install-recommends musl-tools
           echo "CC_${TARGET//-/_}=musl-gcc" >> "$GITHUB_ENV"
 {%- endif %}
+{#- A project generated with `trellis_path` loads the lints from that checkout, whose changes the
+    key below can't see, so it caches nothing. #}
+{%- set dylint_cache = not trellis_path and (kind == 'service' or 'linux' in platforms) %}
 {%- raw %}
 
       - run: just lint
+{%- endraw %}
+{%- if dylint_cache %}
+{%- raw %}
+
+      # cargo-dylint builds the lint library under target/dylint/libraries, from its git checkout,
+      # and its driver under ~/.dylint_drivers. rust-cache keeps only what the project's own
+      # dependencies build, so without this both rebuild on every run. The key holds everything
+      # the two builds depend on: the runner's system, image and processor, the lints' nightly,
+      # the cargo-dylint version, and the libraries entry with its pinned trellis commit. It has no
+      # restore-keys, so a change to any of them misses. Only the builds are cached: the lint
+      # results for the project's own crates, under target/dylint/target, are not, so every run
+      # lints them again. Only the Linux rows have been measured with it, so only they use it.
+      - name: Compute the lint build's cache key
+        if: runner.os == 'Linux'
+        id: dylint-key
+        shell: bash
+        run: |
+          lints_nightly=$(just --evaluate lints_nightly)
+          dylint_version=$(cargo dylint --version)
+          libraries=$(cargo metadata --locked --no-deps --format-version 1 | jq --compact-output '.metadata.dylint.libraries')
+          libraries_hash=$(sha256sum <<< "$libraries" | cut -c1-16)
+          echo "key=dylint-$RUNNER_OS-$ImageOS-$RUNNER_ARCH-$lints_nightly-${dylint_version##* }-$libraries_hash" >> "$GITHUB_OUTPUT"
+
+      - name: Restore the lint library and driver
+        if: runner.os == 'Linux'
+        id: dylint-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          key: ${{ steps.dylint-key.outputs.key }}
+          path: |
+            target/dylint/libraries
+            ~/.dylint_drivers
+            ~/.cargo/git/checkouts/trellis-*
+{% endraw %}
+{%- endif %}
+{%- raw %}
       - run: just dylint
+{%- endraw %}
+{%- if dylint_cache %}
+{%- raw %}
+
+      # Saved only from main, like rust-cache, and only after `just dylint` passed.
+      - name: Save the lint library and driver
+        if: runner.os == 'Linux' && github.ref == 'refs/heads/main' && steps.dylint-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          key: ${{ steps.dylint-key.outputs.key }}
+          path: |
+            target/dylint/libraries
+            ~/.dylint_drivers
+            ~/.cargo/git/checkouts/trellis-*
+{%- endraw %}
+{%- endif %}
+{%- raw %}
 
       # The tests and the release build use the target a release ships. The lints don't: the
       # library cargo-dylint loads can't be built for musl, and code can't branch on what differs

@@ -11,11 +11,13 @@ fn main() -> io::Result<ExitCode> {
     match arguments.as_slice() {
         [] => run(),
         [flag] if flag == "--version" => {
-            writeln!(io::stdout().lock(), "{}", {{ crate_name }}_core::version_line())?;
+            let line = {{ crate_name }}_core::version_line();
+            writeln!(io::stdout().lock(), "{line}")?;
             Ok(ExitCode::SUCCESS)
         }
         _ => {
-            writeln!(io::stderr().lock(), "usage: {{ project_name }} [--version]")?;
+            let name = env!("CARGO_BIN_NAME");
+            writeln!(io::stderr().lock(), "usage: {name} [--version]")?;
             Ok(ExitCode::from(2))
         }
     }
@@ -25,6 +27,7 @@ fn main() -> io::Result<ExitCode> {
 fn run() -> io::Result<ExitCode> {
     use std::io::Write as _;
 
-    writeln!(io::stdout().lock(), "{}", {{ crate_name }}_core::version_line())?;
+    let line = {{ crate_name }}_core::version_line();
+    writeln!(io::stdout().lock(), "{line}")?;
     Ok(ExitCode::SUCCESS)
 }

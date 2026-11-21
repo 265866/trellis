@@ -4,7 +4,8 @@ use std::process::{Command, Output};
 
 /// Runs the built `{{ project_name }}` with `arguments`.
 fn run(arguments: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_{{ project_name }}"))
+    let binary = env!("CARGO_BIN_EXE_{{ project_name }}");
+    Command::new(binary)
         .args(arguments)
         .output()
         .expect("the binary should start")
@@ -21,9 +22,10 @@ fn version_prints_the_version_line_and_succeeds() {
         "`--version` should exit 0: {output:?}"
 {%- endif %}
     );
+    let name = "{{ project_name }}";
     assert_eq!(
         String::from_utf8_lossy(&output.stdout),
-        concat!("{{ project_name }} ", env!("CARGO_PKG_VERSION"), "\n"),
+        format!("{name} {}\n", env!("CARGO_PKG_VERSION")),
         "`--version` should print the name and the version"
     );
 }

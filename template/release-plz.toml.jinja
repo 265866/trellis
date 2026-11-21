@@ -28,7 +28,13 @@ changelog_update = false
 name = "{{ crate_name }}"
 changelog_path = "./CHANGELOG.md"
 changelog_update = true
-changelog_include = [{{ '' if kind == 'library' else '"' ~ crate_name ~ '_core"' }}]
+{%- if kind == 'library' %}
+changelog_include = []
+{%- else %}
+changelog_include = [
+    "{{ crate_name }}_core",
+]
+{%- endif %}
 git_tag_enable = true
 {%- if kind == 'library' %}
 git_release_enable = true

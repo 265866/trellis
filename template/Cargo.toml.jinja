@@ -60,7 +60,9 @@ readme_sections = ["{{ usage_section }}", "Documentation"{{ license_section }}]
 {{ crate_name }} = []
 {%- else -%}
 {{ crate_name }}_core = []
-{{ crate_name }} = ["{{ crate_name }}_core"]
+{{ crate_name }} = [
+    "{{ crate_name }}_core",
+]
 {%- endif %}
 
 [workspace.package]
