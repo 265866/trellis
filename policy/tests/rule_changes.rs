@@ -1445,10 +1445,13 @@ fn a_crate_directory_that_moves_whole_is_neither_rule_nor_code() {
     );
 }
 
+/// The rename goes through another name, since `git mv crates/engine crates/Engine` on a file
+/// system that ignores case finds the destination there already and moves the crate into it.
 #[test]
 fn a_crate_directory_renamed_only_in_letter_case_moves_whole() {
     let repository = repository_with_an_engine();
-    move_the_engine(&repository, "Engine");
+    repository.git(&["mv", "crates/engine", "crates/engine-on-its-way"]);
+    move_the_engine_from(&repository, "engine-on-its-way", "Engine");
     repository.commit("rename the engine's directory");
 
     assert!(
