@@ -178,7 +178,7 @@ jobs:
           path: |
             ~/.cargo/bin/cargo-dylint.exe
             ~/.cargo/bin/dylint-link.exe
-          key: dylint-tools-${{ runner.os }}-${{ runner.arch }}-cargo-dylint@6.3.0+dylint-link@6.3.0
+          key: dylint-tools-${{ runner.os }}-${{ runner.arch }}-cargo-dylint@6.3.0/dylint-link@6.3.0
 
       - name: Build the dylint tools
         if: runner.os == 'Windows' && steps.dylint-tools.outputs.cache-hit != 'true'
