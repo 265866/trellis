@@ -118,9 +118,9 @@ mod tests {
     /// two-letter ASCII name, and `ffi` and `ffl`, each holding its own name. Then it reads a
     /// file named by each non-ASCII character alone: a read that succeeds returns the ASCII name
     /// the file system chose. It reads `x`, the character, `y` the same way, for a character the
-    /// file system leaves out of a comparison, and a few names with dots and spaces at their ends.
-    /// Windows reads a name with dots or spaces at its end as the name without them. Git refuses
-    /// to check such a name out there, so it reaches no checkout, and the test accepts it then.
+    /// file system leaves out of a comparison, and a few names with dots and spaces at their ends
+    /// or a stream after a `:`. Windows reads those as the name without them. Git refuses to
+    /// check such a name out there, so it reaches no checkout, and the test accepts it then.
     #[test]
     fn every_name_the_file_system_reads_as_an_ascii_name_matches_it() {
         let directory = TempDir::new().expect("the temporary directory should be created");
@@ -140,7 +140,7 @@ mod tests {
             candidates.push(character.to_string());
             candidates.push(format!("x{character}y"));
         }
-        for edge in ["xy.", "xy ", "xy..", "xy. ", " xy", "xy\t"] {
+        for edge in ["xy.", "xy ", "xy..", "xy. ", " xy", "xy\t", "xy::$DATA"] {
             candidates.push(edge.to_owned());
         }
         assert!(
