@@ -473,7 +473,9 @@ check-github:
         else [.bypass_actors[] | "\(.actor_type) \(.actor_id) (\(.bypass_mode))"] | join(", ") end' 2> "$err") \
         || { cat "$err" >&2; exit 1; }
       verdict "what may bypass main's ruleset" "$bypass" nothing
-      rules=$(gh api "repos/$repo/rules/branches/main" --jq "$rules_jq" 2> "$err") || { cat "$err" >&2; exit 1; }
+      # Another ruleset's rules don't count: this reads who may bypass only the one named main.
+      rules=$(gh api "repos/$repo/rules/branches/main" \
+        --jq "[.[] | select(.ruleset_id == $ruleset_id)] | $rules_jq" 2> "$err") || { cat "$err" >&2; exit 1; }
       if [ "$rules" = '; ' ]; then
         echo "wrong: main's protection: the ruleset main is active but applies no rule to the branch main; run just setup-github"
         wrong=1

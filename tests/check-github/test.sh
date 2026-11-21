@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Runs `just check-github` in the generated project $1 against the fixtures next to this script,
 # with tests/check-github/gh as gh. A correct repository must pass. One with merge commits allowed,
-# one whose ruleset main is disabled or in evaluate mode, lets an actor bypass it or applies no
-# rule to main, and one without it must each fail and say why. A private repository whose plan
-# GitHub says lacks rulesets must pass with main's protection unavailable.
+# one whose ruleset main is disabled or in evaluate mode, lets an actor bypass it, leaves rules
+# to another ruleset or applies no rule to main, and one without it must each fail and say why. A
+# private repository whose plan GitHub says lacks rulesets must pass with main's protection
+# unavailable.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 cd "$1"
@@ -51,6 +52,9 @@ expect bypass 1 'wrong: what may bypass main'"'"'s ruleset: "RepositoryRole 5 (a
 # GitHub leaves the list out for an account that may not change the ruleset.
 variant bypass-hidden rulesets-1 'del(.bypass_actors)'
 expect bypass-hidden 1 'wrong: what may bypass main'"'"'s ruleset: "unreadable", expected "nothing"'
+# A second ruleset, which anything might bypass, holds the pull request rule and the checks.
+variant split rules-branches-main 'map(if .type == "pull_request" or .type == "required_status_checks" then .ruleset_id = 2 end)'
+expect split 1 'wrong: main'"'"'s required checks and rules: "; deletion, non_fast_forward", expected "CI passed from GitHub Actions, PR title from GitHub Actions, Rule changes stand alone from GitHub Actions; deletion, non_fast_forward, pull_request"'
 variant another-branch rules-branches-main '[]'
 expect another-branch 1 "wrong: main's protection: the ruleset main is active but applies no rule to the branch main; run just setup-github"
 variant deleted rulesets '[]'

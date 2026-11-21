@@ -92,7 +92,8 @@ Commit the generated project on a branch named `main` (`git init --initial-branc
 5. Check the settings. `just check-github` reports each one as ok or wrong, and fails if any is
    wrong. It checks that the `RELEASE_PLZ_TOKEN` secret exists, but GitHub never shows it a
    secret's value, so the token's access is left to the check in step 4. A missing `main` ruleset,
-   one that isn't active and one that anything may bypass are each wrong.
+   one that isn't active and one that anything may bypass
+   are each wrong.
 {%- if visibility == 'private' %} When GitHub answers that the account's plan can't protect
    `main` in a private repository, it reports `main`'s protection as unavailable rather than wrong.
 {%- endif %}

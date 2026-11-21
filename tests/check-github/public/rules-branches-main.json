@@ -1,8 +1,8 @@
 [
-  {"type": "deletion"},
-  {"type": "non_fast_forward"},
-  {"type": "pull_request"},
-  {"type": "required_status_checks", "parameters": {"required_status_checks": [
+  {"type": "deletion", "ruleset_id": 1},
+  {"type": "non_fast_forward", "ruleset_id": 1},
+  {"type": "pull_request", "ruleset_id": 1},
+  {"type": "required_status_checks", "ruleset_id": 1, "parameters": {"required_status_checks": [
     {"context": "PR title", "integration_id": 15368},
     {"context": "CI passed", "integration_id": 15368},
     {"context": "Rule changes stand alone", "integration_id": 15368}]}}
