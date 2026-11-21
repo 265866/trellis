@@ -10,12 +10,12 @@ crate-type = ["cdylib"]
 
 [dependencies]
 clippy_utils = "=0.1.102"
-dylint_linting = "6.3.0"
+dylint_linting = "6.4.0"
 serde = { version = "1", features = ["derive"] }
 unicode-normalization = "0.1.26"
 
 [dev-dependencies]
-dylint_testing = "6.3.0"
+dylint_testing = "6.4.0"
 toml = "1"
 
 [lints.rust]

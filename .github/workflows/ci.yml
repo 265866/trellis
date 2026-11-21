@@ -80,7 +80,7 @@ jobs:
 
       - uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2.90.5
         with:
-          tool: just@1.59.0,cargo-nextest@0.9.150,cargo-dylint@6.3.0,dylint-link@6.3.0
+          tool: just@1.59.0,cargo-nextest@0.9.150,cargo-dylint@6.4.0,dylint-link@6.4.0
 
       - run: just lints-lint
       - run: just lints-comments
@@ -102,23 +102,23 @@ jobs:
             os: ubuntu-24.04
             kind: binary
             recipes: ci
-            tools: just@1.59.0,cargo-deny@0.20.2,cargo-shear@1.14.0,typos@1.51.1,taplo@0.10.0,shellcheck@0.11.0,zizmor@1.31.1,lychee@0.24.2,cargo-nextest@0.9.150,cargo-dylint@6.3.0,dylint-link@6.3.0,uv@0.13.8,cargo-about@0.9.3
+            tools: just@1.59.0,cargo-deny@0.20.2,cargo-shear@1.14.0,typos@1.51.1,taplo@0.10.0,shellcheck@0.11.0,zizmor@1.31.1,lychee@0.24.2,cargo-nextest@0.9.150,cargo-dylint@6.4.0,dylint-link@6.4.0,uv@0.13.8,cargo-about@0.9.3
           - name: service
             os: ubuntu-24.04
             kind: service
             recipes: ci
-            tools: just@1.59.0,cargo-deny@0.20.2,cargo-shear@1.14.0,typos@1.51.1,taplo@0.10.0,shellcheck@0.11.0,zizmor@1.31.1,lychee@0.24.2,cargo-nextest@0.9.150,cargo-dylint@6.3.0,dylint-link@6.3.0,uv@0.13.8,cargo-about@0.9.3
+            tools: just@1.59.0,cargo-deny@0.20.2,cargo-shear@1.14.0,typos@1.51.1,taplo@0.10.0,shellcheck@0.11.0,zizmor@1.31.1,lychee@0.24.2,cargo-nextest@0.9.150,cargo-dylint@6.4.0,dylint-link@6.4.0,uv@0.13.8,cargo-about@0.9.3
           - name: service with a web UI
             os: ubuntu-24.04
             kind: service
             web: "true"
             recipes: ci
-            tools: just@1.59.0,cargo-deny@0.20.2,cargo-shear@1.14.0,typos@1.51.1,taplo@0.10.0,shellcheck@0.11.0,zizmor@1.31.1,lychee@0.24.2,cargo-nextest@0.9.150,cargo-dylint@6.3.0,dylint-link@6.3.0,uv@0.13.8,cargo-about@0.9.3
+            tools: just@1.59.0,cargo-deny@0.20.2,cargo-shear@1.14.0,typos@1.51.1,taplo@0.10.0,shellcheck@0.11.0,zizmor@1.31.1,lychee@0.24.2,cargo-nextest@0.9.150,cargo-dylint@6.4.0,dylint-link@6.4.0,uv@0.13.8,cargo-about@0.9.3
           - name: library
             os: ubuntu-24.04
             kind: library
             recipes: ci
-            tools: just@1.59.0,cargo-deny@0.20.2,cargo-shear@1.14.0,typos@1.51.1,taplo@0.10.0,shellcheck@0.11.0,zizmor@1.31.1,lychee@0.24.2,cargo-nextest@0.9.150,cargo-dylint@6.3.0,dylint-link@6.3.0,uv@0.13.8
+            tools: just@1.59.0,cargo-deny@0.20.2,cargo-shear@1.14.0,typos@1.51.1,taplo@0.10.0,shellcheck@0.11.0,zizmor@1.31.1,lychee@0.24.2,cargo-nextest@0.9.150,cargo-dylint@6.4.0,dylint-link@6.4.0,uv@0.13.8
           # A generated binary's CI runs `test` and `build-release` for each target, and these
           # recipes on each runner but Linux on x86-64's; its release build runs `notices` there.
           - name: binary for Linux on x86-64
@@ -132,32 +132,32 @@ jobs:
             kind: binary
             target: aarch64-unknown-linux-musl
             recipes: lint dylint test docs build-release notices
-            tools: just@1.59.0,cargo-nextest@0.9.150,cargo-dylint@6.3.0,dylint-link@6.3.0,uv@0.13.8,cargo-about@0.9.3
+            tools: just@1.59.0,cargo-nextest@0.9.150,cargo-dylint@6.4.0,dylint-link@6.4.0,uv@0.13.8,cargo-about@0.9.3
           - name: binary on macOS
             os: macos-26
             kind: binary
             target: aarch64-apple-darwin
             recipes: lint dylint test docs build-release notices
-            tools: just@1.59.0,cargo-nextest@0.9.150,cargo-dylint@6.3.0,dylint-link@6.3.0,uv@0.13.8,cargo-about@0.9.3
+            tools: just@1.59.0,cargo-nextest@0.9.150,cargo-dylint@6.4.0,dylint-link@6.4.0,uv@0.13.8,cargo-about@0.9.3
           - name: binary on Windows
             os: windows-2025
             kind: binary
             target: x86_64-pc-windows-msvc
             recipes: lint dylint test docs build-release notices
-            tools: just@1.59.0,cargo-nextest@0.9.150,uv@0.13.8,cargo-about@0.9.3
+            tools: just@1.59.0,cargo-nextest@0.9.150,cargo-dylint@6.4.0,dylint-link@6.4.0,uv@0.13.8,cargo-about@0.9.3
           - name: binary on Windows on ARM64
             os: windows-11-arm
             kind: binary
             target: aarch64-pc-windows-msvc
             recipes: lint dylint test docs build-release notices
-            tools: just@1.59.0,cargo-nextest@0.9.150,uv@0.13.8,cargo-about@0.9.3
+            tools: just@1.59.0,cargo-nextest@0.9.150,cargo-dylint@6.4.0,dylint-link@6.4.0,uv@0.13.8,cargo-about@0.9.3
           # The published library's `package` recipe has a PowerShell variant only Windows runs.
           - name: published library on Windows
             os: windows-2025
             kind: library
             publish: "true"
             recipes: package lint dylint test
-            tools: just@1.59.0,cargo-nextest@0.9.150,uv@0.13.8
+            tools: just@1.59.0,cargo-nextest@0.9.150,cargo-dylint@6.4.0,dylint-link@6.4.0,uv@0.13.8
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -166,25 +166,6 @@ jobs:
       - uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2.90.5
         with:
           tool: ${{ matrix.tools }}
-
-      # install-action has no Windows download of cargo-dylint and dylint-link. It builds them from
-      # source, which takes about four minutes, and with `--force`, so an installed copy doesn't
-      # help. The Windows entries leave them out of `tools` and build them on a cache miss only.
-      - name: Restore the dylint tools
-        id: dylint-tools
-        if: runner.os == 'Windows'
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            ~/.cargo/bin/cargo-dylint.exe
-            ~/.cargo/bin/dylint-link.exe
-          key: dylint-tools-${{ runner.os }}-${{ runner.arch }}-cargo-dylint@6.3.0/dylint-link@6.3.0
-
-      - name: Build the dylint tools
-        if: runner.os == 'Windows' && steps.dylint-tools.outputs.cache-hit != 'true'
-        uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2.90.5
-        with:
-          tool: cargo-dylint@6.3.0,dylint-link@6.3.0
 
       - name: Install the pinned toolchains
         shell: bash
@@ -231,7 +212,7 @@ jobs:
 
       - uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2.90.5
         with:
-          tool: just@1.59.0,cargo-deny@0.20.2,cargo-shear@1.14.0,typos@1.51.1,taplo@0.10.0,cargo-nextest@0.9.150,cargo-dylint@6.3.0,dylint-link@6.3.0,uv@0.13.8,cargo-about@0.9.3
+          tool: just@1.59.0,cargo-deny@0.20.2,cargo-shear@1.14.0,typos@1.51.1,taplo@0.10.0,cargo-nextest@0.9.150,cargo-dylint@6.4.0,dylint-link@6.4.0,uv@0.13.8,cargo-about@0.9.3
 
       - name: Install the pinned toolchains
         run: |

@@ -121,15 +121,13 @@ jobs:
         with:
           persist-credentials: false
 
-      # cargo-dylint has no download for Windows, so install-action builds it there on every run.
-      # The cache restores the last build, but install-action reinstalls over it with `--force`.
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2.90.5
         with:
-          tool: just@1.59.0,cargo-nextest@0.9.150,cargo-dylint@6.3.0,dylint-link@6.3.0
+          tool: just@1.59.0,cargo-nextest@0.9.150,cargo-dylint@6.4.0,dylint-link@6.4.0
 
       # The custom lints run on every platform, so they also check platform-gated code.
       - name: Install the pinned toolchains
