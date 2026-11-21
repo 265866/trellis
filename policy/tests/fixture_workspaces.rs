@@ -229,9 +229,15 @@ fn a_build_key_outside_ascii_fails() {
 }
 
 #[test]
-fn a_build_key_with_a_backslash_fails() {
+fn a_build_key_windows_reads_as_another_path_fails() {
     let fixture = Fixture::new("build_script_crates = [\"app\"]\n");
-    for (path, has_a_backslash) in [("scripts/make.rs", false), ("scripts\\\\x/make.rs", true)] {
+    for (path, is_another_path) in [
+        ("scripts/make.rs", false),
+        ("scripts/.hidden/make.rs", false),
+        ("scripts\\\\x/make.rs", true),
+        ("scripts./make.rs", true),
+        ("scripts /make.rs", true),
+    ] {
         fixture.write(
             "crates/app/Cargo.toml",
             &APP_MANIFEST.replace(
@@ -243,7 +249,7 @@ fn a_build_key_with_a_backslash_fails() {
             build_scripts::check(&fixture.workspace()).expect("the members should be readable");
         assert_eq!(
             mentions(&violations, "names different files on different systems"),
-            has_a_backslash,
+            is_another_path,
             "`build = \"{path}\"` on a listed crate: {violations:?}"
         );
     }

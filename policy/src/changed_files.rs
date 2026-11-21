@@ -351,19 +351,10 @@ enum Role {
     Other,
 }
 
-/// Whether Windows reads `path` as another path. It drops dots and spaces from the end of each
-/// part, reads a `:` as the start of a stream of the file before it, and reads a `\` as a
-/// separator, so `build.rs.` and `build.rs::$DATA` are `build.rs` there. Git for Windows refuses
-/// to check such a path out, but only while its `core.protectNTFS` setting is on.
-fn windows_reads_as_another(path: &str) -> bool {
-    path.split('/')
-        .any(|part| part.contains([':', '\\']) || part.ends_with(['.', ' ']))
-}
-
 /// What the file at `path`, relative to the repository root, is. Rule names match in any case,
 /// since a case-insensitive file system finds `Clippy.toml` or `Build.rs` for the name a tool
 /// looks for; the names that make a file code or neither match exactly. A path Windows reads as
-/// another path is a rule, whatever it names.
+/// another path is a rule that no list knows, whatever it names.
 fn role(path: &str) -> Role {
     if path == "Cargo.toml" {
         return Role::RootManifest;
@@ -371,8 +362,8 @@ fn role(path: &str) -> Role {
     if OTHER_FILES.contains(&path) {
         return Role::Other;
     }
-    if windows_reads_as_another(path) {
-        return Role::Rule;
+    if source_path::windows_reads_as_another(path) {
+        return Role::Unlisted;
     }
     let name = path.rsplit('/').next().unwrap_or(path);
     if name == "Cargo.toml" && path.starts_with("crates/") {
@@ -841,7 +832,7 @@ mod tests {
             "crates/app\\build.rs",
             "docs/notes.md.",
         ] {
-            assert_eq!(role(path), Role::Rule, "{path:?} should be a rule");
+            assert_eq!(role(path), Role::Unlisted, "{path:?} should be a rule");
         }
         for path in ["crates/app/src/lib.rs", "crates/app/src/.hidden.rs"] {
             assert_eq!(role(path), Role::Code, "{path:?} should be code");

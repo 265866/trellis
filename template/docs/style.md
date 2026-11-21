@@ -131,22 +131,23 @@ Beyond the Google guide, the workspace also turns on:
   a new crate or a new edge between crates is a rule change. It also checks that every crate's
   `[lints]` table is exactly `workspace = true`; that no crate has a build script unless
   `build_script_crates` lists it, since a build script can set a `cfg` that hides code from the lint
-  runs, and that a listed crate's `build` key names a file in the crate's own directory, in ASCII
-  and with no `\`; that tool configuration files exist only at the root, with no variant name that
-  would override them; that the workspace's members are exactly the packages one directory below
-  `crates/`, each in a directory with an ASCII name, with no symbolic link for `crates` or a crate's
-  directory, since which changes are rules depends on that place; that the workspace excludes
-  nothing, pulls in no non-member crate by path, and loads only the trellis lints as its dylint
-  library; that each crate's `Cargo.toml` holds only allowed keys (no `test = false`, `harness =
-  false` outside a `[[bench]]`, `auto*` or `required-features`), inherits `edition`, `rust-version`
-  and `publish`, and `license` when the workspace has one, and keeps its sources, `#[path]` files
-  included, inside the crate, with no symbolic link in or above its directory and no git submodule,
-  or other git repository, in or above it or anywhere under `crates/`; that `.cargo/config.toml`
-  holds only the Windows `+crt-static` flags; that a crate depends directly only on proc-macro
-  crates listed in `proc_macro_crates`, since a proc macro writes code the custom lints don't check;
-  that the root `AGENTS.md` is the only file of instructions for coding agents; that every crate's
-  commits reach the release notes through `changelog_include` in `release-plz.toml`; and that the
-  docs keep the layout under [Documentation](#documentation).
+  runs, and that a listed crate's `build` key names a file in the crate's own directory, in ASCII,
+  with no `\` and no part that ends in a dot or a space; that tool configuration files exist only at
+  the root, with no variant name that would override them; that the workspace's members are exactly
+  the packages one directory below `crates/`, each in a directory with an ASCII name, with no
+  symbolic link for `crates` or a crate's directory, since which changes are rules depends on that
+  place; that the workspace excludes nothing, pulls in no non-member crate by path, and loads only
+  the trellis lints as its dylint library; that each crate's `Cargo.toml` holds only allowed keys
+  (no `test = false`, `harness = false` outside a `[[bench]]`, `auto*` or `required-features`),
+  inherits `edition`, `rust-version` and `publish`, and `license` when the workspace has one, and
+  keeps its sources, `#[path]` files included, inside the crate, with no symbolic link in or above
+  its directory and no git submodule, or other git repository, in or above it or anywhere under
+  `crates/`; that `.cargo/config.toml` holds only the Windows `+crt-static` flags; that a crate
+  depends directly only on proc-macro crates listed in `proc_macro_crates`, since a proc macro
+  writes code the custom lints don't check; that the root `AGENTS.md` is the only file of
+  instructions for coding agents; that every crate's commits reach the release notes through
+  `changelog_include` in `release-plz.toml`; and that the docs keep the layout under
+  [Documentation](#documentation).
 - `overflow-checks` and `panic = "abort"` in release builds: an overflow stops the program rather
   than wrapping, and nothing catches a panic. `trellis-policy` fails a change that turns either
   off, including a per-package or `.cargo/config.toml` override.
@@ -159,7 +160,7 @@ Beyond the Google guide, the workspace also turns on:
   `tsconfig.json`, `bunfig.toml` and `.npmrc` are rules in any directory, since they change what a
   check sees, and so is a git submodule, whose files no check sees. A path that Windows reads as
   another path is a rule too: one with a part that ends in a dot or a space, or that holds a `:` or
-  a `\`; a web UI's `package.json`, its scripts and its sources are code. A proc-macro dependency is
+  a `\`. A web UI's `package.json`, its scripts and its sources are code. A proc-macro dependency is
   code: a rules pull request lists the crate in `proc_macro_crates`, and a code pull request then
   adds the dependency with its first use, since `cargo shear` rejects a dependency nothing uses. A
   `.rs` change that only adds, removes or moves `expect` attributes is neither, so a new lint lands

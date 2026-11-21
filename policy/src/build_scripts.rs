@@ -26,10 +26,10 @@ use crate::{case_insensitive, source_path, toml_file};
 ///
 /// A listed crate's `build` key names a file in the crate's directory. Outside it, the path could
 /// pass through a symbolic link that leads back to one of the crate's modules, and a change to
-/// that module would then change the build script as code. The key holds no `\`, which is a
-/// separator on Windows and part of a file name elsewhere, and only ASCII characters, since a
-/// file system that ignores case or accents reads two other spellings as one file. So every
-/// system and the rule-change check agree on which file the key names.
+/// that module would then change the build script as code. The key is a path Windows reads as
+/// written, with no `\` and no part that ends in a dot or a space, and holds only ASCII
+/// characters, since a file system that ignores case or accents reads two other spellings as one
+/// file. So every system and the rule-change check agree on which file the key names.
 ///
 /// `build = false`, which turns off Cargo's automatic `build.rs`, is allowed.
 ///
@@ -75,13 +75,14 @@ pub fn check(workspace: &Workspace) -> Result<Vec<Violation>, PolicyError> {
                         ),
                     ));
                 }
-                if path.contains('\\') {
+                if source_path::windows_reads_as_another(path) {
                     violations.push(Violation::new(
                         workspace.relative(member.manifest_path()),
                         format!(
-                            "`build = {path:?}` in `[package]` holds a `\\`, which separates \
-                             directories on Windows and is part of a name elsewhere, so the key \
-                             names different files on different systems. Write the path with `/`."
+                            "`build = {path:?}` in `[package]` names another file on Windows, \
+                             which reads a `\\` as a separator and drops a dot or a space from \
+                             the end of each part, so the key names different files on different \
+                             systems. Write the path with `/` and without those endings."
                         ),
                     ));
                 }
