@@ -75,7 +75,7 @@ fn check_constructor(cx: &LateContext<'_>, ident: Ident, signature: FnSig<'_>, f
         .tcx
         .fn_sig(function)
         .instantiate_identity()
-        .skip_norm_wip()
+        .skip_normalization()
         .skip_binder()
         .output();
     let returns_result = output.is_diag_item(cx, sym::Result);

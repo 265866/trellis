@@ -1,0 +1,70 @@
+warning: `expect` of a layout lint on an item with a module beneath it
+  --> $DIR/nested_modules.rs:9:5
+   |
+LL |     expect(non_leaf_module_items, reason = "the runner ties the startup steps together")
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: it covers the lint's reports in that module too, in a function body or below a `#[cfg(test)]` module as well: put the `expect` on what the lint reports inside, or move the module out. Only a `#[cfg(test)]` module that holds no module may be beneath it
+   = note: `#[warn(suppression_policy)]` on by default
+
+warning: `expect` of a layout lint on an item with a module beneath it
+  --> $DIR/nested_modules.rs:17:5
+   |
+LL |     expect(file_named_after_item, reason = "the module gathers widget helpers, not only Widget")
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: it covers the lint's reports in that module too, in a function body or below a `#[cfg(test)]` module as well: put the `expect` on what the lint reports inside, or move the module out. Only a `#[cfg(test)]` module that holds no module may be beneath it
+
+warning: `expect` of a layout lint on an item with a module beneath it
+  --> $DIR/nested_modules.rs:25:5
+   |
+LL | /     expect(
+LL | |         non_leaf_module_items,
+LL | |         reason = "the sealed trait keeps other crates from implementing the public traits"
+LL | |     )
+   | |_____^
+   |
+   = help: it covers the lint's reports in that module too, in a function body or below a `#[cfg(test)]` module as well: put the `expect` on what the lint reports inside, or move the module out. Only a `#[cfg(test)]` module that holds no module may be beneath it
+
+warning: `expect` of a layout lint on an item with a module beneath it
+  --> $DIR/nested_modules.rs:53:5
+   |
+LL |     expect(non_leaf_module_items, reason = "the reading joins the child modules' units")
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: it covers the lint's reports in that module too, in a function body or below a `#[cfg(test)]` module as well: put the `expect` on what the lint reports inside, or move the module out. Only a `#[cfg(test)]` module that holds no module may be beneath it
+
+warning: `expect` of a layout lint on an item with a module beneath it
+  --> $DIR/nested_modules.rs:71:5
+   |
+LL |     expect(file_named_after_item, reason = "the module gathers gear totals, not only Gear")
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: it covers the lint's reports in that module too, in a function body or below a `#[cfg(test)]` module as well: put the `expect` on what the lint reports inside, or move the module out. Only a `#[cfg(test)]` module that holds no module may be beneath it
+
+warning: `expect` of a layout lint on an item with a module beneath it
+  --> $DIR/nested_modules.rs:80:5
+   |
+LL |     expect(non_leaf_module_items, reason = "registers each child module's routes in one place")
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: it covers the lint's reports in that module too, in a function body or below a `#[cfg(test)]` module as well: put the `expect` on what the lint reports inside, or move the module out. Only a `#[cfg(test)]` module that holds no module may be beneath it
+
+warning: `expect` of a layout lint on an item with a module beneath it
+  --> $DIR/nested_modules.rs:96:9
+   |
+LL |         expect(non_leaf_module_items, reason = "the reset joins the child modules' units")
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: it covers the lint's reports in that module too, in a function body or below a `#[cfg(test)]` module as well: put the `expect` on what the lint reports inside, or move the module out. Only a `#[cfg(test)]` module that holds no module may be beneath it
+
+warning: `expect` of a layout lint on an item with a module beneath it
+  --> $DIR/nested_modules.rs:113:9
+   |
+LL |         expect(non_leaf_module_items, reason = "the sum joins the child modules' counts")
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: it covers the lint's reports in that module too, in a function body or below a `#[cfg(test)]` module as well: put the `expect` on what the lint reports inside, or move the module out. Only a `#[cfg(test)]` module that holds no module may be beneath it
+
+warning: 8 warnings emitted
+

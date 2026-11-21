@@ -21,9 +21,10 @@ declare_lint! {
     /// documentation from macros. This makes the documentation directly readable when viewing
     /// or modifying the source code."
     ///
-    /// This covers a crate root's `#![doc = include_str!("../README.md")]` too. The lint assumes
-    /// the crates aren't published, so a README has no docs.rs page to double as, and the crate's
-    /// docs stay readable where its code is.
+    /// This covers a crate root's `#![doc = include_str!("../README.md")]` too, and a crate root
+    /// can't carry an `expect`, since `suppression_policy` rejects every inner lint level. A
+    /// published library writes its docs.rs front page as `//!` lines in the crate root, while
+    /// crates.io shows the README through `readme` in `Cargo.toml`.
     ///
     /// ```rust,ignore
     /// /** Returns the price for one order. */

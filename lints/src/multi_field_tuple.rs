@@ -118,7 +118,7 @@ fn check_tuple_fields(cx: &LateContext<'_>, ident: Ident, kind: &str, fields: &[
                 .tcx
                 .type_of(field.def_id)
                 .instantiate_identity()
-                .skip_norm_wip();
+                .skip_normalization();
             !matches!(ty.kind(), ty::Adt(adt, _) if adt.is_phantom_data())
         })
         .count();

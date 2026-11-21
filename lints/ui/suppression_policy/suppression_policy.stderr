@@ -299,7 +299,7 @@ LL | |     reason = "the legacy module predates these rules"
 LL | | )]
    | |__^
    |
-   = help: it covers every item in the module and in the modules inside it: put the `expect` on the smallest item inside that the lint reports
+   = help: it covers every item in the module and in the modules inside it: put the `expect` on the smallest item inside that the lint reports. Only an `expect` of the lints that report at a module itself, listed in `MODULE_LINTS` in `lints/src/suppression_policy.rs`, may go on a module, and only on one with no module beneath it
 
 warning: `expect` on a module
   --> $DIR/suppression_policy.rs:169:1
@@ -307,26 +307,18 @@ warning: `expect` on a module
 LL | #[expect(clippy::unwrap_used, reason = "the legacy module predates these rules")]
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    |
-   = help: it covers every item in the module and in the modules inside it: put the `expect` on the smallest item inside that the lint reports
+   = help: it covers every item in the module and in the modules inside it: put the `expect` on the smallest item inside that the lint reports. Only an `expect` of the lints that report at a module itself, listed in `MODULE_LINTS` in `lints/src/suppression_policy.rs`, may go on a module, and only on one with no module beneath it
 
 warning: `expect` on a module
   --> $DIR/suppression_policy.rs:173:1
    |
 LL | / #[cfg_attr(
 LL | |     dylint_lib = "trellis_lints",
-LL | |     expect(non_leaf_module_items, reason = "the legacy module predates these rules")
+LL | |     expect(qualified_function_calls, reason = "the legacy module predates these rules")
 LL | | )]
    | |__^
    |
-   = help: it covers every item in the module and in the modules inside it: put the `expect` on the smallest item inside that the lint reports
-
-warning: `expect` of `non_leaf_module_items`, which has no exceptions
-  --> $DIR/suppression_policy.rs:175:12
-   |
-LL |     expect(non_leaf_module_items, reason = "the legacy module predates these rules")
-   |            ^^^^^^^^^^^^^^^^^^^^^
-   |
-   = help: rename or move the code as the lint says; if the rule itself is wrong for the workspace, change it in trellis's `lints/` and `docs/style.md`
+   = help: it covers every item in the module and in the modules inside it: put the `expect` on the smallest item inside that the lint reports. Only an `expect` of the lints that report at a module itself, listed in `MODULE_LINTS` in `lints/src/suppression_policy.rs`, may go on a module, and only on one with no module beneath it
 
 warning: `expect` of `clippy::unwrap_used` on an impl block
   --> $DIR/suppression_policy.rs:186:10
@@ -504,7 +496,28 @@ LL | |     expect(dead_code, reason = "the device manager in the next change cal
 LL | | )]
    | |__^
    |
-   = help: it covers every item in the module and in the modules inside it: put the `expect` on the smallest item inside that the lint reports
+   = help: it covers every item in the module and in the modules inside it: put the `expect` on the smallest item inside that the lint reports. Only an `expect` of the lints that report at a module itself, listed in `MODULE_LINTS` in `lints/src/suppression_policy.rs`, may go on a module, and only on one with no module beneath it
+
+warning: `expect` on a module
+  --> $DIR/suppression_policy.rs:471:1
+   |
+LL | / #[cfg_attr(
+LL | |     dylint_lib = "trellis_lints",
+LL | |     expect(
+LL | |         file_named_after_item,
+...  |
+LL | | )]
+   | |__^
+   |
+   = help: it covers every item in the module and in the modules inside it: put the `expect` on the smallest item inside that the lint reports. Only an `expect` of the lints that report at a module itself, listed in `MODULE_LINTS` in `lints/src/suppression_policy.rs`, may go on a module, and only on one with no module beneath it
+
+warning: `expect` of `doc_after_attribute`, which has no exceptions
+  --> $DIR/suppression_policy.rs:504:12
+   |
+LL |     expect(doc_after_attribute, reason = "the derive reads better above the docs here")
+   |            ^^^^^^^^^^^^^^^^^^^
+   |
+   = help: fix what the lint reports; if the rule itself is wrong for the workspace, change it in trellis's `lints/` and `docs/style.md`
 
 warning: `allow` attribute
   --> $DIR/modules/hidden.rs:5:1
@@ -711,5 +724,21 @@ LL | careless!(#);
    |
    = help: expect each lint that fires here by name, so the exception covers only them
 
-warning: 78 warnings emitted
+warning: `expect` of a layout lint on an item with a module beneath it
+  --> $DIR/suppression_policy.rs:485:5
+   |
+LL |     expect(file_named_after_item, reason = "the catalog module predates the naming rule")
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: it covers the lint's reports in that module too, in a function body or below a `#[cfg(test)]` module as well: put the `expect` on what the lint reports inside, or move the module out. Only a `#[cfg(test)]` module that holds no module may be beneath it
+
+warning: `expect` of a layout lint on an item with a module beneath it
+  --> $DIR/suppression_policy.rs:492:5
+   |
+LL |     expect(non_leaf_module_items, reason = "the wiring module predates the layout rule")
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: it covers the lint's reports in that module too, in a function body or below a `#[cfg(test)]` module as well: put the `expect` on what the lint reports inside, or move the module out. Only a `#[cfg(test)]` module that holds no module may be beneath it
+
+warning: 81 warnings emitted
 

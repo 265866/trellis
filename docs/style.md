@@ -33,7 +33,7 @@ in its `justfile` names, so read them at that commit when `main` has moved on.
 | Avoid `Rc` and `Arc` | `shared_ownership`: each use in a field or signature needs an `expect` saying why |
 | Prefer borrows over deep copies | `clippy::implicit_clone`, `clippy::unnecessary_to_owned`, `clippy::needless_pass_by_value` (partly) |
 | Accept flexible references (`&[T]`, `&str`, `Option<&T>`) | `clippy::ptr_arg`, `clippy::borrowed_box`, `clippy::ref_option`, `clippy::ref_option_ref` |
-| Application code almost never accepts `impl Into<T>` | `impl_into_params` |
+| Application code almost never accepts `impl Into<T>` | `impl_into_params`: library APIs too; a parameter whose call-site ergonomics are paramount needs an `expect` saying so |
 | Prefer `enum` over `bool` in APIs | `bool_literal_argument` (no literal `true` or `false` passed to the project's own function's `bool` parameter), `clippy::fn_params_excessive_bools`, `clippy::struct_excessive_bools` (partly) |
 | Newtypes versus type aliases | `primitive_type_alias` (aliases of primitives and strings) |
 | Prefer named fields over tuples and non-newtype tuple structs | `multi_field_tuple` |
@@ -182,8 +182,11 @@ a `cfg_attr` that only one of the clippy and dylint runs sees can't hide any of 
 - A `cfg_attr` around a lint level in any other form than the two above,
   `cfg_attr(dylint_lib = "trellis_lints", expect(lint, reason = "..."))` and
   `cfg_attr(not(test), expect(dead_code, reason = "..."))`.
-- A lint-level attribute on a `mod`, or on an `impl` block or a trait for a lint that doesn't
-  report at the block.
+- A lint-level attribute on a `mod`, other than an `expect` naming only `file_named_after_item` or
+  `non_leaf_module_items`, or on an `impl` block or a trait for a lint that doesn't report at the
+  block. An `expect` of those two lints may go on no item with a module beneath it, in a function
+  body or below a `#[cfg(test)]` module too, whose reports it would cover as well. A `#[cfg(test)]`
+  module that holds no module may be beneath it.
 - A lint attribute built from macro variables or assembled by a macro: a `#` that doesn't start
   an attribute, an attribute that doesn't start with a path (`paste`'s `[<...>]`), or brackets
   after a `$name:tt` variable.
@@ -197,9 +200,9 @@ a `cfg_attr` that only one of the clippy and dylint runs sees can't hide any of 
   `#[tracing::instrument]`; the [idioms](#idioms-under-these-rules) replace them.
 
 Some lints have no exceptions, and an `expect` naming one fails: `code_comment`,
-`suppression_policy`, `missing_workspace_lints`, `disabled_code` and `needless_raw_identifier`
-(fix the code), `file_named_after_item` and `non_leaf_module_items` (rename or move the code), and
-`macro_definition` (a macro goes only in a crate that `macro_crates` in `dylint.toml` lists).
+`suppression_policy`, `missing_workspace_lints`, `disabled_code`, `doc_after_attribute` and
+`needless_raw_identifier` (fix the code), and `macro_definition` (a macro goes only in a crate that
+`macro_crates` in `dylint.toml` lists).
 
 ## Checked in review
 
@@ -292,11 +295,12 @@ Write these like this rather than inventing a workaround:
   code: a doc comment, a name, an assertion message, or the `reason` of an `#[expect(...)]`.
   Configuration files keep their comments.
 - **Exceptions carry reasons.** Rules the guide leaves to judgment, such as `Rc` and `Arc`,
-  macros and `#[rustfmt::skip]`, are linted, and each justified use carries
+  `impl Into<T>` on a library API and `#[rustfmt::skip]`, are linted, and each justified use carries
   `#[expect(lint, reason = "...")]`, so every exception is written down where review sees it.
-- **Formatting.** The guide lets a codebase on stable Rust skip `imports_granularity` and
-  `format_macro_matchers`, which exist only in nightly rustfmt. trellis applies them: `just fmt`
-  uses the nightly pinned in the `justfile`, while the code itself builds on stable.
+- **Formatting.** The guide's rule that a `use` statement imports items from one module needs
+  rustfmt's `imports_granularity`, which only nightly rustfmt has. The guide lets a codebase on
+  stable Rust skip `format_macro_matchers`, also nightly-only, and trellis applies it anyway.
+  `just fmt` uses the nightly pinned in the `justfile`, while the code itself builds on stable.
 - **Assertion messages.** The guide asks you to consider a message on every assertion.
   `clippy::missing_assert_message` requires one outside tests.
 

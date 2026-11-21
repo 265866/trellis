@@ -59,7 +59,11 @@ impl<'tcx> LateLintPass<'tcx> for ErrorTypeCopy {
             .own_params
             .iter()
             .any(|param| !matches!(param.kind, GenericParamDefKind::Lifetime));
-        let ty = cx.tcx.type_of(id).instantiate_identity().skip_norm_wip();
+        let ty = cx
+            .tcx
+            .type_of(id)
+            .instantiate_identity()
+            .skip_normalization();
         let adt = cx.tcx.adt_def(id);
         if has_type_params
             || !crate::trait_impls::implements_error(cx.tcx, ty)
@@ -74,7 +78,7 @@ impl<'tcx> LateLintPass<'tcx> for ErrorTypeCopy {
                 cx.tcx
                     .type_of(field.did)
                     .instantiate_identity()
-                    .skip_norm_wip(),
+                    .skip_normalization(),
             )
         });
         if !fields_are_copy {

@@ -16,10 +16,11 @@ use crate::{attribute_origin, imports};
 declare_lint! {
     /// Checks for code that a check never sees:
     ///
-    /// - `#[ignore]` and `#[ignore = "..."]`, directly or through `cfg_attr`. An ignored test is
-    ///   a failing check that nobody runs. After expansion, an `#[ignore]` that a macro wrote is
-    ///   flagged too, unless the macro comes from a crate `trusted_macro_crates` in
-    ///   `dylint.toml` lists.
+    /// - `#[ignore]` and `#[ignore = "..."]`, directly or through `cfg_attr`. A plain
+    ///   `cargo test`, and an editor running a module's tests, skip an ignored test, so its
+    ///   failure shows in `just test` and CI rather than where it is being worked on. After
+    ///   expansion, an `#[ignore]` that a macro wrote is flagged too, unless the macro comes from a
+    ///   crate `trusted_macro_crates` in `dylint.toml` lists.
     /// - A test attribute with an argument. A test attribute is `#[test]` or one whose last
     ///   segment is `test` or ends in `_test`, such as `#[sqlx::test]`, and it takes no
     ///   arguments. An argument can set a run count of 0, which never runs the test, retry a test
@@ -574,7 +575,9 @@ fn report_ignore(cx: &EarlyContext<'_>, span: Span, origin: &str) {
         attribute_origin::report_span(cx, span),
         format!("ignored test{origin}"),
         None,
-        "an ignored test is a failing check nobody runs: fix the test, or delete it",
+        "a plain `cargo test`, and an editor running a module's tests, skip an ignored test, so \
+         its failure shows in `just test` and CI rather than where it is being worked on: fix \
+         the test, or delete it",
     );
 }
 
