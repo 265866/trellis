@@ -353,6 +353,7 @@ cat >$core/src/settings_error.rs <<'EOF'
 //! Why the settings couldn't be read.
 
 use std::io;
+use std::string::FromUtf8Error;
 
 /// Why the settings couldn't be read.
 #[derive(Debug, thiserror::Error)]
@@ -379,6 +380,15 @@ pub enum SettingsError {
     /// The settings set a section that only tests read.
     #[error("the section {0:>5} is read only when cfg!(test) holds")]
     TestSection(String),
+    /// The settings file isn't UTF-8. The message is the source's own, a bare positional field.
+    #[error("{0}")]
+    Encoding(#[from] FromUtf8Error),
+    /// The settings name a section nobody knows. The message is a bare named field.
+    #[error("{section}")]
+    UnknownSection {
+        /// The section the settings name.
+        section: String,
+    },
 }
 EOF
 
