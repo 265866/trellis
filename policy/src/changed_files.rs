@@ -960,7 +960,8 @@ fn moved_paths(
 /// The kit's code keeps its bytes, but not what a path in it reaches. A file that names the kit's
 /// old place, such as `deploy/install.sh` in a unit, or climbs out of the kit with `..`, such as
 /// `cd "$(dirname "$0")/.."`, now reaches somewhere else, since the kit sits two directories
-/// deeper. A following code change fixes such a file, as review of that change sees.
+/// deeper. A code change before the move makes such a file independent of the kit's place, as
+/// the generated `docs/maintaining.md` says, since changing it in the move makes it no move.
 ///
 /// # Errors
 ///
