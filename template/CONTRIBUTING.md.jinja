@@ -327,22 +327,29 @@ bytes the diff showed, apart from line endings; `just policy` fails any other at
 renamed with no file in it changed, is neither rule nor code, so a crate's directory can move in one
 pull request beside the `path` of each dependency on it. A file in the crate that reads its own
 location, such as a build script that reads `CARGO_MANIFEST_DIR`, can then do something else, as a
-code change can change what a listed build script emits.
+code change can change what a listed build script emits. An untracked file that fits none of
+these, such as an `.envrc`, counts as a rule in `just rule-changes`: commit it in a rules pull
+request, or list it in `.git/info/exclude`.
 {%- if kind != 'library' %}
+
 A root deploy kit that moves into `crates/{{ crate_name }}/deploy/` with every code file unchanged
-leaves its code out the same way, while its files that are rules by their names count at both
-paths, so the move lands in a rules pull request beside the paths that name the kit, as
+leaves its code out as a moved crate does, while its files that are rules by their names count at
+both paths, so the move lands in a rules pull request beside the paths that name the kit, as
 [Maintaining](docs/maintaining.md#extend-what-trellis-generates) says. A code file in the kit that
 names `deploy/` or climbs out of it with `..` reaches somewhere else after the move.
 {%- endif %}
-{%- if web_ui %} The web UI's `package.json`, its scripts and its sources are code, outside
-the rule split, so a code pull request can change what its `check` script runs, including which
-settings file `tsc` reads and the flags it gets.
+{%- if web_ui %}
+
+The web UI's `package.json`, its scripts and its sources are code, outside the rule split, so a
+code pull request can change what its `check` script runs, including which settings file `tsc`
+reads and the flags it gets. Its `tsconfig.json` is a rule, and a `types` entry there fails `tsc`
+until its `@types` package is installed. So a new `types` entry takes three pull requests: add the
+package to `devDependencies` in a code pull request, the entry in a rules pull request, then the
+code that uses it in another code pull request.
 {%- endif %}
-So an untracked file that fits none of these, such as an `.envrc`, counts as a rule in
-`just rule-changes`: commit it in a rules pull request, or list it in `.git/info/exclude`. When a
-new rule would flag existing code, either fix the code in one pull request and add the rule in the
-next, or add the rule together with an `expect` and a real reason at each place it flags. A
+
+When a new rule would flag existing code, either fix the code in one pull request and add the rule
+in the next, or add the rule together with an `expect` and a real reason at each place it flags. A
 proc-macro dependency is code: list the crate in `proc_macro_crates` in one pull request, then add
 the dependency and its first use in the next. Run `just rule-changes` to see how your changes
 sort: it counts the rule and code files, and lists both when a change mixes them.
