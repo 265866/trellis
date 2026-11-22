@@ -24,6 +24,9 @@ need admin rights on the repository or the release token, so `just ci` leaves th
 {%- endif %} `tests/command_line.rs` runs the built binary and checks it. |
 | `crates/{{ crate_name }}_core` | The logic. A crate of its own keeps the binary's command-line and runtime dependencies out of it, lets `just docs` check the doc comments of both crates, and gives `internal_dependencies` its first edge: the binary depends on the logic, never the reverse. |
 {%- endif %}
+{%- if image.files %}
+| `crates/{{ crate_name }}/image` | The files the image adds, at their paths under its root: `crates/{{ crate_name }}/image/app/data.json` lands at `/app/data.json`. `image` in `.copier-answers.yml` turns them on, and [docs/maintaining.md](docs/maintaining.md#extend-what-trellis-generates) says what else it sets. |
+{%- endif %}
 {%- if web_ui %}
 | `crates/{{ crate_name }}/web` | The web UI, a Bun app. trellis needs only its `check` and `build` scripts, and `build` to write the UI to `dist/`. The image puts that build in `/usr/share/{{ project_name }}/web`, and `just run` builds it into `dist/`; both name the directory in `{{ crate_name | upper }}_WEB_DIR`, for the service to read when it serves the UI. |
 {%- endif %}

@@ -455,8 +455,8 @@ lints-comments:
 lints-test:
     cargo test --locked
 
-# Runs `template` for every kind, then `shapes`, `dependencies`, `update` and `build-extras`.
-templates: (template "binary") (template "service") (template "service" "ci" "false" "true") (template "library") shapes dependencies update build-extras
+# Runs `template` for each kind, then `shapes`, `dependencies`, `update` and the extras checks.
+templates: (template "binary") (template "service") (template "service" "ci" "false" "true") (template "library") shapes dependencies update build-extras image-extras
 
 # Copies the working tree into a scratch repository as two tagged trellis versions, generates a
 # library from the first, and edits it the way an owner would: its code and changelog, and a new
@@ -916,6 +916,136 @@ build-extras:
       fail "a service took a build answer"
     fi
     grep --quiet 'Only a binary takes a `build` answer' <<< "$refusal" || fail "a service's build answer was refused for another reason: $refusal"
+
+# Generates a service whose `image` answer sets every key, with files in crates/<crate>/image, and
+# builds its image under umask 077 with those files 0600 or 0700. The image must carry each
+# environment default as written, the working directory and the ports, keep distroless's nonroot
+# user and its own /tmp and /home/nonroot, give that user read access to the files and execute
+# access to none, and keep trellis's license file over one the files hold at its path. Without
+# the files, or with a file in a directory the base image has, the build must fail and say why.
+# A working directory without files must be root's. The answer's checks must refuse the values
+# that would break or change the Containerfile, and a service with the default answer must get
+# none of it.
+#
+# Checks what a service's `image` answer adds to its image.
+image-extras:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    trellis="{{ justfile_directory() }}"
+    out=$(mktemp -d)
+    trap 'rm -rf "$out"' EXIT
+    fail() { echo "error: image-extras: $1" >&2; exit 1; }
+    # Generates a service in $1, with the further arguments.
+    generate() {
+      local destination=$1
+      shift
+      uv tool run copier@9.19.1 copy --quiet --defaults --vcs-ref HEAD \
+        --data project_name=demo-service \
+        --data "description=A demo service that trellis generates for its tests." \
+        --data kind=service --data trellis_path="$trellis" "$@" "$trellis" "$destination"
+    }
+    # Runs `docker build` in the current directory, which must fail with a line of its own output
+    # that matches $1; $2 says what a success did.
+    refused_build() {
+      if docker build --progress plain --file Containerfile . > "$out/build.txt" 2>&1 \
+        || ! grep --quiet --extended-regexp "^#[0-9]+ [0-9.]+ error: .*$1" "$out/build.txt"; then
+        cat "$out/build.txt" >&2
+        fail "$2"
+      fi
+    }
+    while IFS='|' read -r answer message; do
+      if refusal=$(generate "$out/refused" --data "image=$answer" 2>&1); then
+        fail "the image answer took $answer"
+      fi
+      grep --quiet --fixed-strings -- "$message" <<< "$refusal" || fail "the image answer refused $answer for another reason: $refusal"
+    done << 'EOF'
+    {env: {PORT: 8080}}|needs a quoted one-line string
+    {env: {A: "x\ny"}}|needs a quoted one-line string
+    {env: {A: "x\u0085y"}}|needs a quoted one-line string
+    {env: {"A\n": "x"}}|is not a variable name
+    {env: {DEMO_SERVICE_WEB_DIR: /x}}|the variable trellis sets to the web UI
+    {workdir: "/app\n"}|`workdir` is an absolute path
+    {workdir: /app/../tmp}|`workdir` is an absolute path
+    {workdir: /home/app}|`workdir` is under the image's own /home
+    {workdir: //tmp}|`workdir` is an absolute path
+    {workdir: /./tmp}|`workdir` is an absolute path
+    {workdir: /usr/lib/app}|`workdir` is under the image's own /usr
+    {expose: ["8080\n"]}|in `expose` is not a port
+    {expose: [65536]}|in `expose` is not a port
+    {files: "yes"}|`files` is `true` or `false`
+    {user: app}|`user` is not a key it takes
+    EOF
+    if refusal=$(uv tool run copier@9.19.1 copy --quiet --defaults --vcs-ref HEAD --data project_name=demo-binary \
+      --data "description=A demo binary." --data kind=binary --data 'image={files: true}' "$trellis" "$out/binary" 2>&1); then
+      fail "a binary took an image answer"
+    fi
+    grep --quiet 'Only a service takes an `image` answer' <<< "$refusal" || fail "a binary's image answer was refused for another reason: $refusal"
+    generate "$out/default"
+    final_stage=$(awk '/^FROM / { stage = "" } { stage = stage $0 "\n" } END { printf "%s", stage }' "$out/default/Containerfile")
+    if grep --quiet --extended-regexp '^(WORKDIR|EXPOSE|ENV) |/files/' <<< "$final_stage"; then
+      fail "a service with the default image answer got image extras: $final_stage"
+    fi
+    if ! command -v docker > /dev/null; then
+      echo "image-extras checked the answer, but builds no image without Docker."
+      exit 0
+    fi
+    generate "$out/workdir" --data 'image={workdir: /srv/app}'
+    (cd "$out/workdir" && git init --quiet --initial-branch main && just notices && docker build --quiet --file Containerfile --tag demo-service:workdir . > /dev/null)
+    listing=$(docker run --rm --entrypoint /usr/local/bin/demo-service demo-service:workdir --version && docker image inspect --format '{{{{ .Config.WorkingDir }}' demo-service:workdir)
+    grep --quiet --line-regexp /srv/app <<< "$listing" || fail "the image's working directory isn't /srv/app: $listing"
+    container=$(docker create demo-service:workdir)
+    docker cp "$container:/srv" - | tar --list --verbose > "$out/workdir.txt"
+    docker rm "$container" > /dev/null
+    grep --quiet --extended-regexp '^drwxr-xr-x (root/root|0/0) .* srv/app/$' "$out/workdir.txt" \
+      || fail "the working directory isn't root's and 0755: $(cat "$out/workdir.txt")"
+    project="$out/demo-service"
+    generate "$project" --data 'image={env: {HOST: 0.0.0.0, PORT: "8740", QUOTED: "a \"b\" $HOME \\ c"}, workdir: /app, expose: [8740, 9000/udp], files: true}'
+    cd "$project"
+    git init --quiet --initial-branch main
+    files=crates/demo_service/image
+    just notices
+    refused_build "crates/demo_service/image doesn't exist" "the image built without crates/demo_service/image"
+    mkdir -p "$files/tmp"
+    echo "scratch" > "$files/tmp/scratch"
+    refused_build "crates/demo_service/image/tmp would change the image's own /tmp" "the image's files went into its own /tmp"
+    rm -r "$files/tmp"
+    mkdir -p "$files/usr/lib"
+    echo "not a library" > "$files/usr/lib/libgcc_s.so.1"
+    refused_build "usr/lib would change the image's own /usr/lib" "the image's files went into its own /usr/lib"
+    rm -r "$files/usr/lib"
+    mkdir -p "$files/app"
+    cp "$(type -P true)" "$files/app/tool"
+    refused_build "app/tool is an ELF program or library" "the image took an ELF file"
+    rm "$files/app/tool"
+    mkdir -p "$files/app/profiles" "$files/usr/share/doc/demo-service" "$files/app/bin"
+    echo '{"name": "default"}' > "$files/app/profiles/default.json"
+    echo "A vendored component's notice." > "$files/usr/share/doc/demo-service/NOTICE"
+    echo "Not the project's license." > "$files/usr/share/doc/demo-service/LICENSE"
+    printf '#!/bin/sh\necho helper\n' > "$files/app/bin/helper"
+    chmod 600 "$files/app/profiles/default.json" "$files/usr/share/doc/demo-service/"* LICENSE* target/THIRD-PARTY-LICENSES*
+    chmod 700 "$files/app/bin/helper"
+    git add --all
+    git -c user.name=trellis -c user.email=trellis@localhost commit --quiet --message "chore: generate from trellis"
+    just policy
+    (umask 077 && just image)
+    docker run --rm demo-service:dev --version
+    config=$(docker image inspect --format '{{{{ json .Config }}' demo-service:dev)
+    for expected in '"HOST=0.0.0.0"' '"PORT=8740"' '"QUOTED=a \"b\" $HOME \\ c"' '"WorkingDir":"/app"' \
+      '"8740/tcp":{}' '"9000/udp":{}' '"User":"65532"'; do
+      grep --quiet --fixed-strings -- "$expected" <<< "$config" || fail "the image's config lacks $expected: $config"
+    done
+    container=$(docker create demo-service:dev)
+    trap 'docker rm "$container" > /dev/null; rm -rf "$out"' EXIT
+    for path in /app/profiles/default.json /usr/share/doc/demo-service/NOTICE /app/bin/helper; do
+      docker cp "$container:$path" - | tar --list --verbose > "$out/file.txt"
+      grep --quiet --extended-regexp -- "^-rw-r--r-- (root/root|0/0) " "$out/file.txt" || fail "$path isn't -rw-r--r--, owned by root: $(cat "$out/file.txt")"
+    done
+    docker export "$container" | tar --list --verbose > "$out/image.txt"
+    for expected in '^drwxrwxrwt (root/root|0/0) .* tmp/$' '^drwx------ 65532/65532 .* home/nonroot/$'; do
+      grep --quiet --extended-regexp -- "$expected" "$out/image.txt" || fail "the image's files changed the base image's directories: $(grep -E ' (tmp|home/nonroot)/$' "$out/image.txt")"
+    done
+    docker cp "$container:/usr/share/doc/demo-service/LICENSE" "$out/LICENSE"
+    cmp --quiet LICENSE "$out/LICENSE" || fail "the image's files replaced trellis's license file"
 
 # A generated service's CI builds the image for every architecture on an x86-64 runner, as its
 # release does, cross-compiling for the others. CI's `Service image` jobs build the arm64 one here

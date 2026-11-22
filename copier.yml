@@ -174,6 +174,72 @@ build:
     {%- endif -%}
     {{ ns.error }}
 
+image:
+  type: yaml
+  help: >-
+    What the service's image adds to its binary and license files, as a YAML mapping, or {} for
+    nothing. `env` maps variable names to default values, quoted, `workdir` is the directory the
+    service starts in, `expose` lists the ports it listens on, and `files: true` copies the tree in
+    `crates/<crate>/image/`, where `<crate>` is the name with `_` for `-`, onto the image's root,
+    such as a notice at `crates/<crate>/image/usr/share/doc/<name>/NOTICE`. Most services need
+    nothing. Example: `{env: {PORT: "8080"}, workdir: /app, expose: [8080]}`.
+  default: {}
+  when: "{{ kind == 'service' }}"
+  # Every value lands in a Containerfile instruction, so each is held to a form that instruction
+  # reads one way: `\Z`, unlike `$`, doesn't match before a last line feed. An env value must be a
+  # string, since YAML reads an unquoted `0022` or `1.10` as a number and drops what was written.
+  # The image's own top-level directories are refused as a workdir, as the Containerfile refuses
+  # them as files, since the copy would reset their owners and modes. Copier runs this even when it
+  # doesn't ask, so a `--data` answer can't reach another kind.
+  validator: >-
+    {%- set ns = namespace(error='') -%}
+    {%- set own = ['bin', 'boot', 'dev', 'etc', 'home', 'lib', 'lib32', 'lib64', 'libx32', 'proc', 'root', 'run', 'sbin', 'sys', 'tmp', 'var'] -%}
+    {%- set web_dir = (project_name | replace('-', '_') | upper) ~ '_WEB_DIR' -%}
+    {%- if image is not mapping -%}
+    {%- set ns.error = 'Write a mapping, such as `{env: {PORT: "8080"}}`, or `{}` for nothing.' -%}
+    {%- elif image and kind != 'service' -%}
+    {%- set ns.error = 'Only a service takes an `image` answer.' -%}
+    {%- else -%}
+    {%- for key in image if key not in ['env', 'workdir', 'expose', 'files'] -%}
+    {%- set ns.error = '`' ~ key ~ '` is not a key it takes; use `env`, `workdir`, `expose` or `files`.' -%}
+    {%- endfor -%}
+    {%- if 'env' in image -%}
+    {%- if image.env is not mapping -%}
+    {%- set ns.error = '`env` maps variable names to values, such as `{PORT: "8080"}`.' -%}
+    {%- else -%}
+    {%- for name, value in image.env.items() -%}
+    {%- if not (name is string and name | regex_search('^[A-Za-z_][A-Za-z0-9_]*\\Z')) -%}
+    {%- set ns.error = '`' ~ name ~ '` in `env` is not a variable name: use letters, digits and `_`.' -%}
+    {%- elif name == web_dir -%}
+    {%- set ns.error = '`' ~ name ~ '` in `env` is the variable trellis sets to the web UI it puts in the image.' -%}
+    {%- elif value is not string or value | length > 4096 or value | regex_search('[\\x00-\\x1f\\x7f-\\x9f\\u2028\\u2029]') -%}
+    {%- set ns.error = '`env`\'s `' ~ name ~ '` needs a quoted one-line string of at most 4096 characters, such as `"8080"`.' -%}
+    {%- endif -%}
+    {%- endfor -%}
+    {%- endif -%}
+    {%- endif -%}
+    {%- if 'workdir' in image -%}
+    {%- if not (image.workdir is string and image.workdir | regex_search('^(/[A-Za-z0-9_-][A-Za-z0-9._-]*)+\\Z')) -%}
+    {%- set ns.error = '`workdir` is an absolute path whose parts are letters, digits and `._-`, not starting with a dot, such as `/app`.' -%}
+    {%- elif image.workdir.split('/')[1] in own or (image.workdir.split('/')[1] == 'usr' and image.workdir.split('/')[2] | default('') != 'share') -%}
+    {%- set ns.error = '`workdir` is under the image\'s own /' ~ image.workdir.split('/')[1] ~ '; use /usr/share or a directory of its own, such as /app.' -%}
+    {%- endif -%}
+    {%- endif -%}
+    {%- if 'expose' in image -%}
+    {%- if image.expose is string or image.expose is not iterable or image.expose is mapping -%}
+    {%- set ns.error = '`expose` lists ports, such as `[8080, 9000/udp]`.' -%}
+    {%- else -%}
+    {%- for port in image.expose if port is boolean or not ((port | string) | regex_search('^[1-9][0-9]{0,4}(/(tcp|udp))?\\Z') and (port | string).split('/')[0] | int <= 65535) -%}
+    {%- set ns.error = '`' ~ port ~ '` in `expose` is not a port, such as `8080` or `9000/udp`.' -%}
+    {%- endfor -%}
+    {%- endif -%}
+    {%- endif -%}
+    {%- if 'files' in image and image.files is not boolean -%}
+    {%- set ns.error = '`files` is `true` or `false`.' -%}
+    {%- endif -%}
+    {%- endif -%}
+    {{ ns.error }}
+
 publish_crate:
   type: bool
   help: >-
