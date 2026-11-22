@@ -701,10 +701,11 @@ update:
 # only when it has one. After `ci`, a service also builds and runs its image when Docker is
 # installed, under umask 077 with its license files 0600, and the image's user must be able to read
 # them. A web UI's build and license notices must be in it too, and its install must refuse a
-# missing bun.lock and a package that provides a `bun` command, and read the app's bunfig.toml.
-# After `ci`, an about.toml entry for a crate the graph doesn't hold must pass `just notices` and
-# fail `just stale-licenses`. A `target` runs `test` and `build-release` for that target, as a
-# project's CI does for the target a release ships.
+# missing bun.lock and a package that provides a `bun` command, and read the app's bunfig.toml. A
+# library's `just dylint` must delete a lint library built from another trellis commit and keep one
+# built from this one. After `ci`, an about.toml entry for a crate the graph doesn't hold must pass
+# `just notices` and fail `just stale-licenses`. A `target` runs `test` and `build-release` for
+# that target, as a project's CI does for the target a release ships.
 #
 # Generates a project of one kind and runs its checks.
 template kind recipes="ci" publish="false" web="false" target="":
@@ -745,6 +746,22 @@ template kind recipes="ci" publish="false" web="false" target="":
       # one, the checks must have left no change behind.
       git update-ref refs/remotes/origin/main HEAD
       just rule-changes
+    fi
+    if [ "{{ kind }}" = library ] && [[ " {{ recipes }} " = *" dylint "* || "{{ recipes }}" = ci ]]; then
+      # A lint library built from another trellis commit is deleted before `just dylint` runs, as
+      # after an update, since cargo-dylint would keep using it.
+      echo "an older trellis commit" > target/dylint/trellis-rev
+      touch target/dylint/libraries/built-from-the-older-commit
+      just dylint
+      [ ! -e target/dylint/libraries/built-from-the-older-commit ] \
+        || { echo "error: just dylint kept a lint library built from another trellis commit" >&2; exit 1; }
+      [ "$(tr -d '\r\n' < target/dylint/trellis-rev)" = "$(just --evaluate trellis_rev | tr -d '\r\n')" ] \
+        || { echo "error: just dylint recorded \"$(cat target/dylint/trellis-rev)\" as the trellis commit its lint library came from" >&2; exit 1; }
+      # A library built from this commit stays, so CI's cache keeps saving the build.
+      touch target/dylint/libraries/built-from-this-commit
+      just dylint
+      [ -e target/dylint/libraries/built-from-this-commit ] \
+        || { echo "error: just dylint deleted a lint library built from this trellis commit" >&2; exit 1; }
     fi
     if [[ "{{ recipes }}" = ci || " {{ recipes }} " = *" notices "* ]] && [ -f about.toml ]; then
       # A rules pull request accepts a license for a crate before the code pull request adds it:
