@@ -6,7 +6,7 @@ part lists what a project's owner must do around the update: a rule that can fla
 a setting to change, or a step to do by hand. [CONTRIBUTING.md](CONTRIBUTING.md#release-trellis)
 has the versioning rule.
 
-## Unreleased
+## v0.15.1
 
 ### Fixed
 
@@ -20,11 +20,6 @@ has the versioning rule.
   at the message's span, and the lint read a string with no identifier in it as one that could
   spell any path, so it took the call for code the caller wrote. `#[error("text: {0}")]` and
   `#[error("{name}")]` already passed.
-
-## Unreleased
-
-### Fixed
-
 - `just check-github` in a private repository whose plan can't protect `main` reports `main`'s
   protection as unavailable again, as `docs/maintaining.md` says, instead of "wrong". On an HTTP
   error, `gh api` writes GitHub's JSON body to stdout even with `--jq`, and the recipe read that
