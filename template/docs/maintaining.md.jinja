@@ -594,7 +594,9 @@ hold need more than the update, and two can't change this way at all:
   it's missing, and don't run a plain `bun install` or `just web-build` on that branch: until
   the update merges, `.gitignore` doesn't ignore the app's `node_modules/` and `dist/`, so
   `just rule-changes` counts what they write. Then run the update with `--data web_ui=true`, and
-  add the app's settings files to its pull request.
+  add the app's settings files to its pull request. When the app trips a check that only a rule
+  can settle, such as a class name `just typos` flags, which only an entry in `_typos.toml` lets
+  through, land that rule in a rules pull request before the app's code pull request.
 {%- endif %}
 {%- endif %}
 
