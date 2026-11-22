@@ -198,10 +198,15 @@ run *args:{{ ' web-build' if web_ui else '' }}
 # where it puts the build.
 export {{ crate_name | upper }}_WEB_DIR := justfile_directory() / "crates" / "{{ crate_name }}" / "web" / "dist"
 
+# `bun run` finds a script's commands first in node_modules/.bin, in the web UI's directory and
+# in every directory above it. So if one of those holds a `bun` or `bunx` command, the web UI's
+# scripts run on that Bun, not the pinned one, and this fails.
+#
 # Installs the web UI's packages, exactly as bun.lock lists them.
 [working-directory("crates/{{ crate_name }}/web")]
 web-install:
     bun install --frozen-lockfile
+    @bun --eval "const path = require('node:path'); for (let dir = process.cwd(), up; ; dir = up) { const bin = path.join(dir, 'node_modules', '.bin'); if (['bun', 'bunx'].some((name) => Bun.which(name, { PATH: bin }))) { console.error('error: ' + bin + ' holds a bun or bunx command, so the web scripts would run on that Bun and not the pinned one. CONTRIBUTING.md says what to do.'); process.exit(1); } up = path.dirname(dir); if (up === dir) break; }"
 
 # Checks the web UI with its `check` script, which type-checks it.
 [working-directory("crates/{{ crate_name }}/web")]
