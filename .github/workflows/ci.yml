@@ -80,7 +80,7 @@ jobs:
 
       - uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2.90.5
         with:
-          tool: just@1.59.0,cargo-nextest@0.9.150,cargo-dylint@6.4.0,dylint-link@6.4.0
+          tool: just@1.59.0,cargo-nextest@0.9.150,cargo-dylint@6.4.0,dylint-link@6.4.0,shellcheck@0.11.0
 
       - run: just lints-lint
       - run: just lints-comments
@@ -140,28 +140,28 @@ jobs:
             kind: binary
             target: aarch64-unknown-linux-musl
             recipes: lint dylint test docs build-release notices
-            tools: just@1.59.0,cargo-nextest@0.9.150,cargo-dylint@6.4.0,dylint-link@6.4.0,uv@0.13.8,cargo-about@0.9.3
+            tools: just@1.59.0,cargo-nextest@0.9.150,cargo-dylint@6.4.0,dylint-link@6.4.0,uv@0.13.8,cargo-about@0.9.3,shellcheck@0.11.0
             checker: "true"
           - name: binary on macOS
             os: macos-26
             kind: binary
             target: aarch64-apple-darwin
             recipes: lint dylint test docs build-release notices
-            tools: just@1.59.0,cargo-nextest@0.9.150,cargo-dylint@6.4.0,dylint-link@6.4.0,uv@0.13.8,cargo-about@0.9.3
+            tools: just@1.59.0,cargo-nextest@0.9.150,cargo-dylint@6.4.0,dylint-link@6.4.0,uv@0.13.8,cargo-about@0.9.3,shellcheck@0.11.0
             checker: "true"
           - name: binary on Windows
             os: windows-2025
             kind: binary
             target: x86_64-pc-windows-msvc
             recipes: lint dylint test docs build-release notices
-            tools: just@1.59.0,cargo-nextest@0.9.150,cargo-dylint@6.4.0,dylint-link@6.4.0,uv@0.13.8,cargo-about@0.9.3
+            tools: just@1.59.0,cargo-nextest@0.9.150,cargo-dylint@6.4.0,dylint-link@6.4.0,uv@0.13.8,cargo-about@0.9.3,shellcheck@0.11.0
             checker: "true"
           - name: binary on Windows on ARM64
             os: windows-11-arm
             kind: binary
             target: aarch64-pc-windows-msvc
             recipes: lint dylint test docs build-release notices
-            tools: just@1.59.0,cargo-nextest@0.9.150,cargo-dylint@6.4.0,dylint-link@6.4.0,uv@0.13.8,cargo-about@0.9.3
+            tools: just@1.59.0,cargo-nextest@0.9.150,cargo-dylint@6.4.0,dylint-link@6.4.0,uv@0.13.8,cargo-about@0.9.3,shellcheck@0.11.0
             checker: "true"
           # A binary with a web UI builds it and writes its notices on its Windows release runners
           # too, through the PowerShell recipes.

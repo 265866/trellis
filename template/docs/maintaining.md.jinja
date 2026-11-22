@@ -308,6 +308,15 @@ An update leaves them alone.
 {%- endif %}
 {%- endif %}
 
+## Extend what trellis generates
+
+Each of these is a place trellis leaves to the project, so you never edit a file it generates.
+An update leaves them alone.
+
+- **Deploy kit.** Keep the scripts and units that install and run it on a host in `deploy/`.
+  They are code, and `just policy` runs shellcheck on the scripts; "Send a change" in
+  [CONTRIBUTING.md](../CONTRIBUTING.md#send-a-change) says which files there stay rules.
+
 ## Change an answer
 
 To change an answer, keep the trellis version and pass the new value, such as

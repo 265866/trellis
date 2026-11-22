@@ -15,6 +15,7 @@ pub mod build_scripts;
 mod case_insensitive;
 mod changed_files;
 pub mod config_files;
+mod deploy_scripts;
 pub mod docs_index;
 pub mod docs_layout;
 mod git;

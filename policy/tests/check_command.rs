@@ -397,7 +397,7 @@ fn symbolic_link(target: impl AsRef<Path>, link: &Path) {
 fn a_generated_project_passes() {
     let run = Project::new().check();
     run.assert_passes();
-    run.assert_reports(0, "All 12 structure rules hold");
+    run.assert_reports(0, "All 13 structure rules hold");
 }
 
 #[test]
@@ -2662,5 +2662,247 @@ fn a_git_repository_that_is_ignored_passes_until_it_is_tracked() {
         1,
         "error: [member_sources] scratch/sub: This is another git repository, such as a \
          submodule, so the checks can't see its files",
+    );
+}
+
+/// A deploy kit's scripts that shellcheck passes, a unit file and a script known only by its `#!`
+/// line pass.
+#[test]
+fn a_deploy_kit_that_shellcheck_passes_passes() {
+    let project = Project::new();
+    project.write(
+        "deploy/common.sh",
+        "#!/usr/bin/env bash\n# Shared settings.\nexport APP_DIR=/srv/app\n",
+    );
+    project.write(
+        "deploy/install.sh",
+        "#!/usr/bin/env bash\nset -euo pipefail\n# shellcheck source=common.sh\n\
+         . \"$(dirname \"$0\")/common.sh\"\nmkdir -p \"$APP_DIR\"\n",
+    );
+    project.write("deploy/update", "#!/bin/sh\nset -eu\necho \"updating\"\n");
+    project.write(
+        "deploy/app.container",
+        "[Container]\nImage=ghcr.io/owner/app:1\nExec=sh -c $unquoted\n",
+    );
+    project.check().assert_passes();
+}
+
+/// Each script under `deploy/` that shellcheck faults is reported at its file, whether it is
+/// known by its name or by its `#!` line, and only there.
+#[test]
+fn a_deploy_script_that_shellcheck_faults_fails() {
+    let project = Project::new();
+    project.write(
+        "deploy/backup.sh",
+        "#!/usr/bin/env bash\nrm -rf $DATA_DIR/old\n",
+    );
+    project.write("deploy/restore", "#!/bin/sh\ncd $1\n");
+    project.write("tools/loose.sh", "#!/bin/sh\ncd $1\n");
+    let run = project.check();
+    run.assert_reports(
+        1,
+        "error: [deploy_scripts] deploy/backup.sh: shellcheck reports",
+    );
+    run.assert_reports(1, "[SC2086]");
+    run.assert_reports(
+        1,
+        "error: [deploy_scripts] deploy/restore: shellcheck reports",
+    );
+    assert!(
+        !run.stdout.contains("tools/loose.sh"),
+        "only deploy/ is checked: {run:#?}"
+    );
+}
+
+/// A `.shellcheckrc`, in the kit or at the root, can't turn a check off; a directive beside the
+/// line can, where review sees it.
+#[test]
+fn a_shellcheckrc_cant_silence_a_deploy_script() {
+    let project = Project::new();
+    project.write(".shellcheckrc", "disable=all\n");
+    project.write("deploy/.shellcheckrc", "disable=all\n");
+    project.write("deploy/backup.sh", "#!/bin/sh\nrm -rf $1/old\n");
+    project.check().assert_reports(
+        1,
+        "error: [deploy_scripts] deploy/backup.sh: shellcheck reports",
+    );
+    project.write(
+        "deploy/backup.sh",
+        "#!/bin/sh\nset -eu\n# shellcheck disable=SC2086 # The argument is one word by contract.\n\
+         rm -rf $1/old\n",
+    );
+    project.check().assert_passes();
+}
+
+/// A directive that turns every check off, or one before the first command, which covers the
+/// whole script, fails, and so does `SHELLCHECK_OPTS`'s attempt to exclude a check.
+#[test]
+fn a_deploy_script_cant_turn_shellcheck_off() {
+    let project = Project::new();
+    project.write(
+        "deploy/backup.sh",
+        "#!/bin/sh\n# shellcheck disable=all\nrm -rf $1/old\n",
+    );
+    project.check().assert_reports(
+        1,
+        "error: [deploy_scripts] deploy/backup.sh: Line 2 disables `all`",
+    );
+    project.write(
+        "deploy/backup.sh",
+        "#!/bin/sh\n# shellcheck disable=SC2086 # Covers the script.\nrm -rf $1/old\nrm -rf $2/new\n",
+    );
+    project.check().assert_reports(
+        1,
+        "error: [deploy_scripts] deploy/backup.sh: A shellcheck directive hides SC2086 at line 4, \
+         which isn't the line right below it",
+    );
+    project.write("deploy/backup.sh", "#!/bin/sh\nset -eu\nrm -rf $1/old\n");
+    let output = Command::new(env!("CARGO_BIN_EXE_trellis-policy"))
+        .arg("check")
+        .current_dir(project.path())
+        .env("CARGO", env!("CARGO"))
+        .env("SHELLCHECK_OPTS", "--exclude=SC2086 --severity=error")
+        .env_remove("GITHUB_ACTIONS")
+        .output()
+        .expect("trellis-policy should run");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(output.status.code(), Some(1), "{stdout}");
+    assert!(stdout.contains("[SC2086]"), "{stdout}");
+}
+
+/// A symbolic link in a deploy kit fails, since review read the file it points at nowhere.
+#[test]
+fn a_symbolic_link_in_a_deploy_kit_fails() {
+    let project = Project::new();
+    project.write("scripts/install.sh", "#!/bin/sh\necho installed\n");
+    project.write("deploy/README.md", "The kit.\n");
+    symbolic_link(
+        "../scripts/install.sh",
+        &project.path().join("deploy/install.sh"),
+    );
+    project.check().assert_reports(
+        1,
+        "error: [deploy_scripts] deploy/install.sh: This is a symbolic link",
+    );
+}
+
+/// Without shellcheck the check can't run, so the run fails rather than pass the kit unchecked,
+/// and a project with no deploy kit doesn't need it.
+#[test]
+fn a_deploy_kit_without_shellcheck_fails() {
+    let project = Project::new();
+    let empty = TempDir::new().expect("the temporary directory should be created");
+    let sysroot = Command::new("rustc")
+        .args(["--print", "sysroot"])
+        .output()
+        .expect("rustc should run");
+    let sysroot = String::from_utf8_lossy(&sysroot.stdout);
+    let rustc = Path::new(sysroot.trim())
+        .join("bin")
+        .join(format!("rustc{}", env::consts::EXE_SUFFIX));
+    let check = |project: &Project| {
+        let output = Command::new(env!("CARGO_BIN_EXE_trellis-policy"))
+            .arg("check")
+            .current_dir(project.path())
+            .env("CARGO", env!("CARGO"))
+            .env("PATH", empty.path())
+            .env("RUSTC", &rustc)
+            .env_remove("GITHUB_ACTIONS")
+            .output()
+            .expect("trellis-policy should run");
+        (
+            output.status.code(),
+            String::from_utf8_lossy(&output.stdout).into_owned(),
+        )
+    };
+    let (code, stdout) = check(&project);
+    assert_eq!(code, Some(0), "no kit needs no shellcheck: {stdout}");
+    project.write("deploy/install.sh", "#!/bin/sh\necho installed\n");
+    let (code, stdout) = check(&project);
+    assert_eq!(code, Some(2), "{stdout}");
+    assert!(
+        stdout.contains("[deploy_scripts] the check couldn't run")
+            && stdout.contains("shellcheck isn't installed"),
+        "{stdout}"
+    );
+}
+
+/// A file a deploy script sources is shellchecked too, though no name or `#!` line marks it as a
+/// script, and its findings and directives are reported at it.
+#[test]
+fn a_file_a_deploy_script_sources_is_checked() {
+    let project = Project::new();
+    project.write(
+        "deploy/install.sh",
+        "#!/bin/sh\nset -eu\n# shellcheck source=lib/common\n. \"$(dirname \"$0\")/lib/common\"\n\
+         clean old\n",
+    );
+    project.write("deploy/lib/common", "clean() {\n  rm -rf $1\n}\n");
+    project.check().assert_reports(
+        1,
+        "error: [deploy_scripts] deploy/lib/common: shellcheck reports, at line:column 2:10",
+    );
+    project.write(
+        "deploy/lib/common",
+        "# shellcheck disable=all\nclean() {\n  rm -rf $1\n}\n",
+    );
+    project.check().assert_reports(
+        1,
+        "error: [deploy_scripts] deploy/lib/common: Line 1 disables `all`",
+    );
+}
+
+/// A directive that covers more than the line below it, the way shellcheck applies one to the
+/// whole next command, fails at the finding it hides: across a lone `\` line, over a block that
+/// opens mid-line, and over a sourced file.
+#[test]
+fn a_directive_that_hides_more_than_its_line_fails() {
+    for (script, hidden_in, line) in [
+        (
+            "#!/bin/sh\n\\\n# shellcheck disable=SC2086 # r\nset -eu\nrm $1\n",
+            "deploy/run.sh",
+            5,
+        ),
+        (
+            "#!/bin/sh\nset -eu\n# shellcheck disable=SC2086 # r\ntrue && {\n  rm $1\n}\n",
+            "deploy/run.sh",
+            5,
+        ),
+        (
+            "#!/bin/sh\nset -eu\n# shellcheck disable=SC2086 # r\nls | while read -r f; do\n  rm $f\ndone\n",
+            "deploy/run.sh",
+            5,
+        ),
+        (
+            "#!/bin/sh\nset -eu\n# shellcheck disable=SC2086 # r\n. ./app.env\n",
+            "deploy/app.env",
+            1,
+        ),
+    ] {
+        let project = Project::new();
+        project.write("deploy/run.sh", script);
+        project.write("deploy/app.env", "rm -rf $1\n");
+        project.check().assert_reports(
+            1,
+            &format!(
+                "error: [deploy_scripts] {hidden_in}: A shellcheck directive hides SC2086 at line \
+                 {line}"
+            ),
+        );
+    }
+}
+
+/// A file outside the kit that a script sources isn't read, so the script must say so.
+#[test]
+fn a_deploy_script_cant_source_a_file_outside_the_kit_unseen() {
+    let project = Project::new();
+    project.write("tools/lib.sh", "# shellcheck disable=all\nrm -rf $1\n");
+    project.write(
+        "deploy/run.sh",
+        "#!/bin/sh\nset -eu\n. \"$(dirname \"$0\")/../tools/lib.sh\"\n",
+    );
+    project.check().assert_reports(
+        1,
+        "error: [deploy_scripts] deploy/run.sh: shellcheck reports",
     );
 }
