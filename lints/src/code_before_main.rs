@@ -228,15 +228,17 @@ impl<'ast> Visitor<'ast> for ConstructorStatics {
     }
 }
 
-/// Whether `item` is a static in a constructor section, as the expanded crate writes it.
+/// Whether `item` is a static in a constructor section, as the expanded crate writes it. rustc
+/// keeps only the first `link_section` of an item and drops the others, so only the first counts
+/// here, as it does for the late pass that reads the parsed attribute.
 pub(crate) fn is_constructor_static(item: &rustc_ast::Item) -> bool {
     matches!(item.kind, rustc_ast::ItemKind::Static(..))
         && item
             .attrs
             .iter()
-            .filter(|attribute| attribute.has_name(sym::link_section))
-            .filter_map(Attribute::value_str)
-            .any(|section| is_constructor_section(section.as_str()))
+            .find(|attribute| attribute.has_name(sym::link_section))
+            .and_then(Attribute::value_str)
+            .is_some_and(|section| is_constructor_section(section.as_str()))
 }
 
 /// Whether `attribute` sets lint levels or is one of clippy's own attributes.

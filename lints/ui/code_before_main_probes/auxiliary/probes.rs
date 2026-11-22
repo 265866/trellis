@@ -103,3 +103,21 @@ macro_rules! submit_reason {
         };
     };
 }
+
+/// Writes the caller's items beside a static whose first `link_section` is an ordinary section
+/// and whose second is a constructor's, which rustc drops.
+#[macro_export]
+macro_rules! wrap_duplicate_section {
+    ($($user:item)*) => {
+        #[allow(dead_code)]
+        pub mod duplicate_wrapped {
+            $($user)*
+
+            extern "C" fn constructor() {}
+            #[used]
+            #[link_section = ".text.ordinary"]
+            #[link_section = ".init_array"]
+            static CONSTRUCTOR: extern "C" fn() = constructor;
+        }
+    };
+}

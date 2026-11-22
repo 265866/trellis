@@ -47,6 +47,15 @@ probes::submit_tool!();
 // Flagged by `code_before_main` alone: a reason names no lint.
 probes::submit_reason!();
 
+// Flagged by `suppression_policy`: rustc keeps only the first `link_section`, an ordinary one, so
+// the static is no constructor and the macro's `allow(dead_code)` over the code written here is
+// checked as its macro's.
+probes::wrap_duplicate_section! {
+    pub fn duplicate_code() -> i32 {
+        3 + 3
+    }
+}
+
 mod quiet {
     #![allow(code_before_main)]
 

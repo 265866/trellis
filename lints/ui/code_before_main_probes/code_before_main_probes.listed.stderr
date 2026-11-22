@@ -10,7 +10,7 @@ LL | |     }
    = note: `#[warn(suppression_policy)]` on by default
 
 warning: `allow` attribute
-  --> $DIR/code_before_main_probes.rs:51:5
+  --> $DIR/code_before_main_probes.rs:60:5
    |
 LL |     #![allow(code_before_main)]
    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -18,7 +18,7 @@ LL |     #![allow(code_before_main)]
    = help: use `#[expect(lint, reason = "...")]` on the narrowest item, which fails once the lint stops firing
 
 warning: inner `#![allow(..)]` attribute
-  --> $DIR/code_before_main_probes.rs:51:5
+  --> $DIR/code_before_main_probes.rs:60:5
    |
 LL |     #![allow(code_before_main)]
    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -26,7 +26,7 @@ LL |     #![allow(code_before_main)]
    = help: it applies to everything in the enclosing crate, module or function: put an outer `#[expect(lint, reason = "...")]` on the narrowest item instead, or change the level in `[workspace.lints]` in `Cargo.toml`
 
 warning: `allow` of `code_before_main`, which has no exceptions
-  --> $DIR/code_before_main_probes.rs:51:14
+  --> $DIR/code_before_main_probes.rs:60:14
    |
 LL |     #![allow(code_before_main)]
    |              ^^^^^^^^^^^^^^^^
@@ -83,6 +83,19 @@ LL | probes::submit_tool!();
    = help: use `#[expect(lint, reason = "...")]` on the narrowest item, which fails once the lint stops firing
    = help: write the code without `probes::submit_tool`, as the idioms in `docs/style.md` show; list `probes` in `trusted_macro_crates` only after reading every lint level its macros write, which is a rule change
 
+warning: `allow` attribute, which the macro `probes::wrap_duplicate_section` from `probes` writes
+  --> $DIR/code_before_main_probes.rs:53:1
+   |
+LL | / probes::wrap_duplicate_section! {
+LL | |     pub fn duplicate_code() -> i32 {
+LL | |         3 + 3
+LL | |     }
+LL | | }
+   | |_^
+   |
+   = help: use `#[expect(lint, reason = "...")]` on the narrowest item, which fails once the lint stops firing
+   = help: write the code without `probes::wrap_duplicate_section`, as the idioms in `docs/style.md` show; list `probes` in `trusted_macro_crates` only after reading every lint level its macros write, which is a rule change
+
 warning: `allow` attribute, which the macro `$crate::probes::submit_plain` from `probes` writes
   --> $DIR/code_before_main_probes.rs:32:1
    |
@@ -93,7 +106,7 @@ LL | trusted_outer::outer!();
    = help: write the code without `$crate::probes::submit_plain`, as the idioms in `docs/style.md` show; list `probes` in `trusted_macro_crates` only after reading every lint level its macros write, which is a rule change
 
 warning: `allow` attribute, which the macro `probes::submit_plain` from `probes` writes
-  --> $DIR/code_before_main_probes.rs:55:5
+  --> $DIR/code_before_main_probes.rs:64:5
    |
 LL |     probes::submit_plain!();
    |     ^^^^^^^^^^^^^^^^^^^^^^^
@@ -118,5 +131,5 @@ LL | probes::submit_reason!();
    |
    = help: call the code from `main` instead, or, if the framework needs it, list "probes::submit_reason" in `constructor_macros` under `[trellis_lints]` in `dylint.toml`
 
-warning: 13 warnings emitted
+warning: 14 warnings emitted
 
