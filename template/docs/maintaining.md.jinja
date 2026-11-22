@@ -280,12 +280,12 @@ An update leaves them alone.
   `.github/setup-build.sh` in CI's build jobs and the release's, on every runner before the
   build, with the runner's system in `RUNNER_OS` and the target in `TARGET`. In CI it runs right
   after the checkout, before the cache is restored, so it can free the disk space the cache and
-  the build need. trellis writes a
-  starter that installs nothing, and an update never overwrites your version. It can install
-  packages with `sudo apt-get`, free disk space, or download a toolchain component such as
-  Xcode's Metal compiler; a step that fails fails the build, with its output. It is a rule, like
-  the workflows, and `just actionlint` shellchecks it. `timeout` raises those jobs' limit from 60
-  minutes. Set the answer and fill in the script in one rules pull request:
+  the build need, and before `just` and the pinned toolchains are installed, so it can't use
+  either. trellis writes a starter that installs nothing, and an update never overwrites your
+  version. It can install packages with `sudo apt-get`, free disk space, or download a toolchain
+  component such as Xcode's Metal compiler; a step that fails fails the build, with its output. It
+  is a rule, like the workflows, and `just actionlint` shellchecks it. `timeout` raises those
+  jobs' limit from 60 minutes. Set the answer and fill in the script in one rules pull request:
 
   ```sh
   uvx copier update --defaults --vcs-ref=:current: --data 'build={libc: gnu, setup: true, timeout: 90}'
