@@ -14,7 +14,6 @@ pub mod agent_files;
 pub mod build_scripts;
 mod case_insensitive;
 mod changed_files;
-mod command_starts;
 pub mod config_files;
 mod deploy_scripts;
 pub mod docs_index;

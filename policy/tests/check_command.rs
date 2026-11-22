@@ -2754,7 +2754,7 @@ fn a_deploy_script_cant_turn_shellcheck_off() {
     project.check().assert_reports(
         1,
         "error: [deploy_scripts] deploy/backup.sh: A shellcheck directive hides SC2086 at line 4, \
-         which isn't in the command right below it",
+         but one right above line 4 would silence it there alone",
     );
     project.write("deploy/backup.sh", "#!/bin/sh\nset -eu\nrm -rf $1/old\n");
     let output = Command::new(env!("CARGO_BIN_EXE_trellis-policy"))
@@ -2975,4 +2975,65 @@ fn a_host_file_a_deploy_script_sources_isnt_reported() {
         ),
     );
     project.check().assert_passes();
+}
+
+/// A directive passes when shellcheck takes none closer to the finding it hides: above a loop
+/// whose closing line holds the finding, above a multi-line array, above a `case` whose pattern
+/// line holds it, and above a pipeline that continues after `done`.
+#[test]
+fn a_directive_where_shellcheck_takes_none_closer_passes() {
+    let project = Project::new();
+    project.write(
+        "deploy/run.sh",
+        "#!/bin/bash\nset -eu\n# shellcheck disable=SC2086 # r\nwhile read -r line; do\n  echo \"$line\"\ndone < $1\n\
+         # shellcheck disable=SC2206 # r\nargs=(\n  --foo $2\n)\necho \"${args[@]}\"\n\
+         # shellcheck disable=SC2254 # r\ncase $1 in\n  $2) echo \"$3\" ;;\n  *) : ;;\nesac\n\
+         # shellcheck disable=SC2086 # r\nfor f in a b; do\n  echo \"$f\"\ndone |\n  sort $4\n",
+    );
+    project.check().assert_passes();
+}
+
+/// A directive fails when a closer one would silence the finding alone: above a function whose
+/// body holds it, and before the first command, which covers the whole file, above a command
+/// whose quoted text holds an apostrophe, where a lexer could lose track of the quotes.
+#[test]
+fn a_directive_where_shellcheck_takes_a_closer_one_fails() {
+    for (script, line) in [
+        (
+            "#!/bin/sh\nset -eu\n# shellcheck disable=SC2086 # r\nclean() {\n  echo done\n  rm $1\n}\n",
+            6,
+        ),
+        (
+            "#!/bin/bash\n# shellcheck disable=SC2086,SC2116 # r\nmsg=\"$(echo \"can't connect\" $1)\"\n\
+             echo \"$msg\"\nrm $2\n",
+            5,
+        ),
+    ] {
+        let project = Project::new();
+        project.write("deploy/run.sh", script);
+        project.check().assert_reports(
+            1,
+            &format!(
+                "error: [deploy_scripts] deploy/run.sh: A shellcheck directive hides SC2086 at line \
+                 {line}"
+            ),
+        );
+    }
+}
+
+/// A kit file a script sources by its absolute path in the checkout is reported as the kit's.
+#[cfg(unix)]
+#[test]
+fn a_kit_file_sourced_by_its_absolute_path_is_checked() {
+    let project = Project::new();
+    project.write("deploy/lib/common", "clean() {\n  rm -rf $1\n}\n");
+    let library = project.path().join("deploy/lib/common");
+    project.write(
+        "deploy/run.sh",
+        &format!("#!/bin/sh\nset -eu\n. {}\nclean old\n", library.display()),
+    );
+    project.check().assert_reports(
+        1,
+        "error: [deploy_scripts] deploy/lib/common: shellcheck reports, at line:column 2:10",
+    );
 }

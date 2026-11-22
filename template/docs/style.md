@@ -168,8 +168,8 @@ Beyond the Google guide, the workspace also turns on:
   that every crate's commits reach the release notes through `changelog_include` in
   `release-plz.toml`; that every shell script under `deploy/` passes shellcheck, with no
   `.shellcheckrc` or `SHELLCHECK_OPTS` read, the files they source included, and that each
-  shellcheck directive there silences named codes, with a reason, only in the command right below
-  it, since a deploy kit is code no other check reads; and that the docs keep the
+  shellcheck directive there silences named codes, with a reason, as close above its finding as
+  shellcheck takes one, since a deploy kit is code no other check reads; and that the docs keep the
   layout under [Documentation](#documentation).
 - `overflow-checks` and `panic = "abort"` in release builds: an overflow stops the program rather
   than wrapping, and nothing catches a panic. `trellis-policy` fails a change that turns either

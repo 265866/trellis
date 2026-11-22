@@ -3,16 +3,17 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::{self, ErrorKind};
+use std::num::NonZeroUsize;
 use std::path::Path;
 use std::process::{Command, Stdio};
-use std::{env, fs};
+use std::{env, fs, panic, thread};
 
 use serde_json::Value;
 
 use crate::policy_error::PolicyError;
+use crate::repository_files;
 use crate::violation::Violation;
 use crate::workspace::Workspace;
-use crate::{command_starts, repository_files};
 
 /// The directory that holds a project's deploy kit, relative to the root. Its files are code to
 /// `trellis-policy rule-changes`, so a kit change lands with the code change it needs.
@@ -43,13 +44,12 @@ const INSTALL_REMEDY: &str = "Install the shellcheck version the Set up section 
 /// too, looked up from the script's directory. A finding in a file outside the kit, such as an
 /// `/etc/os-release` a script sources from the host, isn't the kit's, so it isn't reported.
 ///
-/// A file under `deploy/` silences one finding with a `# shellcheck disable=SC<code> # <reason>`
-/// line right above it, where review sees it. shellcheck applies a directive to the whole command
-/// below it, a function or a sourced file included, so the check measures what each directive
-/// hides: it runs shellcheck a second time with every `disable` taken out, and each finding that
-/// only that run reports must have a directive for its code right above the command its line
-/// belongs to, as [`command_starts::of`] finds it, with only comments and blank lines between.
-/// [`directive_problems`] says which other directives are violations. A symbolic link under
+/// A file under `deploy/` silences a finding with a `# shellcheck disable=SC<code> # <reason>`
+/// line above it, where review sees it. shellcheck applies a directive to the whole command below
+/// it, a function or a sourced file included, so the check measures what each directive hides: it
+/// runs shellcheck a second time with every `disable` taken out, and a finding that only that run
+/// reports fails when a directive closer to it would silence it, as [`Kit::closer_directive`]
+/// finds by asking shellcheck. [`directive_problems`] says which other directives are violations. A symbolic link under
 /// `deploy/` is one too, since the kit's files are what review read.
 ///
 /// A project without `deploy/` has no script, so the check runs nothing.
@@ -98,33 +98,195 @@ pub(crate) fn check(workspace: &Workspace) -> Result<Vec<Violation>, PolicyError
     if scripts.is_empty() {
         return Ok(violations);
     }
-    let reported = shellcheck_copy(&texts, &scripts, str::to_owned)?;
-    let disables = texts.values().any(|text| text.contains("disable="));
+    let kit = Kit {
+        root,
+        texts,
+        scripts,
+    };
+    let reported = kit.shellcheck(|_, text| text.to_owned())?;
+    let disables = kit.texts.values().any(|text| text.contains("disable="));
     let unsilenced = if disables {
-        shellcheck_copy(&texts, &scripts, without_disables)?
+        kit.shellcheck(|_, text| without_disables(text))?
     } else {
         BTreeSet::new()
     };
+    let parse_errors = unsilenced
+        .iter()
+        .filter(|finding| finding.is_parse_error())
+        .count();
     for hidden in unsilenced.difference(&reported) {
-        let silenced_above = texts
-            .get(&hidden.file)
-            .is_some_and(|text| silenced_right_above(text, hidden.line, hidden.code));
-        if !silenced_above {
+        if let Some(closer) = kit.closer_directive(hidden, parse_errors)? {
             violations.push(Violation::new(
                 hidden.file.clone(),
                 format!(
-                    "A shellcheck directive hides SC{} at line {}, which isn't in the command \
-                     right below it, so it hides more than it says: a whole function, block or \
-                     sourced file, or the rest of the file. Put `# shellcheck disable=SC{} # \
-                     <reason>` right above the command line {} belongs to, and take the code out \
-                     of the directive that hid it.",
-                    hidden.code, hidden.line, hidden.code, hidden.line
+                    "A shellcheck directive hides SC{code} at line {line}, but one right above \
+                     line {closer} would silence it there alone, so the directive that hid it \
+                     hides more than it says: a whole function, block or sourced file, or the \
+                     rest of the file. Put `# shellcheck disable=SC{code} # <reason>` on the line \
+                     above line {closer}, and take the code out of the directive that hid it.",
+                    code = hidden.code,
+                    line = hidden.line,
                 ),
             ));
         }
     }
     violations.extend(reported.iter().map(Finding::violation));
     Ok(violations)
+}
+
+/// A deploy kit's files, which shellcheck reads in a copy of `deploy/` alone.
+struct Kit<'root> {
+    /// The workspace's root.
+    root: &'root Path,
+    /// Each file under `deploy/`, relative to the root, mapped to its text.
+    texts: BTreeMap<String, String>,
+    /// The files that are scripts, which shellcheck runs on.
+    scripts: Vec<String>,
+}
+
+impl Kit<'_> {
+    /// The findings shellcheck reports for the kit's scripts in a copy of `deploy/`, made in a
+    /// temporary directory from each file's text as `edit`, given the file and its text, changes
+    /// it.
+    fn shellcheck(
+        &self,
+        edit: impl Fn(&str, &str) -> String,
+    ) -> Result<BTreeSet<Finding>, PolicyError> {
+        let copy = tempfile::tempdir().map_err(|source| PolicyError::Read {
+            path: env::temp_dir(),
+            source,
+        })?;
+        for (file, text) in &self.texts {
+            let path = copy.path().join(file);
+            let write_error = |source| PolicyError::Read {
+                path: path.clone(),
+                source,
+            };
+            if let Some(directory) = path.parent() {
+                fs::create_dir_all(directory).map_err(write_error)?;
+            }
+            fs::write(&path, edit(file, text)).map_err(write_error)?;
+        }
+        shellcheck(copy.path(), self.root, &self.scripts)
+    }
+
+    /// The line, counted from 1, closest above `hidden`'s own where a directive for its code alone
+    /// would silence it, below the first command under the directive that hid it, or `None` if
+    /// there is none. `hidden` is a finding that shellcheck reports only with every `disable` taken
+    /// out, a run that reports `parse_errors` parse errors.
+    ///
+    /// shellcheck refuses a directive inside a command, such as after a `|`, above a `case`
+    /// pattern or above the `done` that ends a loop, and ignores one in a string, a heredoc or an
+    /// array, but takes one above a command in a function or a block. So the check asks it: for
+    /// each line from the finding's up, it adds a probe directive above the line, in the run with
+    /// every `disable` taken out, and the first that silences the finding with no new parse error
+    /// is a closer place. A line after one that ends in `\` is skipped, since a comment there
+    /// would end the command the `\` continues. The probes run as many at once as the machine has
+    /// threads, closest first, since each runs shellcheck on the whole kit.
+    fn closer_directive(
+        &self,
+        hidden: &Finding,
+        parse_errors: usize,
+    ) -> Result<Option<usize>, PolicyError> {
+        let Some(text) = self.texts.get(&hidden.file) else {
+            return Ok(None);
+        };
+        let lines: Vec<&str> = text.lines().collect();
+        let above = &lines[..hidden.line.saturating_sub(1).min(lines.len())];
+        let is_comment = |line: &&str| {
+            let line = line.trim_start_matches([' ', '\t']);
+            line.is_empty() || line.starts_with('#')
+        };
+        let first_command = above
+            .iter()
+            .rposition(|line| {
+                Directive::of(line).is_some_and(|directive| {
+                    directive.code.trim().is_empty()
+                        && directive.disabled_codes().contains(&hidden.code)
+                })
+            })
+            .map(|directive| {
+                above[directive..]
+                    .iter()
+                    .position(|line| !is_comment(line))
+                    .map_or(above.len(), |offset| directive + offset)
+            });
+        let lowest = first_command.map_or(0, |index| index + 1);
+        let candidates: Vec<usize> = (lowest..=above.len())
+            .rev()
+            .filter(|&index| {
+                let continued = index
+                    .checked_sub(1)
+                    .and_then(|previous| lines.get(previous))
+                    .is_some_and(|previous| previous.ends_with('\\'));
+                lines.get(index).is_some_and(|line| !is_comment(line)) && !continued
+            })
+            .collect();
+        let width = thread::available_parallelism().map_or(1, NonZeroUsize::get);
+        for batch in candidates.chunks(width) {
+            let silenced = thread::scope(|scope| {
+                let probes: Vec<_> = batch
+                    .iter()
+                    .map(|&index| {
+                        scope.spawn(move || {
+                            self.probe_silences(hidden, index, parse_errors)
+                                .map(|silences| silences.then_some(index))
+                        })
+                    })
+                    .collect();
+                probes
+                    .into_iter()
+                    .map(|probe| {
+                        probe
+                            .join()
+                            .unwrap_or_else(|panic| panic::resume_unwind(panic))
+                    })
+                    .collect::<Result<Vec<_>, PolicyError>>()
+            })?;
+            if let Some(index) = silenced.into_iter().flatten().max() {
+                return Ok(Some(index + 1));
+            }
+        }
+        Ok(None)
+    }
+
+    /// Whether a directive for `hidden`'s code alone, above the line at `index`, counted from 0,
+    /// in the run with every `disable` taken out, silences `hidden` with no more parse errors than
+    /// that run's `parse_errors`.
+    fn probe_silences(
+        &self,
+        hidden: &Finding,
+        index: usize,
+        parse_errors: usize,
+    ) -> Result<bool, PolicyError> {
+        let probe = format!("# shellcheck disable=SC{} # probe\n", hidden.code);
+        let found = self.shellcheck(|file, text| {
+            let unsilenced = without_disables(text);
+            if file != hidden.file {
+                return unsilenced;
+            }
+            let mut probed = String::with_capacity(unsilenced.len() + probe.len());
+            for (at, piece) in unsilenced.split_inclusive('\n').enumerate() {
+                if at == index {
+                    probed.push_str(&probe);
+                }
+                probed.push_str(piece);
+            }
+            probed
+        })?;
+        let still_reported = found.iter().any(|finding| {
+            finding.file == hidden.file
+                && finding.line == hidden.line + 1
+                && finding.column == hidden.column
+                && finding.code == hidden.code
+        });
+        let new_parse_error = found
+            .iter()
+            .filter(|finding| finding.is_parse_error())
+            .count()
+            > parse_errors;
+        Ok(!still_reported && !new_parse_error)
+    }
 }
 
 /// What is wrong with the shellcheck directives in `text`, the text of `file`. shellcheck reads a
@@ -190,11 +352,11 @@ fn directive_problems(file: &str, text: &str) -> Vec<String> {
                     "Line {number} sets the shell, which the file's `#!` line names already. \
                      Leave it to the `#!` line."
                 )),
-                "source-path" if value != "SCRIPTDIR" && !inside_deploy(directory, value) => {
+                "source-path" if !source_path_inside_deploy(directory, value) => {
                     problems.push(format!(
                         "Line {number} points shellcheck at `{value}` to look for sourced files, \
-                         which isn't `SCRIPTDIR` or a directory in `deploy/`. Look them up in the \
-                         kit."
+                         which isn't in the kit. Write `SCRIPTDIR`, a directory below it such as \
+                         `SCRIPTDIR/lib`, or a path from the root such as `deploy/lib`."
                     ));
                 }
                 "source" if !inside_deploy(directory, value) => problems.push(format!(
@@ -307,6 +469,19 @@ fn inside_deploy(directory: &str, source: &str) -> bool {
     })
 }
 
+/// Whether `value`, a `source-path=` value in a file in `directory`, names `deploy/` or a
+/// directory under it. shellcheck reads `SCRIPTDIR` as the file's directory and any other
+/// relative path from the directory it runs in, the copy's root.
+fn source_path_inside_deploy(directory: &str, value: &str) -> bool {
+    match value.strip_prefix("SCRIPTDIR") {
+        Some("") => true,
+        Some(rest) => rest
+            .strip_prefix('/')
+            .is_some_and(|rest| inside_deploy(directory, rest)),
+        None => normalized(value).is_some_and(|path| path.is_empty()) || inside_deploy("", value),
+    }
+}
+
 /// `path` with its `.` parts and each `..` with the part before it taken out, or `None` if a `..`
 /// climbs above its start.
 fn normalized(path: &str) -> Option<String> {
@@ -353,24 +528,6 @@ fn without_disables(text: &str) -> String {
     edited
 }
 
-/// Whether `text` has a directive that disables `code` right above its line `line`: on the lines
-/// above the command that line belongs to, as [`command_starts::of`] finds it, before any line
-/// that is neither blank nor a comment.
-fn silenced_right_above(text: &str, line: usize, code: u32) -> bool {
-    let lines: Vec<&str> = text.lines().collect();
-    let first = command_starts::of(text)
-        .get(line.saturating_sub(1))
-        .copied()
-        .unwrap_or(lines.len());
-    lines[..first]
-        .iter()
-        .rev()
-        .map(|line| line.trim_start_matches([' ', '\t']))
-        .take_while(|line| line.is_empty() || line.starts_with('#'))
-        .filter_map(Directive::of)
-        .any(|directive| directive.disabled_codes().contains(&code))
-}
-
 /// Whether the file at `path`, whose text is `text`, is a shell script: by its extension, by the
 /// shell its `#!` line names, or by a `# shellcheck shell=<shell>` directive, which a library a
 /// script sources needs to be checked on its own.
@@ -383,16 +540,23 @@ fn is_script(path: &Path, text: &str) -> bool {
     has_script_extension || names_a_shell(text.as_bytes()) || sets_its_shell(text)
 }
 
-/// Whether `text` has a directive on a line of its own that sets the shell, such as
-/// `# shellcheck shell=bash`.
+/// Whether `text` has a directive on a line of its own, before its first command, that sets the
+/// shell, such as `# shellcheck shell=bash`. A comment further down, such as in a README's code
+/// block, doesn't make a file a script.
 fn sets_its_shell(text: &str) -> bool {
-    text.lines().filter_map(Directive::of).any(|directive| {
-        directive.code.trim().is_empty()
-            && directive
-                .settings()
-                .split_whitespace()
-                .any(|setting| setting.starts_with("shell="))
-    })
+    text.lines()
+        .take_while(|line| {
+            let line = line.trim_start_matches([' ', '\t', '\u{feff}']);
+            line.is_empty() || line.starts_with('#')
+        })
+        .filter_map(Directive::of)
+        .any(|directive| {
+            directive.code.trim().is_empty()
+                && directive
+                    .settings()
+                    .split_whitespace()
+                    .any(|setting| setting.starts_with("shell="))
+        })
 }
 
 /// Whether `start`, the start of a file, is a `#!` line that names one of the [`SHELLS`], as
@@ -425,49 +589,36 @@ struct Finding {
 }
 
 impl Finding {
+    /// Whether the finding is one of shellcheck's parse checks, SC1000 to SC1999.
+    fn is_parse_error(&self) -> bool {
+        (1000..=1999).contains(&self.code)
+    }
+
     /// The finding as a violation of its file.
     fn violation(&self) -> Violation {
         Violation::new(
             self.file.clone(),
             format!(
                 "shellcheck reports, at line:column {}:{}: {}: {} [SC{}]. Fix the script, or \
-                 silence the finding with `# shellcheck disable=SC{} # <reason>` on the line \
-                 above it.",
+                 silence the finding with `# shellcheck disable=SC{} # <reason>` as close above \
+                 it as shellcheck takes a directive: above its line, or above the command it \
+                 continues.",
                 self.line, self.column, self.level, self.message, self.code, self.code
             ),
         )
     }
 }
 
-/// The findings shellcheck reports for `scripts` in a copy of `deploy/` alone, made in a
-/// temporary directory from `texts`, each file's text, as `edit` changes it.
-fn shellcheck_copy(
-    texts: &BTreeMap<String, String>,
+/// Runs shellcheck on `scripts`, relative to `copy`, and reads its findings in the files under
+/// `deploy/`. A finding in a kit file a script sources by its absolute path in the workspace at
+/// `workspace` counts as that file's. A finding in another file, such as one on the host that a
+/// script sources by its absolute path, isn't the kit's, and no directive in the kit could
+/// silence it.
+fn shellcheck(
+    copy: &Path,
+    workspace: &Path,
     scripts: &[String],
-    edit: impl Fn(&str) -> String,
 ) -> Result<BTreeSet<Finding>, PolicyError> {
-    let copy = tempfile::tempdir().map_err(|source| PolicyError::Read {
-        path: env::temp_dir(),
-        source,
-    })?;
-    for (file, text) in texts {
-        let path = copy.path().join(file);
-        let write_error = |source| PolicyError::Read {
-            path: path.clone(),
-            source,
-        };
-        if let Some(directory) = path.parent() {
-            fs::create_dir_all(directory).map_err(write_error)?;
-        }
-        fs::write(&path, edit(text)).map_err(write_error)?;
-    }
-    shellcheck(copy.path(), scripts)
-}
-
-/// Runs shellcheck on `scripts`, relative to `root`, and reads its findings in the files under
-/// `deploy/`. A finding in another file, such as one on the host that a script sources by its
-/// absolute path, isn't the kit's, and no directive in the kit could silence it.
-fn shellcheck(root: &Path, scripts: &[String]) -> Result<BTreeSet<Finding>, PolicyError> {
     let arguments = [
         "--norc",
         "--check-sourced",
@@ -484,7 +635,7 @@ fn shellcheck(root: &Path, scripts: &[String]) -> Result<BTreeSet<Finding>, Poli
     let output = Command::new("shellcheck")
         .args(arguments)
         .args(scripts)
-        .current_dir(root)
+        .current_dir(copy)
         .env_remove("SHELLCHECK_OPTS")
         .stdin(Stdio::null())
         .output()
@@ -497,10 +648,24 @@ fn shellcheck(root: &Path, scripts: &[String]) -> Result<BTreeSet<Finding>, Poli
         })?;
     let report = String::from_utf8_lossy(&output.stdout);
     let found = findings(&report);
+    let workspace =
+        normalized(&workspace.to_string_lossy().replace('\\', "/")).map(|path| format!("/{path}/"));
     let in_the_kit = |found: BTreeSet<Finding>| {
         found
             .into_iter()
-            .filter(|finding| finding.file.starts_with(DEPLOY_DIRECTORY))
+            .filter_map(|mut finding| {
+                if let Some(file) = workspace
+                    .as_deref()
+                    .and_then(|workspace| finding.file.strip_prefix(workspace))
+                    .map(str::to_owned)
+                {
+                    finding.file = file;
+                }
+                finding
+                    .file
+                    .starts_with(DEPLOY_DIRECTORY)
+                    .then_some(finding)
+            })
             .collect()
     };
     match (output.status.code(), found) {
@@ -673,7 +838,8 @@ mod tests {
             directive_problems("deploy/app.service", unit),
             Vec::<String>::new()
         );
-        let script = "set -eu\n# shellcheck source-path=.\n. ./lib.sh\n";
+        let script = "set -eu\n# shellcheck source-path=.\n# shellcheck source-path=deploy/lib\n\
+                      # shellcheck source-path=SCRIPTDIR/lib\n. ./lib.sh\n";
         assert_eq!(
             directive_problems("deploy/run.sh", script),
             Vec::<String>::new()
@@ -685,6 +851,18 @@ mod tests {
                 .any(|problem| problem.contains("to look for sourced files")),
             "{outside:#?}"
         );
+        for value in ["lib", "SCRIPTDIR/../..", "../deploy"] {
+            let problems = directive_problems(
+                "deploy/a/run.sh",
+                &format!("# shellcheck source-path={value}\n"),
+            );
+            assert!(
+                problems
+                    .iter()
+                    .any(|problem| problem.contains("to look for sourced files")),
+                "{value}: {problems:#?}"
+            );
+        }
     }
 
     #[test]
@@ -700,6 +878,10 @@ mod tests {
             ("deploy/Containerfile", "FROM scratch\nRUN echo $a\n"),
             ("deploy/Caddyfile", "example.com {\n}\n"),
             ("deploy/lib/common", "clean() {\n  rm -rf $1\n}\n"),
+            (
+                "deploy/README.md",
+                "# The kit\n\nA library starts:\n\n```sh\n# shellcheck shell=bash\n```\n",
+            ),
         ] {
             assert!(!is_script(Path::new(name), text), "{name}");
         }
@@ -716,23 +898,6 @@ mod tests {
              # shellcheck disable=SC0000 source=lib.sh # r\n. ./lib.sh\n\
              echo \"\n# shellcheck disable=SC0000 # \" && rm $b\n"
         );
-    }
-
-    #[test]
-    fn a_finding_in_a_continued_command_or_a_heredoc_counts_from_its_start() {
-        let script = "set -eu\n# shellcheck disable=SC2086 # r\nrm \\\n  $a\n\
-                      # shellcheck disable=SC2154 # r\ncat <<- EOF\n\t$port\n\tEOF\nrm $b\n";
-        assert!(silenced_right_above(script, 4, 2086));
-        assert!(silenced_right_above(script, 7, 2154));
-        assert!(!silenced_right_above(script, 9, 2086));
-    }
-
-    #[test]
-    fn a_silencing_directive_counts_only_right_above_its_line() {
-        let script = "set -eu\n# shellcheck disable=SC2086 # r\n\n# More.\nrm $a\nrm $b\n";
-        assert!(silenced_right_above(script, 5, 2086));
-        assert!(!silenced_right_above(script, 6, 2086));
-        assert!(!silenced_right_above(script, 5, 2046));
     }
 
     #[test]
