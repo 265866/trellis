@@ -401,10 +401,10 @@ add the dependency in a code pull request.
 A framework that lets in `ctor` or `inventory` this way may also have its macros place
 constructors, code that runs before `main()`, in this project's own code, which
 `code_before_main` reports. GPUI's `actions!` and `#[derive(Action)]` place one only when they
-register the action. Give each action `#[action(no_register)]`, beside `#[derive(Action)]` or
-before its name in `actions!`, and they place none. The project then needs no entry, and the lint
-stays strict. An unregistered action can't be invoked by name or built from JSON, such as a keymap
-file.
+register the action, and its `register_action!` always does. Give each action
+`#[action(no_register)]`, beside `#[derive(Action)]` or before its name in `actions!`, and call no
+`register_action!`, and they place none. The project then needs no entry, and the lint stays
+strict. An unregistered action can't be invoked by name or built from JSON, such as a keymap file.
 
 Listing the macros is the fallback: a listed macro may place any constructor. Allow them in the
 same rules pull request as the `wrappers` entry: list each macro in `constructor_macros` in
