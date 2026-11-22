@@ -2128,3 +2128,51 @@ fn a_deploy_kit_change_is_code() {
         "a rule file in the kit is still a rule"
     );
 }
+
+/// A crate's deploy kit is code, as the root kit is, with the files that are rules by their names
+/// in a kit still rules, and moving the root kit into a crate is a code change.
+#[test]
+fn a_crate_kit_change_is_code_and_moving_the_root_kit_there_is_too() {
+    let repository = Repository::new();
+    repository.write("deploy/install.sh", "#!/bin/sh\necho install\n");
+    repository.write("deploy/app.service", "[Service]\nExecStart=/srv/app\n");
+    repository.commit("add the deploy kit");
+    repository.git(&["branch", "--force", "base"]);
+    repository.git(&["mv", "deploy", "crates/app/deploy"]);
+    repository.commit("move the kit into the crate");
+
+    let changed = repository.changed_files();
+    assert!(
+        changed.rules().is_empty(),
+        "moving the kit isn't a rule change: {:?}",
+        changed.rules()
+    );
+    assert_eq!(changed.code().len(), 4, "{:?}", changed.code());
+
+    repository.git(&["branch", "--force", "base"]);
+    repository.write(
+        "crates/app/deploy/install.sh",
+        "#!/bin/sh\necho install v2\n",
+    );
+    repository.write("crates/app/src/lib.rs", "//! The app, installed.\n");
+    repository.commit("install v2");
+    let changed = repository.changed_files();
+    assert!(changed.rules().is_empty(), "{:?}", changed.rules());
+    assert!(!changed.mixes_rules_and_code());
+
+    for rule in [
+        "crates/app/deploy/action.yml",
+        "crates/app/deploy/tasks.just",
+    ] {
+        repository.git(&["branch", "--force", "base"]);
+        repository.write(rule, "x\n");
+        repository.write(
+            "crates/app/deploy/install.sh",
+            &format!("#!/bin/sh\necho {rule}\n"),
+        );
+        repository.commit("a rule beside the kit");
+        let changed = repository.changed_files();
+        assert_eq!(changed.rules(), [rule.to_owned()]);
+        assert!(changed.mixes_rules_and_code(), "{rule} stays a rule");
+    }
+}

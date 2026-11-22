@@ -7,12 +7,12 @@ use std::{fs, iter};
 
 use toml::{Table, Value};
 
-use crate::deploy_scripts::DEPLOY_DIRECTORY;
 use crate::head::Head;
 use crate::policy_error::PolicyError;
 use crate::tool_config::ToolConfig;
 use crate::{
-    agent_files, case_insensitive, config_files, git, lint_expectations, source_path, toml_file,
+    agent_files, case_insensitive, config_files, deploy_scripts, git, lint_expectations,
+    source_path, toml_file,
 };
 
 /// Directories whose every file is a rule: the workflows.
@@ -34,7 +34,8 @@ const RULE_NAMES: [&str; 6] = [
 
 /// The names of the files in a deploy kit that are rules all the same, since a tool reads them as
 /// configuration: a composite action's definition, which a workflow can run with
-/// `uses: ./deploy`, and a justfile module, which a justfile loads with `mod` or `import`.
+/// `uses: ./deploy` or `uses: ./crates/<crate>/deploy`, and a justfile module, which a justfile
+/// loads with `mod` or `import`.
 fn is_deploy_rule(path: &str) -> bool {
     let name = path.rsplit('/').next().unwrap_or(path);
     ["action.yml", "action.yaml"]
@@ -84,11 +85,12 @@ const OTHER_FILES: [&str; 5] = [
 /// a member `Cargo.toml` that holds the build script's settings and the license, every submodule
 /// or other git repository inside this one, whose files no check sees, and any file the lists
 /// here don't know, which the listing marks when it is only untracked. The code is every other
-/// change under `crates/`, every other change under `deploy/`, a deploy kit that ships with the
-/// code it deploys and that `deploy_scripts` shellchecks, and every Rust file elsewhere. A Rust
-/// file whose change only adds, removes, moves or changes lint expectations is neither, and so is
-/// every file of a crate whose directory moved whole. A pull request changes one or the
-/// other, so review sees every loosened rule apart from the code that might have needed it.
+/// change under `crates/`, every other change in a deploy kit, under the root `deploy/` or a
+/// crate's `crates/<crate>/deploy/`, which ships with the code it deploys and that
+/// `deploy_scripts` shellchecks, and every Rust file elsewhere. A Rust file whose change only adds,
+/// removes, moves or changes lint expectations is neither, and so is every file of a crate whose
+/// directory moved whole. A pull request changes one or the other, so review sees every loosened
+/// rule apart from the code that might have needed it.
 #[derive(Debug, Default)]
 pub struct ChangedFiles {
     /// The changed rule files.
@@ -396,7 +398,7 @@ fn role(path: &str) -> Role {
     if name == "Cargo.toml" && path.starts_with("crates/") {
         return Role::MemberManifest;
     }
-    let is_deploy_file = path.starts_with(DEPLOY_DIRECTORY);
+    let is_deploy_file = deploy_scripts::kit_of(path).is_some();
     let is_rule = ToolConfig::of(path).is_some()
         || (is_deploy_file && is_deploy_rule(path))
         || agent_files::is_agent_file(path)
@@ -1397,6 +1399,44 @@ mod tests {
             assert_eq!(role(path), Role::Rule, "{path} should stay a rule");
         }
         for path in ["deploy/install.sh.", "deploy/INSTAL~1.SH", "deploy/a:b.sh"] {
+            assert_eq!(role(path), Role::Unlisted, "{path:?} should be a rule");
+        }
+    }
+
+    #[test]
+    fn a_crate_s_deploy_kit_is_code_and_its_rule_files_stay_rules() {
+        for path in [
+            "crates/demo/deploy/install.sh",
+            "crates/demo/deploy/app.container",
+            "crates/demo/deploy/systemd/app-backup.timer",
+            "crates/demo/deploy/README.md",
+            "crates/demo/deploy/lib/common",
+        ] {
+            assert_eq!(role(path), Role::Code, "{path} should be code");
+        }
+        for path in [
+            "crates/demo/deploy/justfile",
+            "crates/demo/deploy/.gitignore",
+            "crates/demo/deploy/build.rs",
+            "crates/demo/deploy/AGENTS.md",
+            "crates/demo/deploy/clippy.toml",
+            "crates/demo/deploy/.gitattributes",
+            "crates/demo/deploy/tsconfig.json",
+            "crates/demo/deploy/bunfig.toml",
+            "crates/demo/deploy/.npmrc",
+            "crates/demo/deploy/action.yml",
+            "crates/demo/deploy/host/Action.YAML",
+            "crates/demo/deploy/tasks.just",
+        ] {
+            assert_eq!(role(path), Role::Rule, "{path} should stay a rule");
+        }
+        for path in ["crates/demo/src/action.yml", "crates/demo/web/tasks.just"] {
+            assert_eq!(role(path), Role::Code, "{path} is outside a kit");
+        }
+        for path in [
+            "crates/demo/deploy/install.sh.",
+            "crates/demo/deploy/INSTAL~1.SH",
+        ] {
             assert_eq!(role(path), Role::Unlisted, "{path:?} should be a rule");
         }
     }

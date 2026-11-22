@@ -166,7 +166,8 @@ Beyond the Google guide, the workspace also turns on:
   instructions for coding agents; that every crate's commits reach the release notes through
   `changelog_include` in `release-plz.toml`; that no crate but the ones `restricted_crates` lists
   for a package reaches it, directly or through other packages, when that setting is there, and that
-  each of its keys that lists crates matches a package; that every shell script under `deploy/` passes shellcheck,
+  each of its keys that lists crates matches a package; that every shell script in a deploy kit,
+  under `crates/<crate>/deploy/` or the root `deploy/`, passes shellcheck,
   with no `.shellcheckrc` or `SHELLCHECK_OPTS` read, the files they source included, and that each
   shellcheck directive there silences named codes, with a reason, as close above its finding as
   shellcheck takes one, since a deploy kit is code no other check reads; and that the docs keep the layout under
@@ -188,12 +189,13 @@ Beyond the Google guide, the workspace also turns on:
   so is a git submodule, whose files no check sees. A path that Windows reads as another path is
   a rule too: one with a part that ends in a dot or a space, that holds a `:` or a `\`, or that
   has the form of a short name. A web UI's
-  `package.json`, its scripts and its sources are code, and so is a deploy kit under `deploy/`,
-  apart from the files that are rules by their names. A proc-macro dependency is code: a rules
-  pull request lists the crate in `proc_macro_crates`, and a code pull request then adds the
-  dependency with its first use, since `cargo shear` rejects a dependency nothing uses. A `.rs`
-  change that only adds, removes or moves `expect` attributes is neither, so a new lint lands with
-  the `expect`s it needs, and a code change with the `expect`s it forces elsewhere.
+  `package.json`, its scripts and its sources are code, and so is a deploy kit under
+  `crates/<crate>/deploy/` or the root `deploy/`, apart from the files that are rules by their
+  names. A proc-macro dependency is code: a rules pull request lists the crate in
+  `proc_macro_crates`, and a code pull request then adds the dependency with its first use, since
+  `cargo shear` rejects a dependency nothing uses. A `.rs` change that only adds, removes or moves
+  `expect` attributes is neither, so a new lint lands with the `expect`s it needs, and a code
+  change with the `expect`s it forces elsewhere.
 
 ## Silencing a lint
 

@@ -367,9 +367,26 @@ An update leaves them alone.
   image as the release does.
 {%- endif %}
 
-- **Deploy kit.** Keep the scripts and units that install and run it on a host in `deploy/`.
-  They are code, and `just policy` runs shellcheck on the scripts; "Send a change" in
-  [CONTRIBUTING.md](../CONTRIBUTING.md#send-a-change) says which files there stay rules.
+- **Deploy kit.** Keep the scripts and units that install and run it on a host in
+  `crates/{{ crate_name }}/deploy/`. release-plz counts only the commits that change a file in a
+  crate's directory, so a commit that changes only a kit there, such as
+  `fix(deploy): restart the service after an install`, gets a release of its own and a line in
+  its notes. The kit's files are code, and `just policy` runs shellcheck on its scripts; "Send a
+  change" in [CONTRIBUTING.md](../CONTRIBUTING.md#send-a-change) says which files there stay
+  rules. {{ 'The image' if kind == 'service' else 'A release archive' }} doesn't hold the kit.
+
+  `just policy` checks a kit in the root `deploy/` the same way, but release-plz ignores it: a
+  commit that changes only that kit releases nothing, and its fix ships with the next release of
+  the crate. Add the fix's line to that release's notes by hand, in `CHANGELOG.md` on the release
+  pull request's branch, as [Each release](#each-release) says. To move the kit into the crate,
+  open one pull request that renames it, a code change:
+
+  ```sh
+  git mv deploy crates/{{ crate_name }}/deploy
+  ```
+
+  In the same pull request, change any path in the kit's files that names the kit's own place,
+  such as `deploy/install.sh` in a unit or a README.
 {%- endif %}
 
 ## Change an answer
