@@ -434,7 +434,7 @@ setup-github $dry_run="false":
     change PUT "repos/$repo/private-vulnerability-reporting"
     {%- endif %}
 
-    echo "A ruleset that protects main and requires PR title, CI passed and Rule changes stand alone."
+    protected="A ruleset that protects main and requires PR title, CI passed and Rule changes stand alone."
     ruleset='{"name": "main", "target": "branch", "enforcement": "active", "bypass_actors": [],
      "conditions": {"ref_name": {"include": ["refs/heads/main"], "exclude": []}},
      "rules": [
@@ -466,7 +466,10 @@ setup-github $dry_run="false":
       fi
     }
     {%- if visibility == 'private' %}
-    if ! protect 2> "$err"; then
+    # The plan can refuse the ruleset, so the line comes once it's set, in place of the warning.
+    if protect 2> "$err"; then
+      echo "$protected"
+    else
       if ! grep --quiet 'Upgrade to GitHub' "$err"; then
         cat "$err" >&2
         exit 1
@@ -474,6 +477,7 @@ setup-github $dry_run="false":
       echo "warning: main isn't protected. Protecting main in a private repository needs GitHub Pro or a paid organization plan." >&2
     fi
     {%- else %}
+    echo "$protected"
     protect
     {%- endif %}
 
