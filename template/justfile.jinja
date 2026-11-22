@@ -65,13 +65,18 @@ install-tools:
 policy_root := justfile_directory() / "target" / "trellis-policy"
 trellis_policy := "./target/trellis-policy/bin/trellis-policy"
 
+# `--quiet` keeps cargo to its errors. Its warnings here are advice that doesn't apply: to add
+# `policy_root` to `PATH`, though recipes call the binary by its path, and that the toolchain in
+# rust-toolchain.toml builds it, which is the one the project pins. So the first run, which builds
+# the checker, prints nothing but the command for a while.
+#
 # Installs `trellis-policy` at the pinned commit. Cargo skips the build when it is already installed.
 install-policy:
 {%- endraw %}
 {%- if trellis_path %}
-    cargo install --locked --root {% raw %}"{{ policy_root }}"{% endraw %} --path {{ trellis_path }}/policy
+    cargo install --quiet --locked --root {% raw %}"{{ policy_root }}"{% endraw %} --path {{ trellis_path }}/policy
 {%- else %}
-    cargo install --locked --root {% raw %}"{{ policy_root }}"{% endraw %} --git https://github.com/265866/trellis --rev {% raw %}{{ trellis_rev }}{% endraw %} trellis-policy
+    cargo install --quiet --locked --root {% raw %}"{{ policy_root }}"{% endraw %} --git https://github.com/265866/trellis --rev {% raw %}{{ trellis_rev }}{% endraw %} trellis-policy
 {%- endif %}
 {%- raw %}
 
