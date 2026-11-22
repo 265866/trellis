@@ -6,6 +6,47 @@ part lists what a project's owner must do around the update: a rule that can fla
 a setting to change, or a step to do by hand. [CONTRIBUTING.md](CONTRIBUTING.md#release-trellis)
 has the versioning rule.
 
+## v0.17.3
+
+### Fixed
+
+- `just ci`, `just policy` and the other recipes that install `trellis-policy` no longer print
+  cargo's advice to add its directory to `PATH`, which the justfile never needs, or rustup's note
+  that the toolchain file overrode the default. An install that fails still prints cargo's error.
+- `just deny` on a project whose dependencies don't use every license `deny.toml` allows no longer
+  prints a `license-not-encountered` warning for each. The allowed licenses are the same.
+- `just --list` describes the test recipe, `just setup-github` in a private repository prints the
+  ruleset line only once the ruleset is set, and `just stale-licenses` words a single entry as
+  one.
+- A service's `CONTRIBUTING.md` names Docker among what to install, lists `just image`, and says
+  that `just image` builds this machine's architecture only, that a local
+  `podman build --platform` for another one can reuse the host's base layers, and that CI's Buildx
+  builds each architecture properly.
+- `CONTRIBUTING.md` says how to let a banned crate in through the one dependency that needs it,
+  with cargo-deny's `wrappers` in a rules pull request; with a web UI, which pull request goes
+  first for a tsconfig `types` entry; and, for a Windows GUI binary, when `--version` prints.
+- The generated `docs/maintaining.md`:
+  - says an `image.env` or `release.env` value is a string, quoted when YAML would read it as a
+    number, a boolean, a date or null, as do the questions' help and the v0.16.0 notes below;
+  - mentions attestation only for a public project;
+  - labels its example `release` answer as a starter, not the project's own;
+  - says the Web UI's rules pull request may have to come first when the app trips a check only
+    a rule can settle;
+  - has the first release's changelog step list the commits that changed only a root `deploy/`,
+    and says how to list them for each later release, whose notes leave them out too.
+- With a `release` answer that names its own files, the README, `docs/install.md`, the `notices`
+  recipe and the `about.toml` header no longer promise a `PATH` install or notices in the archive
+  that `release/package.sh` decides.
+- The description question asks for a product name in CamelCase in backticks, which clippy's
+  `doc_markdown` otherwise rejects in the generated docs.
+- `from_without_constructor`'s documentation silences it with `expect` and a reason, as the rules
+  ask.
+- The generated `CONTRIBUTING.md`, `docs/` pages and workflow comments wrap at 100 columns, with
+  no short lines left by the answers' conditions.
+- A new web UI's `tsconfig.json` sets `"jsx": "react-jsx"`, so a React app's `.tsx` files check
+  without an edit, and `.editorconfig` gives `bun.lock` the two-space indent Bun writes. An update
+  leaves an existing web UI's `tsconfig.json` as it is.
+
 ## v0.17.2
 
 ### Added
