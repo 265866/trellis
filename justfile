@@ -1278,6 +1278,8 @@ shapes: (shape "binary") (shape "binary-windows-macos-dual") (shape "library-pub
 # tests/check-release-token/. The private binary and library get a 55-character name, the longest
 # Copier takes and the longest for which a binary's scaffold is formatted as generated, so a line
 # that fits only a short name fails `fmt-check`, and a name one character longer must be refused.
+# Each MIT license file must name 265866, the default author, as the only copyright holder, and an
+# unlicensed project must have no license file.
 #
 # Checks the project a user gets for one set of answers.
 shape answers:
@@ -1305,15 +1307,21 @@ shape answers:
       --data "project_name=$name" \
       --data "description=A demo that trellis generates for its tests." \
       "${data[@]}" "$trellis" "$project" 2>&1) || { echo "$copied" >&2; exit 1; }
-    # With the default author, every license file names 265866 as the copyright holder.
-    holders=$(find "$project" -name .git -prune -o -name 'LICENSE*' -type f -exec grep --no-filename '^Copyright (c)' {} +) || true
+    # With the default author, each MIT license file names 265866, and only 265866, as the copyright
+    # holder, and an unlicensed project has no license file.
+    licenses=$(find "$project" -name .git -prune -o -name 'LICENSE*' -type f -print)
     case "{{ answers }}" in
-      *-unlicensed) [ -z "$holders" ] || fail "an unlicensed project has a license file: $holders" ;;
-      *) [ -n "$holders" ] || fail "no license file names a copyright holder" ;;
+      *-unlicensed) [ -z "$licenses" ] || fail "an unlicensed project has license files: $licenses" ;;
+      *) [ -n "$licenses" ] || fail "the project has no license file" ;;
     esac
-    if grep --invert-match --line-regexp --fixed-strings 'Copyright (c) 265866' <<< "$holders" | grep --quiet .; then
-      fail "a license file names another copyright holder: $holders"
-    fi
+    while read -r license; do
+      case "$(basename "$license")" in
+        LICENSE | LICENSE-MIT)
+          holders=$(grep '^Copyright (c)' "$license") || fail "${license#"$project/"} names no copyright holder"
+          [ "$holders" = 'Copyright (c) 265866' ] || fail "${license#"$project/"} names another copyright holder: $holders"
+          ;;
+      esac
+    done <<< "$licenses"
     if [ "${#name}" -eq 55 ]; then
       longer=$(uv tool run copier@9.19.1 copy --defaults --vcs-ref HEAD \
         --data "project_name=${name}x" \
