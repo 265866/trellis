@@ -343,7 +343,7 @@ package:
 {%- endif %}
 {%- if kind == 'service' %}
 
-# Builds the container image, with the license notices, as the release workflow does.
+# Builds the container image for this machine's architecture, with the license notices.
 image: notices
     docker build --file Containerfile --tag {{ project_name }}:dev .
 {%- endif %}

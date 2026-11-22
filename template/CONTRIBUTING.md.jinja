@@ -50,17 +50,24 @@ first, so a checkout of both there can hold one file, with the other's contents.
 
 ## Set up
 
-Install [rustup](https://rustup.rs/), [cargo-binstall](https://github.com/cargo-bins/cargo-binstall),
-[uv](https://docs.astral.sh/uv/), [Go](https://go.dev/dl/) for actionlint, and
-[shellcheck](https://www.shellcheck.net/) 0.11.0, which actionlint runs on the workflows' scripts
-and `just policy` on a deploy kit's.
+Install these first:
+
+- [rustup](https://rustup.rs/), [cargo-binstall](https://github.com/cargo-bins/cargo-binstall),
+  [uv](https://docs.astral.sh/uv/), and [Go](https://go.dev/dl/) for actionlint.
+- [shellcheck](https://www.shellcheck.net/) 0.11.0, which actionlint runs on the workflows'
+  scripts and `just policy` on a deploy kit's.
 {%- if web_ui %}
-Install [Bun](https://bun.com/) 1.4.4, the version CI and the {{ 'image' if kind == 'service' else 'release' }} build the web UI with.
+- [Bun](https://bun.com/) 1.4.4, the version CI and the {{ 'image' if kind == 'service' else 'release' }} build the web UI with.
 {%- endif %}
-{%- if kind != 'service' and 'windows' in platforms %} On
-Windows, also install the [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
-with the "Desktop development with C++" workload, which Rust's MSVC toolchain links with.
+{%- if kind == 'service' %}
+- Docker, for `just image`, which builds the container image with `docker build`.
 {%- endif %}
+{%- if kind != 'service' and 'windows' in platforms %}
+- On Windows, the
+  [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) with
+  the "Desktop development with C++" workload, which Rust's MSVC toolchain links with.
+{%- endif %}
+
 Then install just, and use it to install the tools and toolchains the checks use:
 
 ```sh
@@ -123,6 +130,9 @@ nightly rustfmt, and stable rustfmt ignores them with a warning. For rust-analyz
 {%- if web_ui %}
 | `just web-check`, `just web-build` | The web UI's `check` script, and its build. |
 {%- endif %}
+{%- if kind == 'service' %}
+| `just image` | The container image, for this machine's architecture. `just ci` leaves it out; [The container image](#the-container-image) says why. |
+{%- endif %}
 {%- if kind == 'library' and publish_crate %}
 | `just package` | The crate's package holds the README and its license files. |
 {%- endif %}
@@ -147,6 +157,18 @@ remove the entry, and a crate's exception in `deny.toml`, in a rules pull reques
 {%- else %}. Unless the code pull request that adds that crate is still open, remove the entry,
 and its exception in `deny.toml`, in a rules pull request.
 {%- endif %}
+{%- endif %}
+{%- if kind == 'service' %}
+
+### The container image
+
+`just image` builds the image from `Containerfile` with `docker build`, so it needs Docker, and
+`just ci` leaves it out. It builds for this machine's architecture only. CI's `Container image`
+job and the release build every architecture the image ships for with Docker Buildx, each on
+that architecture's base image, and CI's `Run the image` jobs start each on its own architecture.
+Don't trust a local `podman build --platform` for another architecture: `Containerfile` pins each
+base image by the digest of its index of architectures, and Podman can take the copy it already
+pulled for this machine's architecture, so the image holds the wrong architecture's layers.
 {%- endif %}
 
 ## Code
