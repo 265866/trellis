@@ -27,6 +27,14 @@
 //! isn't credited to the item's macros either: the call, not they, may have built it, so it stays
 //! [`Origin::Unwritten`], as an attribute such a macro builds outside any item a macro wrote
 //! does.
+//!
+//! A lint level that a macro from outside the workspace writes on an item holding a static in a
+//! constructor section, which the same expansion writes, is `code_before_main`'s to judge, as
+//! `inventory::submit!` writes `allow(non_upper_case_globals)` on the `const _` around its
+//! constructor. If `constructor_macros` lets the static pass, the macro's crate counts as trusted
+//! for it, and the attribute is [`Origin::Trusted`], so `trusted_macro_lints` still decides what it
+//! may set over code written in the source. Otherwise it is [`Origin::Constructor`]:
+//! `code_before_main` reports the macro call, and fixing that removes the attribute.
 
 use std::collections::HashMap;
 
@@ -67,6 +75,9 @@ pub(crate) enum Origin {
     /// Built from tokens of the crate's source that aren't this attribute there, outside any item
     /// a macro from another crate wrote.
     Unwritten,
+    /// A lint level that a macro from outside the workspace wrote on an item holding a static in
+    /// a constructor section that `code_before_main` reports, which the same expansion wrote.
+    Constructor,
 }
 
 impl Origin {
@@ -74,7 +85,7 @@ impl Origin {
     /// end of a report's message.
     pub(crate) fn describe(&self) -> String {
         match self {
-            Self::Source | Self::Trusted { .. } => String::new(),
+            Self::Source | Self::Trusted { .. } | Self::Constructor => String::new(),
             Self::Macro {
                 name,
                 defined_in: None,
@@ -159,7 +170,40 @@ pub(crate) fn origin(cx: &EarlyContext<'_>, source: &LocalSource, attribute: &At
             .filter(|_| !source.in_macro_call(attribute.span))
             .map_or(Origin::Unwritten, |expansion| item_origin(cx, expansion));
     };
-    macro_origin(cx, *expanded)
+    constructor_origin(cx, source, attribute, *expanded)
+        .unwrap_or_else(|| macro_origin(cx, *expanded))
+}
+
+/// The origin of `attribute`, whose token at `expanded` an expansion produced, if that expansion
+/// is a macro from outside the workspace that also wrote a static in a constructor section on the
+/// item the attribute is on, as the module docs explain.
+fn constructor_origin(
+    cx: &EarlyContext<'_>,
+    source: &LocalSource,
+    attribute: &Attribute,
+    expanded: Span,
+) -> Option<Origin> {
+    let expansion = expanded.ctxt().outer_expn();
+    let allowed = source.constructor_under(attribute, expansion)?;
+    let id = expansion
+        .expn_data()
+        .macro_def_id
+        .filter(|id| id.krate != LOCAL_CRATE)?;
+    let krate = crate_name(id.krate);
+    let in_workspace = crate::config::get(cx.sess())
+        .macro_crates
+        .iter()
+        .any(|listed| listed.replace('-', "_") == krate.as_str());
+    if in_workspace {
+        return None;
+    }
+    Some(if allowed {
+        Origin::Trusted {
+            crates: vec![krate],
+        }
+    } else {
+        Origin::Constructor
+    })
 }
 
 /// The expansion that wrote the innermost item around each attribute of `krate` that is inside an

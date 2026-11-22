@@ -1,0 +1,11 @@
+warning: `registry::submit` places a `static` in `.init_array`, which runs code before `main`
+  --> $DIR/code_before_main_direct.rs:15:1
+   |
+LL | registry::submit!(start);
+   | ^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: call the code from `main` instead, or, if the framework needs it, list "registry::submit" in `constructor_macros` under `[trellis_lints]` in `dylint.toml`
+   = note: `#[warn(code_before_main)]` on by default
+
+warning: 1 warning emitted
+

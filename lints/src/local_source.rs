@@ -254,6 +254,9 @@ pub(crate) struct LocalSource {
     /// that is inside an item a macro wrote, as [`crate::attribute_origin::item_expansions`]
     /// finds them.
     item_expansions: HashMap<(AttrId, Span), ExpnId>,
+    /// The constructors under each lint level of the expanded crate on an item that holds one, as
+    /// [`crate::code_before_main::constructors_under`] finds them.
+    constructors_under: HashMap<(AttrId, Span), Vec<(ExpnId, bool)>>,
     /// Each call of a function-like macro written in the source, `name!(..)`, `name![..]` or
     /// `name! {..}`, from its name to its closing delimiter.
     macro_calls: Vec<Span>,
@@ -335,6 +338,7 @@ impl LocalSource {
         }
         local.written_metas = written_metas;
         local.item_expansions = crate::attribute_origin::item_expansions(krate);
+        local.constructors_under = crate::code_before_main::constructors_under(krate);
         local.macro_calls = local.files.iter().flat_map(macro_calls).collect();
         local
     }
@@ -376,6 +380,20 @@ impl LocalSource {
         self.item_expansions
             .get(&(attribute.id, attribute.span))
             .copied()
+    }
+
+    /// Whether `constructor_macros` lets the static in a constructor section that `expansion`
+    /// wrote pass, if `attribute`, a lint level, is on an item that holds one.
+    pub(crate) fn constructor_under(
+        &self,
+        attribute: &Attribute,
+        expansion: ExpnId,
+    ) -> Option<bool> {
+        self.constructors_under
+            .get(&(attribute.id, attribute.span))?
+            .iter()
+            .find(|(written, _)| *written == expansion)
+            .map(|&(_, allowed)| allowed)
     }
 
     /// The meta item the scan read that starts where `path_span` starts, if its path is `path`:

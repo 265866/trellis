@@ -62,7 +62,7 @@ impl EarlyLintPass for LocalDocHidden {
         let local = match attribute_origin::origin(cx, source, attribute) {
             Origin::Source | Origin::Unwritten => true,
             Origin::Macro { defined_in, .. } => defined_in.is_none(),
-            Origin::Trusted { .. } => false,
+            Origin::Trusted { .. } | Origin::Constructor => false,
         };
         if local {
             span_lint_and_help(

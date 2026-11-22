@@ -97,7 +97,11 @@ declare_lint! {
     ///   that call may have built it. Nor does one whose tokens all lie inside a string literal,
     ///   which a macro parsed from the string, as serde parses the type of
     ///   `#[serde(into = "..")]`: the caller wrote it where no lint reads it as an attribute, so
-    ///   it is flagged however trusted the macro is.
+    ///   it is flagged however trusted the macro is. A lint level that a macro from outside the
+    ///   workspace writes on an item holding a static in a constructor section, which the same
+    ///   expansion writes, is `code_before_main`'s to judge: it passes as a trusted crate's if
+    ///   `constructor_macros` lets the static pass, and otherwise `code_before_main` reports the
+    ///   macro call, whose removal takes the attribute with it.
     /// - A lint level that a trusted macro writes over code written in the source, which hides
     ///   that code from the lints it names, unless `trusted_macro_lints` in `dylint.toml` lists
     ///   each of them for the macro's crate; a lint group or one of clippy's own attributes is

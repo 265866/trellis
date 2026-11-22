@@ -16,9 +16,15 @@ pub(crate) fn ui_test(lint: &Lint) {
 /// A UI test of the fixtures in `fixtures`, with every lint in the library but `lint` turned off,
 /// for tests that also set a `dylint.toml` or more compiler flags before running it.
 pub(crate) fn ui_test_of(lint: &Lint, fixtures: impl AsRef<Path>) -> Test {
+    ui_test_of_lints(&[lint], fixtures)
+}
+
+/// A UI test of the fixtures in `fixtures`, with every lint in the library but those in `lints`
+/// turned off, for fixtures where two lints could report the same code.
+pub(crate) fn ui_test_of_lints(lints: &[&Lint], fixtures: impl AsRef<Path>) -> Test {
     let others: Vec<String> = crate::lints()
         .into_iter()
-        .filter(|other| other.name != lint.name)
+        .filter(|other| lints.iter().all(|lint| other.name != lint.name))
         .flat_map(|other| ["-A".to_owned(), other.name_lower()])
         .collect();
     let mut test = ui_test_of_all(fixtures);

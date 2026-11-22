@@ -1,10 +1,15 @@
+use std::collections::HashMap;
+
 use clippy_utils::diagnostics::span_lint_and_help;
+use rustc_ast::visit::{self, Visitor};
+use rustc_ast::{AttrId, Attribute, Crate};
 use rustc_attr_ir::find_attr;
 use rustc_hir::def_id::LOCAL_CRATE;
 use rustc_hir::{Item, ItemKind};
 use rustc_lint::{LateContext, LateLintPass};
 use rustc_lint_defs::{declare_lint, declare_lint_pass};
-use rustc_span::{ExpnKind, Span};
+use rustc_middle::ty::TyCtxt;
+use rustc_span::{ExpnId, ExpnKind, Span, sym};
 #[cfg(test)]
 use std::path::Path;
 
@@ -23,8 +28,9 @@ declare_lint! {
     /// and `linkme` crates are banned in `deny.toml` for this reason; this lint catches the
     /// constructors that a macro from a crate let in past the ban writes into the workspace's own
     /// code, such as the `inventory::submit!` that GPUI's `actions!` and `#[derive(Action)]`
-    /// expand to. Cargo runs the lints over workspace members only, so a dependency's own
-    /// constructors aren't reported. Statics in other sections, and in none, are left alone.
+    /// expand to for an action without `#[action(no_register)]`. Cargo runs the lints over
+    /// workspace members only, so a dependency's own constructors aren't reported. Statics in
+    /// other sections, and in none, are left alone.
     ///
     /// A static a macro writes is reported at the outermost macro call in the source, naming that
     /// macro. The `constructor_macros` list in `dylint.toml` names the macros allowed to place
@@ -56,6 +62,12 @@ declare_lint! {
     ///     init();
     /// }
     /// ```
+    ///
+    /// The lint levels that the macro writing the static writes on the items around it, such as
+    /// the `allow` on the `const _` that `inventory::submit!` writes, are this lint's to judge too.
+    /// `suppression_policy` takes them as a trusted crate's once the static passes, so a listed
+    /// macro needs no entry in `trusted_macro_crates`, and otherwise leaves them to this lint's
+    /// report.
     pub CODE_BEFORE_MAIN,
     Warn,
     "a `static` in a section that runs code before `main`"
@@ -79,7 +91,7 @@ impl<'tcx> LateLintPass<'tcx> for CodeBeforeMain {
             return;
         }
         let config = crate::config::get(cx.tcx.sess);
-        let macros = expanded_from(cx, item.span, &config.macro_crates);
+        let macros = expanded_from(cx.tcx, item.span, &config.macro_crates);
         if is_allowed(&macros, &config.constructor_macros) {
             return;
         }
@@ -138,6 +150,88 @@ fn is_allowed(macros: &[Expansion], allowed: &[String]) -> bool {
         })
 }
 
+/// For each lint-level attribute of `krate` on an item that holds a static in a constructor
+/// section, the item itself included, the expansion that wrote each such static and whether
+/// `constructor_macros` lets it pass. `suppression_policy` leaves a lint level that the static's
+/// own expansion wrote to this lint, as [`crate::attribute_origin::origin`] says.
+pub(crate) fn constructors_under(krate: &Crate) -> HashMap<(AttrId, Span), Vec<(ExpnId, bool)>> {
+    rustc_middle::ty::tls::with(|tcx| {
+        let mut under = ConstructorsUnder {
+            tcx,
+            found: HashMap::new(),
+        };
+        visit::walk_crate(&mut under, krate);
+        under.found
+    })
+}
+
+/// Walks the expanded crate, finding the constructors under each item's lint levels.
+struct ConstructorsUnder<'tcx> {
+    tcx: TyCtxt<'tcx>,
+    found: HashMap<(AttrId, Span), Vec<(ExpnId, bool)>>,
+}
+
+impl<'ast> Visitor<'ast> for ConstructorsUnder<'_> {
+    fn visit_item(&mut self, item: &'ast rustc_ast::Item) {
+        let levels: Vec<&Attribute> = item
+            .attrs
+            .iter()
+            .filter(|attribute| is_lint_level(attribute))
+            .collect();
+        if !levels.is_empty() {
+            let mut statics = ConstructorStatics(Vec::new());
+            statics.visit_item(item);
+            let config = crate::config::get(self.tcx.sess);
+            let constructors: Vec<(ExpnId, bool)> = statics
+                .0
+                .into_iter()
+                .map(|span| {
+                    let macros = expanded_from(self.tcx, span, &config.macro_crates);
+                    (
+                        span.ctxt().outer_expn(),
+                        is_allowed(&macros, &config.constructor_macros),
+                    )
+                })
+                .collect();
+            if !constructors.is_empty() {
+                for attribute in levels {
+                    self.found
+                        .insert((attribute.id, attribute.span), constructors.clone());
+                }
+            }
+        }
+        visit::walk_item(self, item);
+    }
+}
+
+/// The span of each static in a constructor section in the items a walk visits.
+struct ConstructorStatics(Vec<Span>);
+
+impl<'ast> Visitor<'ast> for ConstructorStatics {
+    fn visit_item(&mut self, item: &'ast rustc_ast::Item) {
+        if matches!(item.kind, rustc_ast::ItemKind::Static(..))
+            && item
+                .attrs
+                .iter()
+                .filter(|attribute| attribute.has_name(sym::link_section))
+                .filter_map(Attribute::value_str)
+                .any(|section| is_constructor_section(section.as_str()))
+        {
+            self.0.push(item.span);
+        }
+        visit::walk_item(self, item);
+    }
+}
+
+/// Whether `attribute` sets lint levels or is one of clippy's own attributes.
+fn is_lint_level(attribute: &Attribute) -> bool {
+    let path = crate::attribute_origin::path_text(attribute);
+    matches!(
+        path.as_str(),
+        "allow" | "warn" | "expect" | "deny" | "forbid"
+    ) || path.starts_with("clippy::")
+}
+
 /// Whether a static in `section` runs before `main` on some target: ELF's `.preinit_array`,
 /// `.init_array` and `.ctors`; on Apple targets a `__mod_init_func` section, or any section of
 /// type `mod_init_funcs`, in any segment; and on Windows the CRT's `.CRT$XI*` and `.CRT$XC*`
@@ -178,22 +272,19 @@ struct Expansion {
 
 /// The macros `span` was expanded from, innermost first. The last one's call site is in the
 /// source.
-fn expanded_from(cx: &LateContext<'_>, span: Span, macro_crates: &[String]) -> Vec<Expansion> {
+fn expanded_from(tcx: TyCtxt<'_>, span: Span, macro_crates: &[String]) -> Vec<Expansion> {
     span.macro_backtrace()
         .filter_map(|expansion| {
             let ExpnKind::Macro(_, written) = expansion.kind else {
                 return None;
             };
             let defined = expansion.macro_def_id.and_then(|id| {
-                let krate = cx.tcx.crate_name(id.krate);
+                let krate = tcx.crate_name(id.krate);
                 let in_workspace = id.krate == LOCAL_CRATE
                     || macro_crates
                         .iter()
                         .any(|listed| listed.replace('-', "_") == krate.as_str());
-                Some((
-                    format!("{krate}::{}", cx.tcx.opt_item_name(id)?),
-                    in_workspace,
-                ))
+                Some((format!("{krate}::{}", tcx.opt_item_name(id)?), in_workspace))
             });
             let (path, in_workspace) = defined.unwrap_or_else(|| (written.to_string(), true));
             Some(Expansion {
@@ -211,22 +302,38 @@ fn ui() {
 }
 
 /// The fixture of statics that a dependency's macros write, several items deep as GPUI's
-/// `actions!` and `#[derive(Action)]` write them.
+/// `actions!` and `#[derive(Action)]` write them, under the `allow` that `inventory::submit!`
+/// writes around them.
 #[cfg(test)]
 const EXTERNAL_MACRO: &str = "ui/code_before_main_external_macro";
 
+/// A UI test of `fixtures` with `suppression_policy` on as well as this lint, which a project
+/// runs together: the lint levels a constructor macro writes around its static are this lint's to
+/// judge.
+#[cfg(test)]
+fn ui_test_with_suppression_policy(fixtures: impl AsRef<Path>) -> dylint_testing::ui::Test {
+    crate::ui_harness::ui_test_of_lints(
+        &[
+            CODE_BEFORE_MAIN,
+            crate::suppression_policy::SUPPRESSION_POLICY,
+        ],
+        fixtures,
+    )
+}
+
 /// A static that a macro defined in another crate writes is reported at the macro call in the
-/// source, naming the macro as `constructor_macros` spells it.
+/// source, naming the macro as `constructor_macros` spells it, and by this lint alone: the
+/// `allow` the macro writes around it goes once the call does.
 #[test]
 fn ui_external_macro() {
-    crate::ui_harness::ui_test_of(CODE_BEFORE_MAIN, EXTERNAL_MACRO).run();
+    ui_test_with_suppression_policy(EXTERNAL_MACRO).run();
 }
 
 /// Paths that name the macros some other way don't match: the derive by the facade that re-exports
 /// it, and the outer macro without its crate. The statics are still reported.
 #[test]
 fn ui_external_macro_unmatched() {
-    crate::ui_harness::ui_test_of(CODE_BEFORE_MAIN, EXTERNAL_MACRO)
+    ui_test_with_suppression_policy(EXTERNAL_MACRO)
         .dylint_toml(crate::ui_harness::dylint_toml_with(
             "constructor_macros",
             Some(r#"["gui::Action", "actions"]"#),
@@ -237,17 +344,23 @@ fn ui_external_macro_unmatched() {
 /// Listing the macros the source calls passes their statics, as does listing the macro inside
 /// them that writes the static, since any macro a static was expanded from counts, until a
 /// workspace macro is inside it: the statics the workspace's own macro writes are still reported,
-/// even inside a listed framework macro that takes them as tokens. Each fixture's expected output
-/// here is its `.listed.stderr`, and none means nothing is reported.
+/// even inside a listed framework macro that takes them as tokens. The listing alone passes the
+/// `allow` the registry writes around its static too, with `trusted_macro_crates` unchanged, but
+/// not over code written in the source unless `trusted_macro_lints` lists its lint. Each fixture's
+/// expected output for a variant here is its `.<variant>.stderr`, and none means nothing is
+/// reported.
 #[test]
 fn ui_external_macro_listed() {
-    for listed in [
-        r#"["gui::actions", "actions_derive::Action", "fw::app", "fw_macros::app"]"#,
-        r#"["registry::submit", "fw_macros::app"]"#,
+    for (variant, listed) in [
+        (
+            "listed",
+            r#"["gui::actions", "actions_derive::Action", "fw::app", "fw_macros::app"]"#,
+        ),
+        ("submit", r#"["registry::submit", "fw_macros::app"]"#),
     ] {
         let fixture = crate::ui_harness::temp_dir().join("code_before_main_listed");
-        copy_fixture(Path::new(EXTERNAL_MACRO), &fixture, "listed");
-        crate::ui_harness::ui_test_of(CODE_BEFORE_MAIN, &fixture)
+        copy_fixture(Path::new(EXTERNAL_MACRO), &fixture, variant);
+        ui_test_with_suppression_policy(&fixture)
             .dylint_toml(crate::ui_harness::dylint_toml_with(
                 "constructor_macros",
                 Some(listed),

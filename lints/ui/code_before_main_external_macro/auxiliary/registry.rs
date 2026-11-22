@@ -1,10 +1,13 @@
 // edition:2021
 //! A dependency like `inventory`, whose `submit!` registers a value before `main` with a static in
-//! each target's constructor section, written in the 2021 edition's plain `link_section` form.
+//! each target's constructor section, written in the 2021 edition's plain `link_section` form. As
+//! `inventory` 0.3's `__do_submit!` does, it writes the static inside a `const _` under an
+//! `allow`.
 
 #[macro_export]
 macro_rules! submit {
     ($value:expr) => {
+        #[allow(non_upper_case_globals)]
         const _: () = {
             static VALUE: fn() = $value;
             unsafe extern "C" fn constructor() {
