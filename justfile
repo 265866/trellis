@@ -1148,6 +1148,14 @@ image-extras:
       || fail "the release tags the image before it attests, signs and verifies it"
     tag_step=$(awk '/name: Tag the image with its version/ { inside = 1; print; next } inside && /^      - / { exit } inside' <<< "$image_job")
     grep --quiet --fixed-strings -- '--tag "$IMAGE:$TAG"' <<< "$tag_step" || fail "the release doesn't tag the image with its version in its last tagging step"
+    grep --quiet '^    timeout-minutes: 60$' <<< "$image_job" || fail "a public service's image job doesn't take 60 minutes for the attest and sign retries"
+    # A private service's release neither attests nor signs, so its image job keeps the limit
+    # without the retries' waits, and a hung job stops before it spends more of the account's
+    # Actions usage.
+    generate "$out/private" --data visibility=private
+    image_job=$(awk '/^  image:$/ { inside = 1; next } /^  [a-z-]+:$/ { inside = 0 } inside' "$out/private/.github/workflows/release.yml")
+    grep --quiet '^    timeout-minutes: 45$' <<< "$image_job" || fail "a private service's image job doesn't stop at 45 minutes"
+    rm -rf "$out/private"
     final_stage=$(awk '/^FROM / { stage = "" } { stage = stage $0 "\n" } END { printf "%s", stage }' "$out/default/Containerfile")
     if grep --quiet --extended-regexp '^(WORKDIR|EXPOSE|ENV) |/files/' <<< "$final_stage"; then
       fail "a service with the default image answer got image extras: $final_stage"
@@ -1310,7 +1318,14 @@ release-extras:
       || fail "the release doesn't try attesting the archives three times"
     grep --quiet --fixed-strings "steps.attest.outcome == 'success' && steps.attest.outputs.bundle-path || steps.attest-again.outcome == 'success' && steps.attest-again.outputs.bundle-path || steps.attest-last.outputs.bundle-path" <<< "$publish_job" \
       || fail "the release doesn't publish the bundle of the attempt that worked"
+    grep --quiet '^    timeout-minutes: 20$' <<< "$publish_job" || fail "a public binary's publish job doesn't take 20 minutes for the attest retries"
     rm -rf "$out/attested"
+    # A private binary's release attests nothing, so its publish job keeps the limit without the
+    # retries' waits, and a hung job stops before it spends more of the account's Actions usage.
+    generate "$out/private" --data visibility=private
+    publish_job=$(awk '/^  publish:$/ { inside = 1; next } /^  [a-z-]+:$/ { inside = 0 } inside' "$out/private/.github/workflows/release.yml")
+    grep --quiet '^    timeout-minutes: 15$' <<< "$publish_job" || fail "a private binary's publish job doesn't stop at 15 minutes"
+    rm -rf "$out/private"
     project="$out/demo-binary"
     generate "$project" --data 'release={name: Demo Binary, checksums: SHA256SUMS.txt, files: {x86_64-unknown-linux-musl: ["demo-binary-{version}-linux.tar.gz", "demo-binary-{version}-linux"]}, env: {DEMO_RELEASE: "${{{{ inputs.ref && '"'1'"' || '"''"' }}", QUOTED: "a \"b\" \\ c"}}'
     cd "$project"

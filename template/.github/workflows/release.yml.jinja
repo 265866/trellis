@@ -169,7 +169,12 @@ jobs:
 {%- raw %}
     needs: [release, build]
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+{%- endraw %}
+{%- if visibility == 'public' %}
+    # The attest retries' waits add four minutes to a private repository's 15.
+{%- endif %}
+    timeout-minutes: {{ 20 if visibility == 'public' else 15 }}
+{%- raw %}
     permissions:
       contents: write
 {%- endraw %}
@@ -287,7 +292,11 @@ jobs:
     needs: release
     if: needs.release.outputs.tag != ''
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+{%- if visibility == 'public' %}
+    # The attest and sign retries can wait 16 minutes in all, so the limit is 60, where a private
+    # repository, which runs neither, has 45.
+{%- endif %}
+    timeout-minutes: {{ 60 if visibility == 'public' else 45 }}
     permissions:
       contents: write
       packages: write
@@ -355,7 +364,8 @@ jobs:
 {%- endraw %}
           platforms: {{ targets | map(attribute='arch') | map('extract', {'x86_64': 'linux/amd64', 'aarch64': 'linux/arm64'}) | join(',') }}
 {%- raw %}
-          # Pushed by its digest alone, so no tag names it until the last step.
+          # Pushed by its digest alone, so no tag names it until "Tag the image with its version,
+          # minor and latest", the step before "Publish the release".
           outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
           sbom: true
           provenance: mode=max
