@@ -1,0 +1,122 @@
+warning: code written in the source under the lint levels of `dead_code` that a macro from `probes` writes, which `trusted_macro_lints` in `dylint.toml` doesn't allow there
+  --> $DIR/code_before_main_probes.rs:38:5
+   |
+LL | /     pub fn quiet_code() -> i32 {
+LL | |         2 + 2
+LL | |     }
+   | |_____^
+   |
+   = help: move the code into a function or a constant with a name, and refer to it here by that name, so clippy checks it; or, once you have read that the macro writes the level and that no code following the style guide trips the lint, list the lint for the crate in `trusted_macro_lints` in `dylint.toml`, which is a rule change
+   = note: `#[warn(suppression_policy)]` on by default
+
+warning: `allow` attribute
+  --> $DIR/code_before_main_probes.rs:51:5
+   |
+LL |     #![allow(code_before_main)]
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: use `#[expect(lint, reason = "...")]` on the narrowest item, which fails once the lint stops firing
+
+warning: inner `#![allow(..)]` attribute
+  --> $DIR/code_before_main_probes.rs:51:5
+   |
+LL |     #![allow(code_before_main)]
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: it applies to everything in the enclosing crate, module or function: put an outer `#[expect(lint, reason = "...")]` on the narrowest item instead, or change the level in `[workspace.lints]` in `Cargo.toml`
+
+warning: `allow` of `code_before_main`, which has no exceptions
+  --> $DIR/code_before_main_probes.rs:51:14
+   |
+LL |     #![allow(code_before_main)]
+   |              ^^^^^^^^^^^^^^^^
+   |
+   = help: call the code from `main`; only a macro that `constructor_macros` in `dylint.toml` lists may place a constructor, which is a rule change
+
+warning: `allow` attribute, which the macro `probes::submit_warnings` from `probes` writes
+  --> $DIR/code_before_main_probes.rs:12:1
+   |
+LL | probes::submit_warnings!();
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: use `#[expect(lint, reason = "...")]` on the narrowest item, which fails once the lint stops firing
+   = help: write the code without `probes::submit_warnings`, as the idioms in `docs/style.md` show; list `probes` in `trusted_macro_crates` only after reading every lint level its macros write, which is a rule change
+
+warning: `allow` attribute, which the macro `probes::submit_named` from `probes` writes
+  --> $DIR/code_before_main_probes.rs:15:1
+   |
+LL | probes::submit_named!();
+   | ^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: use `#[expect(lint, reason = "...")]` on the narrowest item, which fails once the lint stops firing
+   = help: write the code without `probes::submit_named`, as the idioms in `docs/style.md` show; list `probes` in `trusted_macro_crates` only after reading every lint level its macros write, which is a rule change
+
+warning: `allow` of `code_before_main`, which has no exceptions, which the macro `probes::submit_named` from `probes` writes
+  --> $DIR/code_before_main_probes.rs:15:1
+   |
+LL | probes::submit_named!();
+   | ^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: call the code from `main`; only a macro that `constructor_macros` in `dylint.toml` lists may place a constructor, which is a rule change
+   = help: write the code without `probes::submit_named`, as the idioms in `docs/style.md` show; list `probes` in `trusted_macro_crates` only after reading every lint level its macros write, which is a rule change
+
+warning: `allow` attribute, which the macro `probes::wrap_user` from `probes` writes
+  --> $DIR/code_before_main_probes.rs:18:1
+   |
+LL | / probes::wrap_user! {
+LL | |     pub fn user_code() -> i32 {
+LL | |         1 + 1
+...  |
+LL | |     static USER: extern "C" fn() = user_init;
+LL | | }
+   | |_^
+   |
+   = help: use `#[expect(lint, reason = "...")]` on the narrowest item, which fails once the lint stops firing
+   = help: write the code without `probes::wrap_user`, as the idioms in `docs/style.md` show; list `probes` in `trusted_macro_crates` only after reading every lint level its macros write, which is a rule change
+
+warning: `allow` attribute, which the macro `probes::submit_tool` from `probes` writes
+  --> $DIR/code_before_main_probes.rs:45:1
+   |
+LL | probes::submit_tool!();
+   | ^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: use `#[expect(lint, reason = "...")]` on the narrowest item, which fails once the lint stops firing
+   = help: write the code without `probes::submit_tool`, as the idioms in `docs/style.md` show; list `probes` in `trusted_macro_crates` only after reading every lint level its macros write, which is a rule change
+
+warning: `allow` attribute, which the macro `$crate::probes::submit_plain` from `probes` writes
+  --> $DIR/code_before_main_probes.rs:32:1
+   |
+LL | trusted_outer::outer!();
+   | ^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: use `#[expect(lint, reason = "...")]` on the narrowest item, which fails once the lint stops firing
+   = help: write the code without `$crate::probes::submit_plain`, as the idioms in `docs/style.md` show; list `probes` in `trusted_macro_crates` only after reading every lint level its macros write, which is a rule change
+
+warning: `allow` attribute, which the macro `probes::submit_plain` from `probes` writes
+  --> $DIR/code_before_main_probes.rs:55:5
+   |
+LL |     probes::submit_plain!();
+   |     ^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: use `#[expect(lint, reason = "...")]` on the narrowest item, which fails once the lint stops firing
+   = help: write the code without `probes::submit_plain`, as the idioms in `docs/style.md` show; list `probes` in `trusted_macro_crates` only after reading every lint level its macros write, which is a rule change
+
+warning: `probes::submit_tool` places a `static` in `.init_array`, which runs code before `main`
+  --> $DIR/code_before_main_probes.rs:45:1
+   |
+LL | probes::submit_tool!();
+   | ^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: call the code from `main` instead, or, if the framework needs it, list "probes::submit_tool" in `constructor_macros` under `[trellis_lints]` in `dylint.toml`
+   = note: `#[warn(code_before_main)]` on by default
+
+warning: `probes::submit_reason` places a `static` in `.init_array`, which runs code before `main`
+  --> $DIR/code_before_main_probes.rs:48:1
+   |
+LL | probes::submit_reason!();
+   | ^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: call the code from `main` instead, or, if the framework needs it, list "probes::submit_reason" in `constructor_macros` under `[trellis_lints]` in `dylint.toml`
+
+warning: 13 warnings emitted
+

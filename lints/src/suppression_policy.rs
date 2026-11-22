@@ -1,13 +1,14 @@
+use std::collections::HashMap;
 use std::ops::ControlFlow;
 
 use clippy_utils::ast_utils::is_cfg_test;
 use rustc_ast::visit::{self, AssocCtxt, Visitor};
 use rustc_ast::{
     Arm, AssocItem, AttrStyle, Attribute, Crate, Expr, ExprField, FieldDef, ForeignItem,
-    GenericParam, Item, ItemKind, Local, Param, PatField, Variant,
+    GenericParam, Item, ItemKind, Local, NodeId, Param, PatField, Variant,
 };
-use rustc_lint::{EarlyContext, EarlyLintPass, LintContext};
-use rustc_lint_defs::{declare_lint, declare_lint_pass};
+use rustc_lint::{EarlyContext, EarlyLintPass, Level, LintContext};
+use rustc_lint_defs::{declare_lint, impl_lint_pass};
 use rustc_span::Span;
 
 use crate::attribute_origin;
@@ -100,9 +101,10 @@ declare_lint! {
     ///   it is flagged however trusted the macro is. A lint level that a macro from outside the
     ///   workspace writes on an item holding a static in a constructor section, which the same
     ///   expansion writes, is `code_before_main`'s to judge, if it names only lints, none of them a
-    ///   group or `code_before_main`, and `code_before_main` is on at the crate root: it passes as
-    ///   a trusted crate's if `constructor_macros` lets the static pass, and otherwise
-    ///   `code_before_main` reports the macro call, whose removal takes the attribute with it.
+    ///   group or `code_before_main`: it passes as a trusted crate's if `constructor_macros` lets
+    ///   the static pass, and otherwise `code_before_main` reports the macro call, whose removal
+    ///   takes the attribute with it. It is flagged as the macro's after all where
+    ///   `code_before_main` is off at the static, by a level around it or the command line.
     /// - A lint level that a trusted macro writes over code written in the source, which hides
     ///   that code from the lints it names, unless `trusted_macro_lints` in `dylint.toml` lists
     ///   each of them for the macro's crate; a lint group or one of clippy's own attributes is
@@ -160,7 +162,27 @@ declare_lint! {
      some builds"
 }
 
-declare_lint_pass!(SuppressionPolicy => [SUPPRESSION_POLICY]);
+/// The lint's state across the crate: the lint levels it left to `code_before_main`, and whether
+/// `code_before_main` is on at each static they cover, which the early pass learns only as it
+/// reaches each node.
+#[derive(Default)]
+pub(crate) struct SuppressionPolicy {
+    deferred: Vec<Deferred>,
+    /// Whether `code_before_main` is on at each static in a constructor section, after every lint
+    /// level around it, the command line and `--cap-lints`.
+    constructors_on: HashMap<NodeId, bool>,
+}
+
+impl_lint_pass!(SuppressionPolicy => [SUPPRESSION_POLICY]);
+
+/// A lint level that a macro wrote around its own constructor, an
+/// [`attribute_origin::Origin::Constructor`], which this lint checks as the macro's only if
+/// `code_before_main` is off at one of the statics, so nothing else would report the call.
+struct Deferred {
+    meta: Meta,
+    place: Place,
+    statics: Vec<NodeId>,
+}
 
 /// The groups `expect` must not name, besides the groups the compiler registered. clippy and
 /// rustdoc register theirs only in their own drivers.
@@ -286,18 +308,45 @@ impl EarlyLintPass for SuppressionPolicy {
                 checker: &checker,
                 source,
                 layout_expects: Vec::new(),
+                deferred: &mut self.deferred,
             },
             krate,
         );
     }
+
+    fn check_item(&mut self, cx: &EarlyContext<'_>, item: &Item) {
+        if crate::code_before_main::is_constructor_static(item) {
+            let level = cx
+                .get_lint_level_spec(crate::code_before_main::CODE_BEFORE_MAIN)
+                .level();
+            self.constructors_on
+                .insert(item.id, !matches!(level, Level::Allow | Level::Expect));
+        }
+    }
+
+    fn check_crate_post(&mut self, cx: &EarlyContext<'_>, _: &Crate) {
+        let checker = Checker {
+            cx,
+            groups: lint_groups(cx),
+        };
+        for deferred in self.deferred.drain(..) {
+            let reported = deferred
+                .statics
+                .iter()
+                .all(|id| self.constructors_on.get(id) == Some(&true));
+            if !reported {
+                checker.check(&deferred.meta, &deferred.place, &mut Vec::new());
+            }
+        }
+    }
 }
 
-/// Every lint group a lint level may name: the compiler's registered groups, `warnings`, and
-/// [`TOOL_GROUPS`].
+/// Every lint group a lint level may name: the compiler's registered groups, their deprecated
+/// aliases such as `bad_style` included, `warnings`, and [`TOOL_GROUPS`].
 pub(crate) fn lint_groups(cx: &EarlyContext<'_>) -> Vec<String> {
     rustc_lint::unerased_lint_store(cx.sess())
-        .get_lint_groups()
-        .map(|(name, _, _)| name.to_string())
+        .get_all_group_names()
+        .map(|name| name.to_string())
         .chain(["warnings".to_owned()])
         .chain(TOOL_GROUPS.iter().map(|&group| group.to_owned()))
         .collect()
@@ -311,6 +360,8 @@ struct Expanded<'a, 'cx> {
     /// The span of each `expect` of a lint in [`MODULE_LINTS`] on the nodes the visit is inside,
     /// outermost first, and whether it has been reported.
     layout_expects: Vec<(Span, bool)>,
+    /// The lint levels left to `code_before_main`, which `check_crate_post` checks.
+    deferred: &'a mut Vec<Deferred>,
 }
 
 impl Expanded<'_, '_> {
@@ -413,9 +464,11 @@ impl<'ast> Visitor<'ast> for Expanded<'_, '_> {
             return;
         }
         let origin = attribute_origin::origin(self.checker.cx, self.source, attribute);
-        if !origin.is_untrusted() {
-            return;
-        }
+        let statics = match &origin {
+            attribute_origin::Origin::Constructor { statics, .. } => Some(statics.clone()),
+            _ if origin.is_untrusted() => None,
+            _ => return,
+        };
         let place = Place {
             span: attribute.span,
             inner: attribute.style == AttrStyle::Inner,
@@ -423,8 +476,15 @@ impl<'ast> Visitor<'ast> for Expanded<'_, '_> {
             origin: origin.describe(),
             origin_help: origin.untrusted_crate_help(),
         };
-        self.checker
-            .check(&attribute_origin::meta(attribute), &place, &mut Vec::new());
+        let meta = attribute_origin::meta(attribute);
+        match statics {
+            Some(statics) => self.deferred.push(Deferred {
+                meta,
+                place,
+                statics,
+            }),
+            None => self.checker.check(&meta, &place, &mut Vec::new()),
+        }
     }
 }
 

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use clippy_utils::diagnostics::span_lint_and_help;
 use rustc_ast::visit::{self, Visitor};
-use rustc_ast::{AttrId, Attribute, Crate};
+use rustc_ast::{AttrId, Attribute, Crate, NodeId};
 use rustc_attr_ir::find_attr;
 use rustc_hir::def_id::LOCAL_CRATE;
 use rustc_hir::{Item, ItemKind};
@@ -65,10 +65,10 @@ declare_lint! {
     ///
     /// The lint levels that the macro writing the static writes on the items around it, such as
     /// the `allow` on the `const _` that `inventory::submit!` writes, are this lint's to judge too,
-    /// as long as none can turn it off: each names only lints, none of them a group or this lint,
-    /// and the lint is on at the crate root. `suppression_policy` takes them as a trusted crate's
-    /// once the static passes, so a listed macro needs no entry in `trusted_macro_crates`, and
-    /// otherwise leaves them to this lint's report. It checks any other as the macro's.
+    /// as long as each names only lints, none of them a group or this lint. `suppression_policy`
+    /// takes them as a trusted crate's once the static passes, so a listed macro needs no entry in
+    /// `trusted_macro_crates`, and otherwise leaves them to this lint's report, unless this lint is
+    /// off at the static. It checks any other as the macro's.
     pub CODE_BEFORE_MAIN,
     Warn,
     "a `static` in a section that runs code before `main`"
@@ -152,10 +152,10 @@ fn is_allowed(macros: &[Expansion], allowed: &[String]) -> bool {
 }
 
 /// For each lint-level attribute of `krate` on an item that holds a static in a constructor
-/// section, the item itself included, the expansion that wrote each such static and whether
-/// `constructor_macros` lets it pass. `suppression_policy` leaves a lint level that the static's
-/// own expansion wrote to this lint, as [`crate::attribute_origin::origin`] says.
-pub(crate) fn constructors_under(krate: &Crate) -> HashMap<(AttrId, Span), Vec<(ExpnId, bool)>> {
+/// section, the item itself included, each such static, with the expansion that wrote it and
+/// whether `constructor_macros` lets it pass. `suppression_policy` leaves a lint level that the
+/// static's own expansion wrote to this lint, as [`crate::attribute_origin::origin`] says.
+pub(crate) fn constructors_under(krate: &Crate) -> HashMap<(AttrId, Span), Vec<Constructor>> {
     rustc_middle::ty::tls::with(|tcx| {
         let mut under = ConstructorsUnder {
             tcx,
@@ -169,7 +169,17 @@ pub(crate) fn constructors_under(krate: &Crate) -> HashMap<(AttrId, Span), Vec<(
 /// Walks the expanded crate, finding the constructors under each item's lint levels.
 struct ConstructorsUnder<'tcx> {
     tcx: TyCtxt<'tcx>,
-    found: HashMap<(AttrId, Span), Vec<(ExpnId, bool)>>,
+    found: HashMap<(AttrId, Span), Vec<Constructor>>,
+}
+
+/// A static in a constructor section under a lint level.
+#[derive(Clone, Copy)]
+pub(crate) struct Constructor {
+    pub(crate) id: NodeId,
+    /// The expansion that wrote it.
+    pub(crate) expansion: ExpnId,
+    /// Whether `constructor_macros` lets it pass.
+    pub(crate) allowed: bool,
 }
 
 impl<'ast> Visitor<'ast> for ConstructorsUnder<'_> {
@@ -183,15 +193,16 @@ impl<'ast> Visitor<'ast> for ConstructorsUnder<'_> {
             let mut statics = ConstructorStatics(Vec::new());
             statics.visit_item(item);
             let config = crate::config::get(self.tcx.sess);
-            let constructors: Vec<(ExpnId, bool)> = statics
+            let constructors: Vec<Constructor> = statics
                 .0
                 .into_iter()
-                .map(|span| {
+                .map(|(id, span)| {
                     let macros = expanded_from(self.tcx, span, &config.macro_crates);
-                    (
-                        span.ctxt().outer_expn(),
-                        is_allowed(&macros, &config.constructor_macros),
-                    )
+                    Constructor {
+                        id,
+                        expansion: span.ctxt().outer_expn(),
+                        allowed: is_allowed(&macros, &config.constructor_macros),
+                    }
                 })
                 .collect();
             if !constructors.is_empty() {
@@ -205,23 +216,27 @@ impl<'ast> Visitor<'ast> for ConstructorsUnder<'_> {
     }
 }
 
-/// The span of each static in a constructor section in the items a walk visits.
-struct ConstructorStatics(Vec<Span>);
+/// The id and span of each static in a constructor section in the items a walk visits.
+struct ConstructorStatics(Vec<(NodeId, Span)>);
 
 impl<'ast> Visitor<'ast> for ConstructorStatics {
     fn visit_item(&mut self, item: &'ast rustc_ast::Item) {
-        if matches!(item.kind, rustc_ast::ItemKind::Static(..))
-            && item
-                .attrs
-                .iter()
-                .filter(|attribute| attribute.has_name(sym::link_section))
-                .filter_map(Attribute::value_str)
-                .any(|section| is_constructor_section(section.as_str()))
-        {
-            self.0.push(item.span);
+        if is_constructor_static(item) {
+            self.0.push((item.id, item.span));
         }
         visit::walk_item(self, item);
     }
+}
+
+/// Whether `item` is a static in a constructor section, as the expanded crate writes it.
+pub(crate) fn is_constructor_static(item: &rustc_ast::Item) -> bool {
+    matches!(item.kind, rustc_ast::ItemKind::Static(..))
+        && item
+            .attrs
+            .iter()
+            .filter(|attribute| attribute.has_name(sym::link_section))
+            .filter_map(Attribute::value_str)
+            .any(|section| is_constructor_section(section.as_str()))
 }
 
 /// Whether `attribute` sets lint levels or is one of clippy's own attributes.
@@ -371,12 +386,37 @@ fn ui_external_macro_listed() {
     }
 }
 
+/// The fixture of statics under lint levels a dependency's macros write around them, some of
+/// which could turn this lint off.
+#[cfg(test)]
+const PROBES: &str = "ui/code_before_main_probes";
+
 /// A dependency's lint level that could turn this lint off, by a group such as `warnings` or by
-/// its name, isn't left to it: `suppression_policy` flags each, so the macro call is always
-/// reported, as it is when the level hides the caller's own code too.
+/// its name, tool prefix or not, isn't left to it, nor is one at a static where an enclosing
+/// level turned it off: `suppression_policy` flags each, so the macro call is always reported.
+/// Listing a wrapper that takes the caller's code passes its static, and `suppression_policy`
+/// then flags the caller's code under its level. The listed run's expected output is the
+/// fixture's `.listed.stderr`.
 #[test]
 fn ui_constructor_probes() {
-    ui_test_with_suppression_policy("ui/code_before_main_probes").run();
+    let dylint_toml = |listed: &str| {
+        crate::ui_harness::dylint_toml_with_all(&[
+            (
+                "trusted_macro_crates",
+                Some(r#"["alloc", "core", "std", "trusted_outer"]"#),
+            ),
+            ("constructor_macros", Some(listed)),
+        ])
+    };
+    ui_test_with_suppression_policy(PROBES)
+        .dylint_toml(dylint_toml("[]"))
+        .run();
+    let fixture = crate::ui_harness::temp_dir().join("code_before_main_probes_listed");
+    copy_fixture(Path::new(PROBES), &fixture, "listed");
+    ui_test_with_suppression_policy(&fixture)
+        .dylint_toml(dylint_toml(r#"["probes::wrap_quiet"]"#))
+        .run();
+    std::fs::remove_dir_all(&fixture).expect("the fixture copy should be removable");
 }
 
 /// With this lint turned off on the command line, nothing would report the statics, so

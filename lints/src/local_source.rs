@@ -37,6 +37,8 @@ use rustc_span::def_id::LOCAL_CRATE;
 use rustc_span::source_map::SourceMap;
 use rustc_span::{BytePos, ExpnId, FileName, SourceFile, Span};
 
+use crate::code_before_main::Constructor;
+
 /// An attribute, `#[...]` or `#![...]`, as written in a source file.
 pub(crate) struct SourceAttribute {
     /// Whether it is an inner attribute, `#![...]`, which applies to the enclosing module, crate
@@ -256,7 +258,7 @@ pub(crate) struct LocalSource {
     item_expansions: HashMap<(AttrId, Span), ExpnId>,
     /// The constructors under each lint level of the expanded crate on an item that holds one, as
     /// [`crate::code_before_main::constructors_under`] finds them.
-    constructors_under: HashMap<(AttrId, Span), Vec<(ExpnId, bool)>>,
+    constructors_under: HashMap<(AttrId, Span), Vec<Constructor>>,
     /// Each call of a function-like macro written in the source, `name!(..)`, `name![..]` or
     /// `name! {..}`, from its name to its closing delimiter.
     macro_calls: Vec<Span>,
@@ -382,18 +384,20 @@ impl LocalSource {
             .copied()
     }
 
-    /// Whether `constructor_macros` lets the static in a constructor section that `expansion`
-    /// wrote pass, if `attribute`, a lint level, is on an item that holds one.
-    pub(crate) fn constructor_under(
+    /// The statics in a constructor section that `expansion` wrote, if `attribute`, a lint level,
+    /// is on an item that holds any.
+    pub(crate) fn constructors_under(
         &self,
         attribute: &Attribute,
         expansion: ExpnId,
-    ) -> Option<bool> {
+    ) -> Vec<Constructor> {
         self.constructors_under
-            .get(&(attribute.id, attribute.span))?
-            .iter()
-            .find(|(written, _)| *written == expansion)
-            .map(|&(_, allowed)| allowed)
+            .get(&(attribute.id, attribute.span))
+            .into_iter()
+            .flatten()
+            .filter(|constructor| constructor.expansion == expansion)
+            .copied()
+            .collect()
     }
 
     /// The meta item the scan read that starts where `path_span` starts, if its path is `path`:
