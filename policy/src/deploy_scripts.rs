@@ -17,9 +17,9 @@ use crate::repository_files;
 use crate::violation::Violation;
 use crate::workspace::Workspace;
 
-/// The name of a deploy kit's directory, with its `/`: `deploy/` at the root, or in a crate's
-/// directory, `crates/<crate>/deploy/`.
-const DEPLOY_DIRECTORY: &str = "deploy/";
+/// The name of a deploy kit's directory: `deploy` at the root, or in a crate's directory,
+/// `crates/<crate>/deploy`.
+pub(crate) const KIT_NAME: &str = "deploy";
 
 /// The extensions that make a kit file a shell script, in any case.
 const SCRIPT_EXTENSIONS: [&str; 5] = ["sh", "bash", "dash", "ksh", "bats"];
@@ -43,12 +43,22 @@ const INSTALL_REMEDY: &str = "Install the shellcheck version the Set up section 
 /// apart from the ones that are rules by their names, so a kit change lands with the code change
 /// it needs.
 pub(crate) fn kit_of(path: &str) -> Option<&str> {
-    if path.starts_with(DEPLOY_DIRECTORY) {
-        return Some(&path[..DEPLOY_DIRECTORY.len()]);
+    if let Some(kit) = kit_at(path, 0) {
+        return Some(kit);
     }
-    let (krate, rest) = path.strip_prefix("crates/")?.split_once('/')?;
-    let length = "crates/".len() + krate.len() + 1 + DEPLOY_DIRECTORY.len();
-    (!krate.is_empty() && rest.starts_with(DEPLOY_DIRECTORY)).then(|| &path[..length])
+    let (krate, _) = path.strip_prefix("crates/")?.split_once('/')?;
+    if krate.is_empty() {
+        return None;
+    }
+    kit_at(path, "crates/".len() + krate.len() + 1)
+}
+
+/// The start of `path` up to a kit directory that begins at byte `start`, with its `/`, or `None`
+/// if no `deploy/` begins there.
+fn kit_at(path: &str, start: usize) -> Option<&str> {
+    let rest = path.get(start..)?.strip_prefix(KIT_NAME)?;
+    rest.starts_with('/')
+        .then(|| &path[..=start + KIT_NAME.len()])
 }
 
 /// Checks every shell script in a deploy kit, under the root `deploy/` or a crate's

@@ -301,6 +301,13 @@ renamed with no file in it changed, is neither rule nor code, so a crate's direc
 pull request beside the `path` of each dependency on it. A file in the crate that reads its own
 location, such as a build script that reads `CARGO_MANIFEST_DIR`, can then do something else, as a
 code change can change what a listed build script emits.
+{%- if kind != 'library' %}
+A root deploy kit that moves into `crates/{{ crate_name }}/deploy/` with every code file unchanged
+leaves its code out the same way, while its files that are rules by their names count at both
+paths, so the move lands in a rules pull request beside the paths that name the kit, as
+[Maintaining](docs/maintaining.md#extend-what-trellis-generates) says. A kit file that names
+`deploy/` or climbs out of the kit with `..` reaches somewhere else after the move.
+{%- endif %}
 {%- if web_ui %} The web UI's `package.json`, its scripts and its sources are code, outside
 the rule split, so a code pull request can change what its `check` script runs, including which
 settings file `tsc` reads and the flags it gets.

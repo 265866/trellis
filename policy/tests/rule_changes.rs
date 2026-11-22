@@ -1797,7 +1797,19 @@ fn a_crate_holding_a_symbolic_link_counts() {
 
 #[test]
 fn an_uncommitted_change_in_the_working_tree_stops_the_move() {
-    let uncommitted: [Change; 11] = [
+    let uncommitted: [Change; 13] = [
+        Change {
+            why: "an untracked file named as the old directory",
+            make: |repository| {
+                repository.write("crates/engine", "x\n");
+            },
+        },
+        Change {
+            why: "a staged file named as the old directory in other letters",
+            make: |repository| {
+                repository.stage("100644", "crates/ENGINE", "x\n");
+            },
+        },
         Change {
             why: "an unstaged edit",
             make: |repository| {
@@ -2183,12 +2195,21 @@ fn a_crate_kit_change_is_code() {
     }
 }
 
-/// The files of the root deploy kit in the tests that move it into a crate: a script, which is
-/// code, and a composite action and a justfile module, which are rules by their names.
-const KIT_FILES: [(&str, &str); 3] = [
+/// The files of the root deploy kit in the tests that move it into a crate: a script and a unit,
+/// which are code, and a composite action and a justfile module, which are rules by their names.
+const KIT_FILES: [(&str, &str); 4] = [
     ("install.sh", "#!/bin/sh\necho install\n"),
+    ("app.service", "[Service]\nExecStart=/srv/app\n"),
     ("action.yml", "runs:\n  using: composite\n  steps: []\n"),
     ("tasks.just", "install:\n    sh deploy/install.sh\n"),
+];
+
+/// The kit's rule files at both of its places, as a move lists them.
+const MOVED_KIT_RULES: [&str; 4] = [
+    "crates/app/deploy/action.yml",
+    "crates/app/deploy/tasks.just",
+    "deploy/action.yml",
+    "deploy/tasks.just",
 ];
 
 /// A workflow that runs the kit's composite action from `directory`.
@@ -2212,87 +2233,132 @@ fn repository_with_a_kit() -> Repository {
     repository
 }
 
-/// Asserts that `changed` lists the kit's action at `crates/app/deploy` among its rules and mixes
-/// rules and code, so a move that changed something besides the kit's place is judged as before.
-fn assert_the_kit_counts(changed: &ChangedFiles, why: &str) {
+/// Moves the root kit to `crates/app/deploy` in git's index and the working tree.
+fn move_the_kit(repository: &Repository) {
+    repository.git(&["mv", "deploy", "crates/app/deploy"]);
+}
+
+/// Whether `changed` lists the kit's script at `crates/app/deploy` among its code, so a move that
+/// changed the kit's code, or one a guard refuses, is judged as before.
+fn the_kit_counts(changed: &ChangedFiles) -> bool {
+    changed
+        .code()
+        .iter()
+        .any(|code| code == "crates/app/deploy/install.sh")
+}
+
+/// Asserts that `missed`, the cases whose kit didn't count, is empty.
+fn assert_no_kit_move_missed(missed: &[String]) {
     assert!(
-        changed
-            .rules()
-            .iter()
-            .any(|rule| rule == "crates/app/deploy/action.yml"),
-        "{why}: the moved action is a rule again: {:?}",
-        changed.rules()
-    );
-    assert!(
-        changed.mixes_rules_and_code(),
-        "{why}: beside the moved script, it fails"
+        missed.is_empty(),
+        "the move is judged as before, but these let it through: {missed:#?}"
     );
 }
 
 #[test]
-fn a_root_kit_moved_whole_into_a_crate_is_neither_rule_nor_code() {
+fn a_root_kit_moved_whole_into_a_crate_leaves_out_its_code() {
     let repository = repository_with_a_kit();
-    repository.git(&["mv", "deploy", "crates/app/deploy"]);
+    move_the_kit(&repository);
     repository.commit("move the kit into the crate");
 
     let changed = repository.changed_files();
-    assert!(
-        changed.rules().is_empty(),
-        "the moved kit's rule files are the same files: {:?}",
-        changed.rules()
-    );
     assert!(
         changed.code().is_empty(),
         "the moved kit's code is the same code: {:?}",
         changed.code()
     );
-    let changed = repository.changed_files_to(&Head::WorkingTree);
-    assert!(
-        changed.rules().is_empty() && changed.code().is_empty(),
-        "a clean working tree after the commit agrees: {changed:?}"
-    );
-
-    repository.write("crates/app/deploy/notes.txt", "x\n");
-    let changed = repository.changed_files_to(&Head::WorkingTree);
-    assert!(
-        changed
-            .rules()
-            .iter()
-            .any(|rule| rule == "crates/app/deploy/action.yml"),
-        "an untracked file in the new place stops the move: {:?}",
-        changed.rules()
-    );
-}
-
-#[test]
-fn a_kit_move_with_the_references_to_its_path_is_a_rules_change() {
-    let repository = repository_with_a_kit();
-    repository.git(&["mv", "deploy", "crates/app/deploy"]);
-    repository.write(
-        ".github/workflows/deploy.yml",
-        &deploy_workflow("crates/app/deploy"),
-    );
-    repository.write("justfile", "import 'crates/app/deploy/tasks.just'\n");
-    repository.commit("move the kit into the crate");
-
-    let changed = repository.changed_files();
     assert_eq!(
         changed.rules(),
-        [".github/workflows/deploy.yml", "justfile"],
-        "only the references are rules"
+        MOVED_KIT_RULES,
+        "the kit's rule files are judged at both paths"
     );
-    assert!(changed.code().is_empty(), "{:?}", changed.code());
     assert!(!changed.mixes_rules_and_code());
+    let changed = repository.changed_files_to(&Head::WorkingTree);
+    assert!(
+        changed.code().is_empty(),
+        "a clean working tree after the commit agrees: {changed:?}"
+    );
 }
 
 #[test]
-fn a_kit_move_that_changes_anything_else_is_judged_as_before() {
-    let changes: [Change; 6] = [
+fn a_kit_move_with_rule_file_changes_is_a_rules_change() {
+    let edits: [Change; 3] = [
+        Change {
+            why: "the references to the kit's path and the module's path to its script",
+            make: |repository| {
+                repository.write(
+                    ".github/workflows/deploy.yml",
+                    &deploy_workflow("crates/app/deploy"),
+                );
+                repository.write("justfile", "import 'crates/app/deploy/tasks.just'\n");
+                repository.write(
+                    "crates/app/deploy/tasks.just",
+                    "install:\n    sh crates/app/deploy/install.sh\n",
+                );
+            },
+        },
+        Change {
+            why: "the action removed",
+            make: |repository| {
+                fs::remove_file(repository.path().join("crates/app/deploy/action.yml"))
+                    .expect("the action should be deleted");
+            },
+        },
+        Change {
+            why: "a module added",
+            make: |repository| {
+                repository.write("crates/app/deploy/backup.just", "backup:\n");
+            },
+        },
+    ];
+    for Change { why, make } in edits {
+        let repository = repository_with_a_kit();
+        move_the_kit(&repository);
+        make(&repository);
+        repository.commit(why);
+        let changed = repository.changed_files();
+        assert!(
+            changed.code().is_empty(),
+            "{why}: the kit's code moved whole: {:?}",
+            changed.code()
+        );
+        assert!(
+            !changed.mixes_rules_and_code(),
+            "{why}: the move is a rules change: {:?}",
+            changed.rules()
+        );
+    }
+}
+
+#[test]
+fn a_kit_move_that_changes_its_code_or_its_place_is_judged_as_before() {
+    let edits: [Change; 10] = [
         Change {
             why: "a script edited",
             make: |repository| {
                 repository.write("crates/app/deploy/install.sh", "#!/bin/sh\necho v2\n");
                 repository.git(&["add", "--all"]);
+            },
+        },
+        Change {
+            why: "a code file added",
+            make: |repository| {
+                repository.write("crates/app/deploy/backup.sh", "#!/bin/sh\n");
+                repository.git(&["add", "--all"]);
+            },
+        },
+        Change {
+            why: "a code file removed",
+            make: |repository| {
+                fs::remove_file(repository.path().join("crates/app/deploy/app.service"))
+                    .expect("the unit should be deleted");
+                repository.git(&["add", "--all"]);
+            },
+        },
+        Change {
+            why: "a script made executable",
+            make: |repository| {
+                repository.git(&["update-index", "--chmod=+x", "crates/app/deploy/install.sh"]);
             },
         },
         Change {
@@ -2320,33 +2386,45 @@ fn a_kit_move_that_changes_anything_else_is_judged_as_before() {
             },
         },
         Change {
+            why: "a second kit in the crate in other letters",
+            make: |repository| {
+                repository.stage("100644", "crates/app/Deploy/notes.txt", "x\n");
+            },
+        },
+        Change {
+            why: "a second crate directory in other letters",
+            make: |repository| {
+                repository.stage("100644", "crates/App/notes.txt", "x\n");
+            },
+        },
+        Change {
             why: "attributes that change the new place's checkout",
             make: |repository| {
                 repository.write(".gitattributes", "crates/app/deploy/** ident\n");
                 repository.git(&["add", "--all"]);
             },
         },
-        Change {
-            why: "a symbolic link in the kit",
-            make: |repository| {
-                repository.stage("120000", "crates/app/deploy/current", "install.sh");
-            },
-        },
     ];
-    for Change { why, make } in changes {
+    let mut missed = Vec::new();
+    for Change { why, make } in edits {
         let repository = repository_with_a_kit();
-        repository.git(&["mv", "deploy", "crates/app/deploy"]);
+        move_the_kit(&repository);
+        repository.git(&["add", "--all"]);
         make(&repository);
         repository.commit_index(why);
-        assert_the_kit_counts(&repository.changed_files(), why);
+        let changed = repository.changed_files();
+        if !the_kit_counts(&changed) {
+            missed.push(format!("{why}: {changed:?}"));
+        }
     }
+    assert_no_kit_move_missed(&missed);
 }
 
-/// A kit whose files check out differently or hold a symbolic link at `base` already, so only the
-/// move changes, is judged as before.
+/// A kit that a guard keeps from moving whole at `base` already, so only the move changes, is
+/// judged as before. The move is made in git's index, so a symbolic link or a submodule moves too.
 #[test]
-fn a_kit_that_checks_out_differently_or_holds_a_link_doesnt_move_whole() {
-    let setups: [Change; 3] = [
+fn a_kit_that_a_guard_refuses_is_judged_as_before() {
+    let setups: [Change; 9] = [
         Change {
             why: "attributes for the new place",
             make: |repository| {
@@ -2355,32 +2433,150 @@ fn a_kit_that_checks_out_differently_or_holds_a_link_doesnt_move_whole() {
             },
         },
         Change {
+            why: "an attributes file in other letters",
+            make: |repository| {
+                repository.write(".GitAttributes", "*.md text\n");
+                repository.commit("an attributes file a case-insensitive system reads");
+            },
+        },
+        Change {
             why: "a symbolic link",
             make: |repository| {
-                repository.git(&["add", "--all"]);
                 repository.stage("120000", "deploy/current", "install.sh");
                 repository.commit_index("link the current script");
             },
         },
         Change {
-            why: "a file the crate's build key names",
+            why: "a submodule",
+            make: |repository| {
+                repository.nested_repository("deploy/vendor");
+                repository.commit("vendor a kit");
+            },
+        },
+        Change {
+            why: "a manifest in other letters, which role reads as code",
+            make: |repository| {
+                repository.write("deploy/cargo.toml", "[package]\nname = \"kit\"\n");
+                repository.commit("make the kit a package");
+            },
+        },
+        Change {
+            why: "a file the crate's build key names at the new place",
             make: |repository| {
                 repository.write("deploy/gen.rs", "fn main() {}\n");
                 repository.write(
                     "crates/app/Cargo.toml",
-                    &format!("{MEMBER_MANIFEST}\n[package.metadata]\n")
+                    &MEMBER_MANIFEST
                         .replace("[package]\n", "[package]\nbuild = \"deploy/gen.rs\"\n"),
                 );
                 repository.commit("name a build script in the kit's new place");
             },
         },
+        Change {
+            why: "a file the crate's build key names at the old place",
+            make: |repository| {
+                repository.write("deploy/gen.rs", "fn main() {}\n");
+                repository.write(
+                    "crates/app/Cargo.toml",
+                    &MEMBER_MANIFEST.replace(
+                        "[package]\n",
+                        "[package]\nbuild = \"../../deploy/gen.rs\"\n",
+                    ),
+                );
+                repository.commit("name a build script in the kit");
+            },
+        },
+        Change {
+            why: "a root entry in other letters at the base",
+            make: |repository| {
+                repository.stage("100644", "Deploy/notes.txt", "x\n");
+                repository.commit_index("a second kit a case-insensitive system merges");
+            },
+        },
+        Change {
+            why: "a kit entry in the crate at the base",
+            make: |repository| {
+                repository.stage("100644", "crates/app/Deploy/notes.txt", "x\n");
+                repository.commit_index("a kit where the root kit moves");
+            },
+        },
     ];
+    let mut missed = Vec::new();
     for Change { why, make } in setups {
         let repository = repository_with_a_kit();
         make(&repository);
         repository.git(&["branch", "--force", "base"]);
+        for stale in ["Deploy/notes.txt", "crates/app/Deploy/notes.txt"] {
+            repository.git(
+                &[
+                    &INDEX_AS_WRITTEN[..],
+                    &["update-index", "--force-remove", "--", stale],
+                ]
+                .concat(),
+            );
+        }
         repository.rename_in_index("deploy", "crates/app/deploy");
         repository.commit_index("move the kit into the crate");
-        assert_the_kit_counts(&repository.changed_files(), why);
+        let changed = repository.changed_files();
+        if !the_kit_counts(&changed) {
+            missed.push(format!("{why}: {changed:?}"));
+        }
     }
+    assert_no_kit_move_missed(&missed);
+}
+
+/// A crate directory whose name isn't ASCII can mean another directory where the file system
+/// normalizes names, so the kit doesn't move whole into one.
+#[test]
+fn a_kit_moved_into_a_crate_with_a_name_that_isnt_plain_is_judged_as_before() {
+    let repository = repository_with_a_kit();
+    repository.rename_in_index("deploy", "crates/mot\u{f6}r/deploy");
+    repository.commit_index("move the kit into a new crate");
+    let changed = repository.changed_files();
+    assert!(
+        changed
+            .code()
+            .iter()
+            .any(|code| code == "crates/mot\u{f6}r/deploy/install.sh"),
+        "the moved script is code again: {:?}",
+        changed.code()
+    );
+}
+
+#[test]
+fn an_uncommitted_kit_path_in_the_working_tree_stops_the_kit_move() {
+    let uncommitted: [Change; 5] = [
+        Change {
+            why: "an untracked file named as the kit",
+            make: |repository| repository.write("deploy", "x\n"),
+        },
+        Change {
+            why: "a staged file named as the kit in other letters",
+            make: |repository| repository.stage("100644", "DEPLOY", "x\n"),
+        },
+        Change {
+            why: "an untracked file below the old place",
+            make: |repository| repository.write("deploy/install.sh", "x\n"),
+        },
+        Change {
+            why: "an untracked file below the new place",
+            make: |repository| repository.write("crates/app/deploy/notes.txt", "x\n"),
+        },
+        Change {
+            why: "a staged file below the new place in other letters",
+            make: |repository| repository.stage("100644", "crates/app/DEPLOY/notes.txt", "x\n"),
+        },
+    ];
+    let mut missed = Vec::new();
+    for Change { why, make } in uncommitted {
+        let repository = repository_with_a_kit();
+        move_the_kit(&repository);
+        repository.commit("move the kit into the crate");
+        make(&repository);
+        let changed = repository.changed_files_to(&Head::WorkingTree);
+        if !the_kit_counts(&changed) {
+            missed.push(format!("{why}: {changed:?}"));
+        }
+    }
+    assert_no_kit_move_missed(&missed);
 }

@@ -191,8 +191,8 @@ Beyond the Google guide, the workspace also turns on:
   has the form of a short name. A web UI's
   `package.json`, its scripts and its sources are code, and so is a deploy kit under
   `crates/<crate>/deploy/` or the root `deploy/`, apart from the files that are rules by their
-  names. A root kit that moves whole into a crate's `deploy/` is neither, so it can move beside
-  the workflow and justfile paths that name it. A proc-macro dependency is code: a rules pull request lists the crate in
+  names. A root kit that moves into a crate's `deploy/` with its code files unchanged leaves that
+  code out, so the move is a rules change beside the paths that name the kit. A proc-macro dependency is code: a rules pull request lists the crate in
   `proc_macro_crates`, and a code pull request then adds the dependency with its first use, since
   `cargo shear` rejects a dependency nothing uses. A `.rs` change that only adds, removes or moves
   `expect` attributes is neither, so a new lint lands with the `expect`s it needs, and a code
