@@ -1106,10 +1106,9 @@ fn stale_web_licenses_names_each_entry_for_a_package_not_installed() {
         "5.0.0",
         "\"OFL-1.1\"",
     );
-    install.run_stale().assert_reports(
-        0,
-        &["Each of the 0 entries in web-licenses.toml names an npm package"],
-    );
+    install
+        .run_stale()
+        .assert_reports(0, &["web-licenses.toml has no entries."]);
 
     install.write(
         "web-licenses.toml",
@@ -1120,10 +1119,7 @@ fn stale_web_licenses_names_each_entry_for_a_package_not_installed() {
     );
     install.run_stale().assert_reports(
         0,
-        &[
-            "Each of the 1 entries in web-licenses.toml names an npm package installed under \
-           node_modules.",
-        ],
+        &["The entry in web-licenses.toml names an npm package installed under node_modules."],
     );
 
     install.write(
@@ -1155,4 +1151,61 @@ fn stale_web_licenses_names_each_entry_for_a_package_not_installed() {
     install
         .run_stale()
         .assert_reports(2, &["error: couldn't read node_modules: "]);
+}
+
+#[test]
+fn an_entry_follows_its_package_under_an_alias_or_nested_alone() {
+    let install = Install::new();
+    install.write(
+        "web-licenses.toml",
+        &format!(
+            "{WEB_LICENSES}\n[[package]]\nname = \"@fontsource/inter\"\nlicenses = [\"OFL-1.1\"]\n\
+             reason = \"A font the web UI ships.\"\n\n[[package]]\nname = \"deep-font\"\n\
+             licenses = [\"OFL-1.1\"]\nreason = \"A font a dependency ships.\"\n"
+        ),
+    );
+    install.package(
+        "node_modules/my-font",
+        "@fontsource/inter",
+        "5.0.0",
+        "\"OFL-1.1\"",
+    );
+    install.package(
+        "node_modules/a/node_modules/deep-font",
+        "deep-font",
+        "1.0.0",
+        "\"OFL-1.1\"",
+    );
+    install.package("node_modules/a", "a", "1.0.0", "\"MIT\"");
+    install.run().assert_reports(0, &[]);
+    install.run_stale().assert_reports(
+        0,
+        &[
+            "Each of the 2 entries in web-licenses.toml names an npm package installed under \
+             node_modules.",
+        ],
+    );
+
+    let misnamed = Install::new();
+    misnamed.write(
+        "web-licenses.toml",
+        &format!(
+            "{WEB_LICENSES}\n[[package]]\nname = \"@fontsource/inter\"\nlicenses = [\"OFL-1.1\"]\n\
+             reason = \"A font the web UI ships.\"\n"
+        ),
+    );
+    misnamed.package(
+        "node_modules/@fontsource/inter",
+        "other-font",
+        "1.0.0",
+        "\"OFL-1.1\"",
+    );
+    misnamed.run().assert_reports(
+        1,
+        &["error: other-font 1.0.0 in node_modules/@fontsource/inter has the license `OFL-1.1`"],
+    );
+    misnamed.run_stale().assert_reports(
+        1,
+        &["error: web-licenses.toml accepts licenses for @fontsource/inter, which isn't installed"],
+    );
 }

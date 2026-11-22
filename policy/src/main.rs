@@ -387,11 +387,17 @@ fn stale_web_licenses(
         )?;
         return Ok(ExitCode::FAILURE);
     }
-    writeln!(
-        out,
-        "Each of the {} entries in {web_licenses} names an npm package installed under \
-         {node_modules}.",
-        per_package.len()
-    )?;
+    match per_package.len() {
+        0 => writeln!(out, "{web_licenses} has no entries.")?,
+        1 => writeln!(
+            out,
+            "The entry in {web_licenses} names an npm package installed under {node_modules}."
+        )?,
+        count => writeln!(
+            out,
+            "Each of the {count} entries in {web_licenses} names an npm package installed under \
+             {node_modules}."
+        )?,
+    }
     Ok(ExitCode::SUCCESS)
 }

@@ -151,7 +151,13 @@ impl PackageLicenses {
         let licensees = match entry.get("licenses") {
             Some(Value::Array(values)) if !values.is_empty() => {
                 let mut licensees = Vec::new();
-                for value in values {
+                for (index, value) in values.iter().enumerate() {
+                    if values[..index].contains(value) {
+                        return Err(format!(
+                            "has {} twice in `licenses`",
+                            toml_file::render(value)
+                        ));
+                    }
                     licensees.push(licensee(value).ok_or_else(|| {
                         format!(
                             "has {} in `licenses`, which isn't an SPDX license id",
@@ -379,6 +385,10 @@ mod tests {
             (
                 entry("name = \"a\"\nlicenses = [1]\nreason = \"Why.\""),
                 "has 1 in `licenses`",
+            ),
+            (
+                entry("name = \"a\"\nlicenses = [\"OFL-1.1\", \"OFL-1.1\"]\nreason = \"Why.\""),
+                "entry 1 has \"OFL-1.1\" twice in `licenses`",
             ),
             (
                 entry("name = \"a\"\nlicenses = [\"OFL-1.1\"]"),
