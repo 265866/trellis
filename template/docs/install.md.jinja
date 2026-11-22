@@ -3,10 +3,11 @@
 Read this page to run {{ project_name }} on your machine. It shows how to install a release or
 build from source, and how to update.
 
-Each [release](https://github.com/{{ github_owner }}/{{ project_name }}/releases) has one archive per
-platform:
+Each [release](https://github.com/{{ github_owner }}/{{ project_name }}/releases) has {% if release.files %}these files for
+each platform:{% else %}one archive per
+platform:{% endif %}
 {% for target in targets %}
-- {{ target.name }}: `{{ project_name }}-<version>-{{ target.triple }}.{{ 'zip' if target.os == 'windows' else 'tar.gz' }}`
+- {{ target.name }}: {% if release.files %}{% for file in release.files[target.triple] %}`{{ file | replace('{version}', '<version>') }}`{{ ', ' if not loop.last else '' }}{% endfor %}{% else %}`{{ project_name }}-<version>-{{ target.triple }}.{{ 'zip' if target.os == 'windows' else 'tar.gz' }}`{% endif %}
 {%- endfor %}
 {%- if 'linux' in platforms and build.libc | default('musl') == 'musl' %}
 
@@ -21,14 +22,19 @@ installed. They don't run on Alpine or another musl distribution.
 
 ## Install a release
 
-1. Download the archive for your platform and `SHA256SUMS` from the release.
+1. Download the {{ 'file' if release.files else 'archive' }} for your platform and `{{ release.checksums | default('SHA256SUMS') }}` from the release.
 {%- if visibility == 'private' %} The repository
    is private, so sign in to GitHub first, or use the [GitHub CLI](https://cli.github.com/):
    `gh release download <tag> --repo {{ github_owner }}/{{ project_name }}`.
 {%- endif %}
 2. Check the download as [Verify a release](verifying-releases.md) shows.
+{%- if release.files %}
+3. Install it: run an installer, or unpack an archive or take the program as it is, and move
+   `{{ project_name }}` to where you keep programs, such as a directory on your `PATH`.
+{%- else %}
 3. Unpack the archive and move `{{ project_name }}` to where you keep programs, such as a directory
    on your `PATH`.
+{%- endif %}
 {%- if web_ui %} The archive's `web` directory holds the web UI. Keep it beside the program, or
    set `{{ crate_name | upper }}_WEB_DIR` to where you keep it.
 {%- endif %}

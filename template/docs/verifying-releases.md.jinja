@@ -1,3 +1,5 @@
+{%- set sums = release.checksums | default('SHA256SUMS') -%}
+{%- set download = 'file' if release.files else 'archive' -%}
 # Verify a release
 
 {% if visibility == 'public' -%}
@@ -5,8 +7,8 @@ The [release workflow](../.github/workflows/release.yml) builds every release on
 from its tag and attests where it came from. Check that before you run it.
 {%- elif kind == 'binary' -%}
 The [release workflow](../.github/workflows/release.yml) builds every release on GitHub Actions
-from its tag and lists each archive's checksum. Check a download against it before you run it. The
-checksums sit in the same release as the archives, so they catch a broken download, not a swapped
+from its tag and lists each {{ 'file' if release.files else 'archive' }}'s checksum. Check a download against it before you run it. The
+checksums sit in the same release as the {{ 'files' if release.files else 'archives' }}, so they catch a broken download, not a swapped
 one. The releases carry no attestation.
 {%- else -%}
 The [release workflow](../.github/workflows/release.yml) builds every release on GitHub Actions
@@ -15,16 +17,16 @@ from its tag and names the image it pushed by its digest. The image is neither a
 {% if kind == 'binary' %}
 ## Check the checksum
 
-In the directory with the download and the release's `SHA256SUMS`:
+In the directory with the download and the release's `{{ sums }}`:
 
 ```sh
-sha256sum --check --ignore-missing SHA256SUMS
+sha256sum --check --ignore-missing {{ sums }}
 ```
 
-On macOS, use `shasum -a 256 --check --ignore-missing SHA256SUMS`.
+On macOS, use `shasum -a 256 --check --ignore-missing {{ sums }}`.
 {%- if 'windows' in platforms %} On Windows, run
-`(Get-FileHash <archive>).Hash` in PowerShell and compare it with the archive's line in
-`SHA256SUMS`; the case doesn't matter.
+`(Get-FileHash <{{ download }}>).Hash` in PowerShell and compare it with the {{ download }}'s line in
+`{{ sums }}`; the case doesn't matter.
 {%- endif %}
 {%- if visibility == 'public' %}
 
@@ -33,7 +35,7 @@ On macOS, use `shasum -a 256 --check --ignore-missing SHA256SUMS`.
 Download the release's `attestation.json` too. Then, with the [GitHub CLI](https://cli.github.com/):
 
 ```sh
-gh attestation verify <archive> --bundle attestation.json \
+gh attestation verify <{{ 'file' if release.files else 'archive' }}> --bundle attestation.json \
   --repo {{ github_owner }}/{{ project_name }} \
   --signer-workflow {{ github_owner }}/{{ project_name }}/.github/workflows/release.yml \
   --source-ref refs/heads/main

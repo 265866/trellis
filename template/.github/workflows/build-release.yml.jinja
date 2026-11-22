@@ -30,6 +30,9 @@ on:
 {%- if web_ui %}
       - crates/{{ crate_name }}/web/**
 {%- endif %}
+{%- if release.files %}
+      - release/**
+{%- endif %}
 {%- raw %}
       - rust-toolchain.toml
 
@@ -54,6 +57,9 @@ jobs:
 {%- for target in targets %}
           - os: {{ target.runner }}
             target: {{ target.triple }}
+{%- if release.files %}
+            files: {{ release.files[target.triple] | join(' ') }}
+{%- endif %}
 {%- endfor %}
 {%- raw %}
     defaults:
@@ -117,6 +123,12 @@ jobs:
         env:
           TARGET: ${{ matrix.target }}
 {%- endraw %}
+{%- if release.env %}
+          # The release's own build settings, from the release answer.
+{%- for name, value in release.env.items() %}
+          {{ name }}: "{{ value | replace('\\', '\\\\') | replace('"', '\\"') }}"
+{%- endfor %}
+{%- endif %}
         run: cargo build --locked --release --package {{ crate_name }} --target "$TARGET"
 {%- if web_ui %}
 
@@ -138,6 +150,52 @@ jobs:
             throw '{{ project_name }}.exe imports VCRUNTIME140.dll, so +crt-static from .cargo/config.toml was not applied.'
           }
 {%- endif %}
+{%- if release.files %}
+{%- raw %}
+
+      # release/package.sh writes this target's release files, the ones the release answer names,
+      # to DIST, and nothing else: every file there is attested and published, under the name the
+      # answer gives, and docs/install.md lists them. docs/maintaining.md says what it gets.
+      - name: Package
+        id: archive
+        env:
+          TARGET: ${{ matrix.target }}
+          FILES: ${{ matrix.files }}
+{%- endraw %}
+          NAME: {{ project_name }}
+          PACKAGE: {{ crate_name }}
+{%- if web_ui %}
+          WEB: crates/{{ crate_name }}/web/dist
+          WEB_NOTICES: target/THIRD-PARTY-LICENSES-WEB.txt
+{%- endif %}
+{%- raw %}
+        run: |
+          version=$(cargo metadata --locked --no-deps --format-version 1 \
+            | jq -r --arg name "$PACKAGE" '.packages[] | select(.name == $name) | .version')
+          binary="target/$TARGET/release/$NAME"
+          if [ "$RUNNER_OS" = Windows ]; then binary="$binary.exe"; fi
+          export VERSION="$version" BINARY="$binary" NOTICES=target/THIRD-PARTY-LICENSES.html
+          export DIST="$PWD/target/release-files"
+          rm -rf "$DIST"
+          mkdir -p "$DIST"
+          bash release/package.sh
+          expected=$(for file in $FILES; do echo "${file//\{version\}/$version}"; done | sort)
+          written=$(cd "$DIST" && find . -mindepth 1 -maxdepth 1 | sed 's|^\./||' | sort)
+          if [ "$written" != "$expected" ]; then
+            echo "::error::release/package.sh must write exactly the files the release answer names for $TARGET to \$DIST: $(tr '\n' ' ' <<< "$expected"). It wrote: $(tr '\n' ' ' <<< "$written")."
+            exit 1
+          fi
+          for file in $expected; do
+            if [ ! -f "$DIST/$file" ] || [ -L "$DIST/$file" ] || [ ! -s "$DIST/$file" ]; then
+              echo "::error::release/package.sh wrote $file as something other than a regular file with contents."
+              exit 1
+            fi
+          done
+          mkdir -p dist
+          mv "$DIST"/* dist/
+          echo "artifact=$NAME-$version-$TARGET" >> "$GITHUB_OUTPUT"
+{%- endraw %}
+{%- else %}
 {%- raw %}
 
       - name: Archive
@@ -168,6 +226,9 @@ jobs:
           fi
           rm -r "dist/$stem"
           echo "artifact=$stem" >> "$GITHUB_OUTPUT"
+{%- endraw %}
+{%- endif %}
+{%- raw %}
 
       # A week is long enough to re-run a failed publish job, and keeps the archives from filling a
       # private repository's storage.

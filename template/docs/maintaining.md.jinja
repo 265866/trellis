@@ -232,6 +232,43 @@ An update leaves them alone.
   ```
 
   The answer replaces the whole mapping, so repeat every key you keep.
+- **Release files.** The `release` answer, a YAML mapping, changes what a release attaches.
+  `files` maps each target triple to the names of its files, with `{version}` for the version,
+  and `release/package.sh`, which you write, writes exactly those files for its target; the
+  release build replaces trellis's archive with them, and the release attests and publishes them
+  with the rest. [Install](install.md), [Verify a release](verifying-releases.md) and
+  [Stability](stability.md) then list those names, so changing one breaks your users as
+  "Keep releases verifiable" says. `checksums` names the checksums file, `name` starts the
+  release's title, and `env` sets environment variables, each a quoted string that may hold a
+  `{% raw %}${{ }}{% endraw %}` expression, for the release's `cargo build` only, such as
+  `{% raw %}APP_RELEASE: "${{ inputs.ref && '1' || '' }}"{% endraw %}`, which is set only when the release workflow,
+  not a pull request, runs the build. The script runs with bash from the repository's root on
+  each target's runner, Git Bash on Windows, after the build, with these variables:
+
+  | Variable | Holds |
+  | --- | --- |
+  | `TARGET` | The target triple. |
+  | `VERSION` | The version, such as `1.4.2`. |
+  | `BINARY` | The program the release built, relative to the root. |
+  | `NOTICES` | The license notices, `target/THIRD-PARTY-LICENSES.html`, which the build can read too. |
+  | `DIST` | The empty directory, an absolute path, to write the files to. |
+{%- if web_ui %}
+  | `WEB`, `WEB_NOTICES` | The web UI's build and its license notices. |
+{%- endif %}
+
+  The build fails unless `DIST` then holds exactly the names `files` lists for the target, each a
+  file with contents. Git Bash turns an argument that starts with `/` into a path, so call a
+  Windows program such as Inno Setup's `iscc`, which the windows-2025 runners have, with
+  `MSYS_NO_PATHCONV=1`, and give it paths through `cygpath -w`. The script is a rule, like the
+  workflows, and `just actionlint` shellchecks it. Write it, then set the answer in the same rules
+  pull request:
+
+  ```sh
+  uvx copier update --defaults --vcs-ref=:current: \
+    --data 'release={checksums: SHA256SUMS.txt, files: {x86_64-pc-windows-msvc: ["app-{version}-x64.zip"]}}'
+  ```
+
+  The answer replaces the whole mapping, so repeat every key you keep.
 {%- endif %}
 {%- if kind == 'service' %}
 

@@ -456,7 +456,7 @@ lints-test:
     cargo test --locked
 
 # Runs `template` for each kind, then `shapes`, `dependencies`, `update` and the extras checks.
-templates: (template "binary") (template "binary" "ci" "false" "true") (template "service") (template "service" "ci" "false" "true") (template "library") shapes dependencies update build-extras image-extras
+templates: (template "binary") (template "binary" "ci" "false" "true") (template "service") (template "service" "ci" "false" "true") (template "library") shapes dependencies update build-extras image-extras release-extras
 
 # Copies the working tree into a scratch repository as two tagged trellis versions, generates a
 # library from the first, and edits it the way an owner would: its code and changelog, and a new
@@ -1072,6 +1072,119 @@ image-extras:
     done
     docker cp "$container:/usr/share/doc/demo-service/LICENSE" "$out/LICENSE"
     cmp --quiet LICENSE "$out/LICENSE" || fail "the image's files replaced trellis's license file"
+
+# Generates a binary whose `release` answer sets every key, with a release/package.sh, and runs its
+# release build's own steps for this machine's target, which must leave exactly the files the
+# answer names, and fail when the script writes one fewer or one more. The workflows must build
+# with the answer's environment, run the release build on a change to the script, and write and
+# attest the answer's checksums file under the answer's title; `just actionlint` must shellcheck
+# the script, and the docs must list the answer's names. The answer's checks must refuse what it
+# doesn't take, and another kind's answer.
+#
+# Checks what a binary's `release` answer changes in its releases.
+release-extras:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    trellis="{{ justfile_directory() }}"
+    out=$(mktemp -d)
+    trap 'rm -rf "$out"' EXIT
+    fail() { echo "error: release-extras: $1" >&2; exit 1; }
+    triple=x86_64-unknown-linux-musl
+    # Generates a binary for Linux on x86-64 in $1, with the further arguments.
+    generate() {
+      local destination=$1
+      shift
+      uv tool run copier@9.19.1 copy --quiet --defaults --vcs-ref HEAD \
+        --data project_name=demo-binary \
+        --data "description=A demo binary that trellis generates for its tests." \
+        --data kind=binary --data 'platforms=[linux]' --data 'architectures=[x86_64]' \
+        --data trellis_path="$trellis" "$@" "$trellis" "$destination"
+    }
+    while IFS='|' read -r answer message; do
+      if refusal=$(generate "$out/refused" --data "release=$answer" 2>&1); then
+        fail "the release answer took $answer"
+      fi
+      grep --quiet --fixed-strings -- "$message" <<< "$refusal" || fail "the release answer refused $answer for another reason: $refusal"
+    done << 'EOF'
+    {files: {macos: ["demo-{version}.zip"]}}|is not a target triple
+    {files: {x86_64-unknown-linux-musl: ["demo+{version}"]}}|that holds `{version}`
+    {files: {x86_64-unknown-linux-musl: ["demo.zip"]}}|that holds `{version}`
+    {files: {x86_64-unknown-linux-musl: ["demo-{version}", "demo-{version}"]}}|is named twice
+    {files: {x86_64-unknown-linux-musl: []}}|lists at least one file name
+    {checksums: attestation.json}|other than `attestation.json`
+    {name: "Demo\nBinary"}|`name` is up to 64 letters
+    {env: {GITHUB_TOKEN: "x"}}|no `GITHUB_`, `RUNNER_` or `CARGO_` prefix
+    {env: {RUSTFLAGS: "-C x"}}|none of the variables that change the toolchain
+    {env: {target: "x"}}|use capitals
+    {env: {DEMO_RELEASE: 1}}|needs a quoted one-line string
+    {installer: true}|`installer` is not a key it takes
+    EOF
+    if refusal=$(uv tool run copier@9.19.1 copy --quiet --defaults --vcs-ref HEAD --data project_name=demo-service \
+      --data "description=A demo service." --data kind=service --data 'release={checksums: SUMS}' "$trellis" "$out/service" 2>&1); then
+      fail "a service took a release answer"
+    fi
+    grep --quiet 'Only a binary takes a `release` answer' <<< "$refusal" || fail "a service's release answer was refused for another reason: $refusal"
+    # With the build answer's glibc, the release answer names the glibc target's files.
+    generate "$out/glibc" --data 'build={libc: gnu}' \
+      --data 'release={files: {x86_64-unknown-linux-gnu: ["demo-binary-{version}-linux"]}}'
+    grep --quiet '^            files: demo-binary-{version}-linux$' "$out/glibc/.github/workflows/build-release.yml" \
+      || fail "a glibc release doesn't name the glibc target's files"
+    grep --quiet --fixed-strings 'Linux on x86-64: `demo-binary-<version>-linux`' "$out/glibc/docs/install.md" \
+      || fail "a glibc release's docs/install.md doesn't list its files"
+    project="$out/demo-binary"
+    generate "$project" --data 'release={name: Demo Binary, checksums: SHA256SUMS.txt, files: {x86_64-unknown-linux-musl: ["demo-binary-{version}-linux.tar.gz", "demo-binary-{version}-linux"]}, env: {DEMO_RELEASE: "${{{{ inputs.ref && '"'1'"' || '"''"' }}", QUOTED: "a \"b\" \\ c"}}'
+    cd "$project"
+    git init --quiet --initial-branch main
+    workflow=.github/workflows/build-release.yml
+    grep --quiet "^            files: demo-binary-{version}-linux.tar.gz demo-binary-{version}-linux$" "$workflow" \
+      || fail "$workflow's matrix doesn't name the target's files"
+    grep --quiet '^      - release/\*\*$' "$workflow" || fail "a change to release/ doesn't run the release build"
+    grep --quiet --fixed-strings "DEMO_RELEASE: \"\${{{{ inputs.ref && '1' || '' }}\"" "$workflow" \
+      || fail "the release build doesn't get DEMO_RELEASE"
+    grep --quiet --fixed-strings 'QUOTED: "a \"b\" \\ c"' "$workflow" || fail "the release build's QUOTED isn't escaped"
+    ! grep --quiet '^      - name: Archive$' "$workflow" || fail "the release build still archives as trellis does"
+    grep --quiet 'run: sha256sum -- \* > SHA256SUMS.txt$' .github/workflows/release.yml || fail "the release doesn't write SHA256SUMS.txt"
+    grep --quiet 'subject-checksums: dist/SHA256SUMS.txt$' .github/workflows/release.yml || fail "the release doesn't attest SHA256SUMS.txt"
+    grep --quiet -- '--title "Demo Binary ${TAG#v}"' .github/workflows/release.yml || fail "the release's title doesn't start with Demo Binary"
+    grep --quiet --fixed-strings 'Linux on x86-64: `demo-binary-<version>-linux.tar.gz`, `demo-binary-<version>-linux`' docs/install.md \
+      || fail "docs/install.md doesn't list the release's files"
+    grep --quiet 'sha256sum --check --ignore-missing SHA256SUMS.txt' docs/verifying-releases.md \
+      || fail "docs/verifying-releases.md doesn't name SHA256SUMS.txt"
+    grep --quiet '`SHA256SUMS.txt` and `attestation.json` files' docs/stability.md || fail "docs/stability.md doesn't name SHA256SUMS.txt"
+    mkdir release
+    cat > release/package.sh << 'EOF'
+    #!/usr/bin/env bash
+    # Writes the release files for $TARGET to $DIST.
+    set -euo pipefail
+    staging="$DIST/../staging"
+    rm -rf "$staging"
+    mkdir "$staging"
+    cp "$BINARY" "$NOTICES" "$staging/"
+    tar -C "$staging" -czf "$DIST/demo-binary-$VERSION-linux.tar.gz" .
+    rm -r "$staging"
+    cp "$BINARY" "$DIST/demo-binary-$VERSION-linux"
+    if [ -n "${EXTRA:-}" ]; then echo extra > "$DIST/$EXTRA"; fi
+    if [ -n "${SKIP:-}" ]; then rm "$DIST/demo-binary-$VERSION-$SKIP"; fi
+    if [ -n "${SIDE:-}" ]; then mkdir -p dist && echo side > "dist/$SIDE"; fi
+    EOF
+    just actionlint zizmor
+    export FILES="demo-binary-{version}-linux.tar.gz demo-binary-{version}-linux"
+    "$trellis/tests/release-build/run.sh" "$project" > "$out/dist.txt"
+    expected=$(printf 'dist/demo-binary-0.1.0-linux\ndist/demo-binary-0.1.0-linux.tar.gz\n')
+    [ "$(cat "$out/dist.txt")" = "$expected" ] || fail "the release build left other files than the answer names: $(cat "$out/dist.txt")"
+    for wrong in 'EXTRA=notes.txt|must write exactly the files' 'SKIP=linux|must write exactly the files' \
+      'SIDE=notes.txt|wrote dist/' 'FILES=|names no files for'; do
+      if env "${wrong%%|*}" "$trellis/tests/release-build/run.sh" "$project" > "$out/wrong.txt" 2>&1 \
+        || ! grep --quiet --fixed-strings "${wrong#*|}" "$out/wrong.txt"; then
+        cat "$out/wrong.txt" >&2
+        fail "the release build took what release/package.sh wrote with ${wrong%%|*}"
+      fi
+    done
+    printf '#!/usr/bin/env bash\ncp $BINARY "$DIST"\n' > release/package.sh
+    if just actionlint > "$out/actionlint.txt" 2>&1 || ! grep --quiet SC2086 "$out/actionlint.txt"; then
+      cat "$out/actionlint.txt" >&2
+      fail "just actionlint passed a release/package.sh that shellcheck faults"
+    fi
 
 # A generated service's CI builds the image for every architecture on an x86-64 runner, as its
 # release does, cross-compiling for the others. CI's `Service image` jobs build the arm64 one here
