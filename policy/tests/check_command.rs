@@ -3116,3 +3116,47 @@ fn a_probe_that_breaks_the_parse_is_no_closer_place() {
     );
     project.check().assert_passes();
 }
+
+/// A directive above a command that a `\` continues covers its continued line, while a trailing
+/// comment that ends in `\` continues nothing, so a closer directive there still counts.
+#[test]
+fn a_backslash_continues_a_command_but_not_a_comment() {
+    let project = Project::new();
+    project.write(
+        "deploy/run.sh",
+        "#!/bin/bash\nset -eu\n# shellcheck disable=SC2086 # r\ncp a \\\n  $1\n",
+    );
+    project.check().assert_passes();
+    project.write(
+        "deploy/run.sh",
+        "#!/bin/bash\n# shellcheck disable=SC2086 # whole function\nf() {\n  y=1\t# note \\\n  rm $1\n}\n",
+    );
+    project
+        .check()
+        .assert_reports(1, "but one right above line 5 would silence it there alone");
+}
+
+/// A kit file sourced by its path in the checkout fails in every place a command starts, and a
+/// README that shows such a line passes, since shellcheck doesn't read it.
+#[cfg(unix)]
+#[test]
+fn a_checkout_path_sourced_where_a_command_starts_fails() {
+    let project = Project::new();
+    project.write("deploy/common", "clean() {\n  rm -rf \"$1\"\n}\n");
+    let library = project.path().join("deploy/common");
+    let library = library.display();
+    project.write("deploy/README.md", &format!("Run:\n\n    . {library}\n"));
+    project.check().assert_passes();
+    for line in [
+        format!(". {library};"),
+        format!("if . \"{library}\"; then clean old; fi"),
+        format!("{{ . {library}; }}"),
+    ] {
+        project.write("deploy/run.sh", &format!("#!/bin/sh\nset -eu\n{line}\n"));
+        project.check().assert_reports(
+            1,
+            "error: [deploy_scripts] deploy/run.sh: This file sources a kit file by its absolute \
+             path in the checkout",
+        );
+    }
+}

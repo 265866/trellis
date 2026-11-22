@@ -50,7 +50,7 @@ const INSTALL_REMEDY: &str = "Install the shellcheck version the Set up section 
 /// line above it, where review sees it. shellcheck applies a directive to the whole command below
 /// it, a function or a sourced file included, so the check measures what each directive hides: it
 /// runs shellcheck a second time with every `disable` taken out, and a finding that only that run
-/// reports fails when a directive closer to it would silence it, as [`Kit::closer_directive`]
+/// reports fails when a directive closer to it would silence it, as [`Kit::closer_directives`]
 /// finds by asking shellcheck. [`directive_problems`] says which other directives are violations.
 /// A symbolic link under `deploy/` is one too, since the kit's files are what review read, and so
 /// is a file that sources a kit file by its absolute path in the checkout, which shellcheck would
@@ -102,8 +102,11 @@ pub(crate) fn check(workspace: &Workspace) -> Result<Vec<Violation>, PolicyError
     if scripts.is_empty() {
         return Ok(violations);
     }
-    violations.extend(sourced_from_checkout(root, &texts).into_iter().map(|file| {
-        Violation::new(
+    violations.extend(
+        sourced_from_checkout(root, &texts, &scripts)
+            .into_iter()
+            .map(|file| {
+                Violation::new(
             file,
             "This file sources a kit file by its absolute path in the checkout. shellcheck reads \
              that path in the checkout instead of the kit's copy, with its directives as they \
@@ -111,7 +114,8 @@ pub(crate) fn check(workspace: &Workspace) -> Result<Vec<Violation>, PolicyError
              `. \"$(dirname \"$0\")/lib/common\"`."
                 .to_owned(),
         )
-    }));
+            }),
+    );
     let width = thread::available_parallelism().map_or(1, NonZeroUsize::get);
     let kit = Kit {
         texts,
@@ -125,8 +129,23 @@ pub(crate) fn check(workspace: &Workspace) -> Result<Vec<Violation>, PolicyError
     } else {
         BTreeSet::new()
     };
+    violations.extend(hidden_too_far(&kit, &reported, &unsilenced, width)?);
+    violations.extend(in_the_kit(&reported).map(Finding::violation));
+    Ok(violations)
+}
+
+/// A violation for each finding in `unsilenced`, the run with every `disable` taken out, that the
+/// run as written, `reported`, doesn't report, when a directive closer to it would silence it.
+/// Up to `width` groups of findings, those of one code in one file, are probed at once.
+fn hidden_too_far(
+    kit: &Kit,
+    reported: &BTreeSet<Finding>,
+    unsilenced: &BTreeSet<Finding>,
+    width: usize,
+) -> Result<Vec<Violation>, PolicyError> {
+    let mut violations = Vec::new();
     let mut groups: BTreeMap<(&str, u32), Vec<&Finding>> = BTreeMap::new();
-    let newly_reported = in_the_kit(&unsilenced).filter(|finding| !reported.contains(finding));
+    let newly_reported = in_the_kit(unsilenced).filter(|finding| !reported.contains(finding));
     for finding in newly_reported {
         groups
             .entry((finding.file.as_str(), finding.code))
@@ -137,7 +156,7 @@ pub(crate) fn check(workspace: &Workspace) -> Result<Vec<Violation>, PolicyError
     for chunk in groups.chunks(width) {
         let each_width = (width / chunk.len()).max(1);
         let closer = in_parallel(chunk, |group| {
-            kit.closer_directives(group, &unsilenced, each_width)
+            kit.closer_directives(group, unsilenced, each_width)
         })?;
         for (finding, closer) in chunk.iter().flatten().zip(closer.into_iter().flatten()) {
             let Some(closer) = closer else {
@@ -151,15 +170,14 @@ pub(crate) fn check(workspace: &Workspace) -> Result<Vec<Violation>, PolicyError
                      hides more than it says: a whole function, block or sourced file, or the \
                      rest of the file. Put `# shellcheck disable=SC{code} # <reason>` on the line \
                      above line {closer}, and take the code out of the directive that hid it: \
-                     the nearest one for SC{code} above line {line}, or the one above the line \
-                     that sources this file.",
+                     one for SC{code} above the function, block or file that holds line {line}, \
+                     or above the line that sources this file.",
                     code = finding.code,
                     line = finding.line,
                 ),
             ));
         }
     }
-    violations.extend(in_the_kit(&reported).map(Finding::violation));
     Ok(violations)
 }
 
@@ -172,11 +190,15 @@ fn in_the_kit(found: &BTreeSet<Finding>) -> impl Iterator<Item = &Finding> {
         .filter(|finding| finding.file.starts_with(DEPLOY_DIRECTORY))
 }
 
-/// The kit files, among `texts`, with a line that sources a path under `deploy/` in the checkout
-/// at `root` by its absolute path: `. /path` or `source /path`, at the start of the line or after
-/// `;`, `&&`, `||`, `then` or `do`, with the path's `.` and `..` parts and its symbolic links
-/// resolved. shellcheck follows only such a literal path.
-fn sourced_from_checkout(root: &Path, texts: &BTreeMap<String, String>) -> Vec<String> {
+/// The kit files among `texts` that shellcheck may read, the scripts and the files without an
+/// extension, with a line that sources a path under `deploy/` in the checkout at `root` by its
+/// absolute path: `. /path` or `source /path` where a command starts, with the path's `.` and `..`
+/// parts and its symbolic links resolved. shellcheck follows only such a literal path.
+fn sourced_from_checkout(
+    root: &Path,
+    texts: &BTreeMap<String, String>,
+    scripts: &[String],
+) -> Vec<String> {
     let Ok(root) = fs::canonicalize(root) else {
         return Vec::new();
     };
@@ -192,22 +214,60 @@ fn sourced_from_checkout(root: &Path, texts: &BTreeMap<String, String>) -> Vec<S
                         .starts_with(DEPLOY_DIRECTORY)
                 })
     };
+    let read = |file: &str| {
+        scripts.iter().any(|script| script == file) || Path::new(file).extension().is_none()
+    };
     texts
         .iter()
-        .filter(|(_, text)| {
-            text.lines().any(|line| {
-                let words: Vec<&str> = line.split_whitespace().collect();
-                words.windows(2).enumerate().any(|(at, pair)| {
-                    let at_command = at == 0
-                        || words.get(at - 1).is_some_and(|before| {
-                            before.ends_with(';') || matches!(*before, "&&" | "||" | "then" | "do")
-                        });
-                    at_command && matches!(pair[0], "." | "source") && in_checkout(pair[1])
-                })
-            })
+        .filter(|(file, text)| {
+            read(file)
+                && text
+                    .lines()
+                    .any(|line| sources_where_a_command_starts(line, in_checkout))
         })
         .map(|(file, _)| file.clone())
         .collect()
+}
+
+/// Whether `line` sources a path `matches` accepts, with `.` or `source` where a command starts:
+/// at the start of the line, after `;`, `&`, `|`, a bracket or a brace, or after a word such as
+/// `if`, `then` or `do` that a command follows.
+fn sources_where_a_command_starts(line: &str, matches: impl Fn(&str) -> bool) -> bool {
+    let mut spaced = String::with_capacity(line.len() * 2);
+    for character in line.chars() {
+        if ";&|(){}".contains(character) {
+            spaced.extend([' ', character, ' ']);
+        } else {
+            spaced.push(character);
+        }
+    }
+    let words: Vec<&str> = spaced.split_whitespace().collect();
+    words.windows(2).enumerate().any(|(at, pair)| {
+        let at_command = at
+            .checked_sub(1)
+            .and_then(|before| words.get(before))
+            .is_none_or(|before| {
+                matches!(
+                    *before,
+                    ";" | "&"
+                        | "|"
+                        | "("
+                        | ")"
+                        | "{"
+                        | "}"
+                        | "!"
+                        | "if"
+                        | "elif"
+                        | "then"
+                        | "else"
+                        | "do"
+                        | "while"
+                        | "until"
+                        | "time"
+                )
+            });
+        at_command && matches!(pair[0], "." | "source") && matches(pair[1])
+    })
 }
 
 /// What `run` returns for each of `items`, run at once on threads of their own, in order, or the
@@ -406,8 +466,9 @@ impl Kit {
 
 /// The lines, counted from 0, above which a probe for `hidden` may go, closest first: from its own
 /// line up to the line below the topmost directive for its code in its file, or to the first
-/// line. A blank or comment line is left out, and so is a line after one that ends in a `\\`
-/// before any comment, since a comment there would end the command the `\\` continues.
+/// line. A blank or comment line is left out, and so is a line after one that ends in a `\\` and
+/// holds no `#`, since a comment there would end the command the `\\` continues. A line with a
+/// `#` is probed anyway, since a probe after a real `\\` adds a parse error and doesn't count.
 fn probe_lines(lines: &[&str], hidden: &Finding) -> Vec<usize> {
     let own = hidden.line.saturating_sub(1).min(lines.len());
     let lowest = lines[..own]
@@ -419,10 +480,7 @@ fn probe_lines(lines: &[&str], hidden: &Finding) -> Vec<usize> {
             .checked_sub(1)
             .and_then(|previous| lines.get(previous))
             .is_some_and(|previous| {
-                let code = previous
-                    .split_once(" #")
-                    .map_or(*previous, |(code, _)| code);
-                !is_comment(previous) && code.ends_with('\\') && !code.ends_with("\\\\")
+                !previous.contains('#') && previous.ends_with('\\') && !previous.ends_with("\\\\")
             })
     };
     (lowest..=own)
