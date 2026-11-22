@@ -4,6 +4,11 @@ _answers_file: .copier-answers.yml
 # The project's own once generated: a starter that an update never overwrites.
 _skip_if_exists:
   - .github/setup-build.sh
+  - release/installer-custom.iss
+# The answers an update starts from, which the `release` answer's check compares an installer's
+# `app_id` with.
+_external_data:
+  previous: .copier-answers.yml
 # Copier prints this after an interactive copy, but not under `--quiet`, so docs/maintaining.md
 # stays the full procedure.
 _message_after_copy: |
@@ -338,8 +343,11 @@ release:
     entry for each target the project releases for.
     `checksums` names the checksums file, `SHA256SUMS` by default, `name` is the name the release's
     title starts with, and `env` sets environment variables for the release's build only, each a
-    string, quoted if YAML would read it as a number, a boolean, a date or null. Most binaries need
-    nothing.
+    string, quoted if YAML would read it as a number, a boolean, a date or null. `installer` maps a
+    Windows target triple to an Inno Setup installer that the release builds, such as
+    `{x86_64-pc-windows-msvc: {app_id: <GUID>, file: "app-{version}-setup.exe"}}`: `app_id` is a
+    GUID that `uuidgen` prints, without braces, `file` one of that target's `files`, and `name`,
+    optional, the name it shows, `name` above by default. Most binaries need nothing.
   default: {}
   when: "{{ kind == 'binary' }}"
   # Each value lands in a workflow or a docs page, so each is held to a form both read one way:
@@ -348,8 +356,12 @@ release:
   # change of platforms doesn't make Copier drop the whole answer, as it drops any stored answer
   # its checks refuse. Every file name holds `{version}`, so an attestation for one release's file
   # can't pass for another's, and the names are unique across targets, since the publish job puts
-  # every target's files in one directory. Copier runs this even when it doesn't ask, so a
-  # `--data` answer can't reach another kind.
+  # every target's files in one directory. An installer's `app_id` is how Windows finds the
+  # installed program, so a passed answer can't change a stored one. The comparison runs only in
+  # an update's own render, where `_commit` holds the stored commit and the passed data lacks
+  # `project_name`: Copier also renders into empty directories, with every answer passed, where
+  # the answers file is missing. Copier runs this even when it doesn't ask, so a `--data` answer
+  # can't reach another kind.
   validator: >-
     {%- set ns = namespace(error='', names=[]) -%}
     {%- if release is not mapping -%}
@@ -357,8 +369,8 @@ release:
     {%- elif release and kind != 'binary' -%}
     {%- set ns.error = 'Only a binary takes a `release` answer.' -%}
     {%- else -%}
-    {%- for key in release if key not in ['files', 'checksums', 'name', 'env'] -%}
-    {%- set ns.error = '`' ~ key ~ '` is not a key it takes; use `files`, `checksums`, `name` or `env`.' -%}
+    {%- for key in release if key not in ['files', 'checksums', 'name', 'env', 'installer'] -%}
+    {%- set ns.error = '`' ~ key ~ '` is not a key it takes; use `files`, `checksums`, `name`, `env` or `installer`.' -%}
     {%- endfor -%}
     {%- if 'name' in release and not (release.name is string and release.name | regex_search('^[A-Za-z0-9][A-Za-z0-9 ._+-]{0,63}\\Z')) -%}
     {%- set ns.error = '`name` is up to 64 letters, digits, spaces and `._+-`, such as `Arcwise`.' -%}
@@ -399,6 +411,40 @@ release:
     {%- endfor -%}
     {%- endif -%}
     {%- endfor -%}
+    {%- endif -%}
+    {%- endif -%}
+    {%- if 'installer' in release -%}
+    {%- set files = release.files if release.files is defined and release.files is mapping else {} -%}
+    {%- if release.installer is not mapping or not release.installer -%}
+    {%- set ns.error = '`installer` maps a Windows target triple to its installer, such as `{x86_64-pc-windows-msvc: {app_id: <GUID>, file: "app-{version}-setup.exe"}}`.' -%}
+    {%- else -%}
+    {%- for triple, entry in release.installer.items() -%}
+    {%- if triple not in ['x86_64-pc-windows-msvc', 'aarch64-pc-windows-msvc'] -%}
+    {%- set ns.error = '`' ~ triple ~ '` in `installer` is not a Windows target: use `x86_64-pc-windows-msvc` or `aarch64-pc-windows-msvc`.' -%}
+    {%- elif entry is not mapping -%}
+    {%- set ns.error = '`installer`\'s `' ~ triple ~ '` maps `app_id` and `file`, and `name` if the installer shows another name than the release\'s.' -%}
+    {%- else -%}
+    {%- for key in entry if key not in ['app_id', 'file', 'name'] -%}
+    {%- set ns.error = '`' ~ key ~ '` in `installer`\'s `' ~ triple ~ '` is not a key it takes; use `app_id`, `file` or `name`.' -%}
+    {%- endfor -%}
+    {%- if not (entry.app_id is defined and entry.app_id is string and entry.app_id | regex_search('^[0-9A-Fa-f]{8}(-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}\\Z')) -%}
+    {%- set ns.error = '`installer`\'s `' ~ triple ~ '` needs `app_id`, a new GUID without braces, such as `uuidgen` prints.' -%}
+    {%- endif -%}
+    {%- if not (entry.file is defined and entry.file is string and entry.file.endswith('.exe') and entry.file in files.get(triple, [])) -%}
+    {%- set ns.error = '`installer`\'s `' ~ triple ~ '` needs `file`, one of the names `files` lists for it, ending in `.exe`.' -%}
+    {%- endif -%}
+    {%- if 'name' in entry and not (entry.name is string and entry.name | regex_search('^[A-Za-z0-9][A-Za-z0-9 ._+-]{0,63}\\Z')) -%}
+    {%- set ns.error = '`installer`\'s `' ~ triple ~ '` has a `name` of up to 64 letters, digits, spaces and `._+-`, such as `Arcwise`.' -%}
+    {%- endif -%}
+    {%- endif -%}
+    {%- endfor -%}
+    {%- if _commit is defined and 'release' in _copier_conf.data and 'project_name' not in _copier_conf.data -%}
+    {%- set stored = (_external_data.previous or {}).release | default({}) -%}
+    {%- set stored = stored.installer | default({}) if stored is mapping else {} -%}
+    {%- for triple, entry in release.installer.items() if stored is mapping and entry is mapping and stored[triple] is defined and stored[triple] is mapping and stored[triple].app_id is defined and stored[triple].app_id != entry.app_id | default('') -%}
+    {%- set ns.error = '`installer`\'s `' ~ triple ~ '` has `app_id` ' ~ stored[triple].app_id ~ ' in .copier-answers.yml. Windows finds the installed program by it, so it never changes: pass that `app_id` again.' -%}
+    {%- endfor -%}
+    {%- endif -%}
     {%- endif -%}
     {%- endif -%}
     {%- endif -%}
