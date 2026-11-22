@@ -1068,7 +1068,8 @@ image-extras:
     # times, and tags it with its version, minor and latest only after it is signed and verified,
     # so a failed run leaves no tag on an unsigned image.
     image_job=$(awk '/^  image:$/ { inside = 1; next } /^  [a-z-]+:$/ { inside = 0 } inside' "$out/default/.github/workflows/release.yml")
-    grep --quiet 'push-by-digest=true' <<< "$image_job" || fail "the release doesn't push the image by its digest"
+    grep --quiet --extended-regexp 'outputs: type=image,name=\$\{\{ env\.IMAGE \}\},push-by-digest=true' <<< "$image_job" \
+      || fail "the release doesn't push the image by its digest alone"
     ! grep --quiet --extended-regexp '^ +tags:' <<< "$image_job" || fail "the release pushes the image with a tag before it is signed"
     [ "$(grep --count 'uses: actions/attest-build-provenance' <<< "$image_job")" -eq 3 ] \
       || fail "the release doesn't try attesting the image three times"
@@ -1078,7 +1079,8 @@ image-extras:
     tagged=$(step 'name: Tag the image with its version')
     [ -n "$attested" ] && [ -n "$signed" ] && [ -n "$tagged" ] && [ "$attested" -lt "$signed" ] && [ "$signed" -lt "$tagged" ] \
       || fail "the release tags the image before it attests, signs and verifies it"
-    grep --quiet --fixed-strings -- '--tag "$IMAGE:$TAG"' <<< "$image_job" || fail "the release doesn't tag the image with its version"
+    tag_step=$(awk '/name: Tag the image with its version/ { inside = 1; print; next } inside && /^      - / { exit } inside' <<< "$image_job")
+    grep --quiet --fixed-strings -- '--tag "$IMAGE:$TAG"' <<< "$tag_step" || fail "the release doesn't tag the image with its version in its last tagging step"
     final_stage=$(awk '/^FROM / { stage = "" } { stage = stage $0 "\n" } END { printf "%s", stage }' "$out/default/Containerfile")
     if grep --quiet --extended-regexp '^(WORKDIR|EXPOSE|ENV) |/files/' <<< "$final_stage"; then
       fail "a service with the default image answer got image extras: $final_stage"
@@ -1239,7 +1241,7 @@ release-extras:
     publish_job=$(awk '/^  publish:$/ { inside = 1; next } /^  [a-z-]+:$/ { inside = 0 } inside' "$out/attested/.github/workflows/release.yml")
     [ "$(grep --count 'uses: actions/attest-build-provenance' <<< "$publish_job")" -eq 3 ] \
       || fail "the release doesn't try attesting the archives three times"
-    grep --quiet --fixed-strings 'steps.attest.outputs.bundle-path || steps.attest-again.outputs.bundle-path || steps.attest-last.outputs.bundle-path' <<< "$publish_job" \
+    grep --quiet --fixed-strings "steps.attest.outcome == 'success' && steps.attest.outputs.bundle-path || steps.attest-again.outcome == 'success' && steps.attest-again.outputs.bundle-path || steps.attest-last.outputs.bundle-path" <<< "$publish_job" \
       || fail "the release doesn't publish the bundle of the attempt that worked"
     rm -rf "$out/attested"
     project="$out/demo-binary"
