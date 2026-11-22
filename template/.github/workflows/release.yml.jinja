@@ -293,7 +293,8 @@ jobs:
     if: needs.release.outputs.tag != ''
     runs-on: ubuntu-24.04
 {%- if visibility == 'public' %}
-    # The attest and sign retries' waits add up to 16 minutes to a private repository's 45.
+    # The attest and sign retries can wait 16 minutes in all, so the limit is 60, where a private
+    # repository, which runs neither, has 45.
 {%- endif %}
     timeout-minutes: {{ 60 if visibility == 'public' else 45 }}
     permissions:
