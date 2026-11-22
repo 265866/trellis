@@ -159,7 +159,7 @@ _dylint $DYLINT_RUSTFLAGS:
 [private]
 [windows]
 _dylint $DYLINT_RUSTFLAGS:
-    $ErrorActionPreference = 'Stop'; $stamp = 'target/dylint/trellis-rev'; if (-not (Test-Path $stamp) -or ([string](Get-Content $stamp -Raw)).Trim() -ne '{{ trellis_rev }}') { if (Test-Path target/dylint/libraries) { Remove-Item -Recurse -Force target/dylint/libraries }; New-Item -ItemType Directory -Force target/dylint > $null; Set-Content -NoNewline $stamp '{{ trellis_rev }}' }
+    $ErrorActionPreference = 'Stop'; $stamp = 'target/dylint/trellis-rev'; if (-not (Test-Path -LiteralPath $stamp) -or "$(Get-Content -LiteralPath $stamp -Raw)".Trim() -ne '{{ trellis_rev }}') { if (Test-Path -LiteralPath target/dylint/libraries) { Remove-Item -LiteralPath target/dylint/libraries -Recurse -Force }; New-Item -ItemType Directory -Force -Path target/dylint > $null; Set-Content -LiteralPath $stamp -Value '{{ trellis_rev }}' -NoNewline }
     cargo dylint --all --fail-on-no-libraries -- --locked --workspace --all-targets --all-features
 
 # Runs the tests, then the doctests, which nextest does not run.
