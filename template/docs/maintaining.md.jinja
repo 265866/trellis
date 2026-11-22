@@ -200,9 +200,10 @@ To rename a crate's package, use three pull requests. A rules pull request adds 
 `internal_dependencies` as a key with the old name's list, and beside the old name in each list
 of `internal_dependencies` and `restricted_crates` that holds it. It also adds the new name to
 `changelog_include` in `release-plz.toml`, and to `build_script_crates` if the crate has a build
-script. A code pull request then changes the package's `name`, each dependency on it and each
-path that names it in code. A last rules pull request removes the old name's key and the old name
-from each list. Move the directory and rename
+script. If the crate is itself a key of `restricted_crates`, the first rules pull request removes
+that key, and the last adds it back under the new name. A code pull request then changes the
+package's `name`, each dependency on it and each path that names it in code. A last rules pull
+request removes the old name's key and the old name from each list. Move the directory and rename
 the package in separate pull requests.
 
 This doesn't cover the package `{{ crate_name }}`, which carries the project's name. Rule files
@@ -216,9 +217,10 @@ follow "Name and kind" under [Change an answer](#change-an-answer).
 `restricted_crates` in `[workspace.metadata.policy]` of the root `Cargo.toml` maps a package to
 the workspace crates that may depend on it, directly or through any other package. A crate that
 must build without a UI toolkit then can't reach one through a new dependency. `just policy` fails
-every other crate that reaches the package, with the path. It also fails a key that matches no
-package, so a misspelled key can't pass while it restricts nothing. An empty list lets no crate
-reach the package. The setting is a rule, so add or change it in a rules pull request:
+every other crate that reaches the package, with the path. It also fails a key that lists crates
+but matches no package, so a misspelled key can't pass while it restricts nothing. An empty list
+lets no crate reach the package, and may name one no crate depends on yet, to keep the first
+dependency out. The setting is a rule, so add or change it in a rules pull request:
 
 ```toml
 [workspace.metadata.policy.restricted_crates]
@@ -234,10 +236,13 @@ A key takes one of three forms:
 - **A name prefix** ending in `*`, such as `gpui-*`. It matches the same way, so `gpui-*` also
   covers `gpui_macros`.
 - **A source**, starting with `git+`, `registry+` or `sparse+`. It matches every package from the
-  same repository however the URL is written. The scheme, a `user@`, a query such as
-  `?branch=main`, a fragment, a trailing `/` or `.git` and letter case don't matter. The kind
-  does, so a `git+` key never matches a registry's packages. The repository must match whole, so
-  `git+https://github.com/zed-industries/zed` doesn't match `zed-fork` or `zed2`.
+  same repository however the URL is written. The scheme, a `user@`, a port, a query such as
+  `?branch=main`, a fragment, a trailing `/` or `.git`, a percent-escape of a letter, digit, `-`,
+  `.`, `_` or `~`, and letter case, in the path too, don't matter. The kind does, so a `git+` key
+  never matches a registry's packages. The repository must match whole, so
+  `git+https://github.com/zed-industries/zed` doesn't match `zed-fork` or `zed2`. Cargo writes
+  every crates.io package's source as `registry+https://github.com/rust-lang/crates.io-index`,
+  whichever protocol fetched it.
 
 A crate reaches a package through:
 

@@ -3452,12 +3452,24 @@ fn a_key_that_matches_no_package_fails() {
             restricted_violations(&run),
             [format!(
                 "error: [restricted_crates] Cargo.toml: `restricted_crates` has a key `{key}` \
-                 that matches no package in the dependency graph, on any platform or with any \
-                 feature. Fix the spelling, or remove the key."
+                 that matches no package in the dependency graph, on any platform with every \
+                 workspace feature on, though it lists crates that may reach one. Fix the \
+                 spelling, or remove the key."
             )],
             "the key `{key}` should fail: {run:#?}"
         );
     }
+}
+
+/// A key with an empty list bans its package from every crate, so it passes while no crate
+/// depends on the package yet, and fails the first crate that does.
+#[test]
+fn a_ban_on_a_package_no_crate_depends_on_yet_passes() {
+    let restricted =
+        "restricted_crates = { \"absent\" = [], \"demo_ui\" = [\"demo\", \"demo_widgets\"] }";
+    restricted_project("", restricted).check().assert_passes();
+    let run = restricted_project("", "restricted_crates = { \"demo_ui\" = [] }").check();
+    run.assert_reports(1, "which `restricted_crates` lets no member reach");
 }
 
 /// A key that names no package, a list that names no member, and a value of the wrong shape fail

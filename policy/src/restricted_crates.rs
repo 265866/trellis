@@ -46,15 +46,17 @@ pub fn check(workspace: &Workspace) -> Vec<Violation> {
         }
     }
     let mut violations: Vec<Violation> = restricted
-        .keys()
+        .iter()
+        .filter(|(_, entry)| !entry.allowed().is_empty())
+        .map(|(key, _)| key)
         .filter(|key| !matching.values().flatten().any(|found| found.key == *key))
         .map(|key| {
             Violation::new(
                 "Cargo.toml".to_owned(),
                 format!(
                     "`restricted_crates` has a key `{key}` that matches no package in the \
-                     dependency graph, on any platform or with any feature. Fix the spelling, or \
-                     remove the key."
+                     dependency graph, on any platform with every workspace feature on, though it \
+                     lists crates that may reach one. Fix the spelling, or remove the key."
                 ),
             )
         })

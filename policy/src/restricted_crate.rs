@@ -93,8 +93,9 @@ fn package_name(name: &str) -> String {
 struct Repository {
     /// The kind of source: `git`, `registry` or `sparse`.
     kind: String,
-    /// The host and path in lowercase, without the scheme, a `user@`, a query, a fragment, a
-    /// trailing `/` or a trailing `.git`, such as `github.com/zed-industries/zed`.
+    /// The host and path in lowercase, without the scheme, a `user@`, a port, a query, a
+    /// fragment, a trailing `/` or a trailing `.git`, and with each percent-escape of an
+    /// unreserved character decoded, such as `github.com/zed-industries/zed`.
     location: String,
 }
 
@@ -112,6 +113,12 @@ impl Repository {
         let url = url.split(['?', '#']).next().unwrap_or_default();
         let authority = url.split('/').next().unwrap_or_default();
         let url = authority.rfind('@').map_or(url, |at| &url[at + 1..]);
+        let (host, path) = url.split_once('/').unwrap_or((url, ""));
+        let host = host
+            .rsplit_once(':')
+            .filter(|(_, port)| !port.is_empty() && port.bytes().all(|byte| byte.is_ascii_digit()))
+            .map_or(host, |(host, _)| host);
+        let url = unreserved_decoded(&format!("{host}/{path}"));
         let url = url.trim_end_matches('/');
         let location = url
             .strip_suffix(".git")
@@ -125,6 +132,30 @@ impl Repository {
             location: location.to_owned(),
         })
     }
+}
+
+/// `text` with each percent-escape of an unreserved character, a letter, a digit, `-`, `.`, `_`
+/// or `~`, decoded and in lowercase, since a URL means the same with or without it.
+fn unreserved_decoded(text: &str) -> String {
+    let mut decoded = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(at) = rest.find('%') {
+        decoded.push_str(&rest[..at]);
+        let unreserved = rest
+            .get(at + 1..at + 3)
+            .and_then(|hex| u8::from_str_radix(hex, 16).ok())
+            .map(char::from)
+            .filter(|character| character.is_ascii_alphanumeric() || "-._~".contains(*character));
+        if let Some(character) = unreserved {
+            decoded.push(character.to_ascii_lowercase());
+            rest = &rest[at + 3..];
+        } else {
+            decoded.push('%');
+            rest = &rest[at + 1..];
+        }
+    }
+    decoded.push_str(rest);
+    decoded
 }
 
 #[cfg(test)]
@@ -186,6 +217,9 @@ mod tests {
             "git+https://github.com/zed-industries/zed/",
             "git+https://github.com/zed-industries/zed.git/",
             "git+https://user@GitHub.com/zed-industries/zed",
+            "git+ssh://git@github.com:22/zed-industries/zed",
+            "git+https://github.com:443/zed-industries/zed",
+            "git+https://github.com/zed%2Dindustries/%7a%65d",
         ] {
             assert_eq!(Repository::parse(source), key, "{source:?}");
         }
@@ -196,6 +230,7 @@ mod tests {
             "git+https://gitlab.com/zed-industries/zed",
             "registry+https://github.com/zed-industries/zed",
             "sparse+https://github.com/zed-industries/zed",
+            "git+https://github.com/zed-industries/zed%2Ffork",
         ] {
             assert_ne!(Repository::parse(source), key, "{source:?}");
         }

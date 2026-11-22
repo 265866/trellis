@@ -166,7 +166,7 @@ Beyond the Google guide, the workspace also turns on:
   instructions for coding agents; that every crate's commits reach the release notes through
   `changelog_include` in `release-plz.toml`; that no crate but the ones `restricted_crates` lists
   for a package reaches it, directly or through other packages, when that setting is there, and that
-  each of its keys matches a package; that every shell script under `deploy/` passes shellcheck,
+  each of its keys that lists crates matches a package; that every shell script under `deploy/` passes shellcheck,
   with no `.shellcheckrc` or `SHELLCHECK_OPTS` read, the files they source included, and that each
   shellcheck directive there silences named codes, with a reason, as close above its finding as
   shellcheck takes one, since a deploy kit is code no other check reads; and that the docs keep the layout under
