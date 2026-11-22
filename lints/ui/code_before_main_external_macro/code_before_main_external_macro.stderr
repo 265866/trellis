@@ -1,0 +1,19 @@
+warning: `gui::actions` places a `static` in `.init_array`, which runs code before `main`
+  --> $DIR/code_before_main_external_macro.rs:11:1
+   |
+LL | gui::actions!(Open);
+   | ^^^^^^^^^^^^^^^^^^^
+   |
+   = help: call the code from `main` instead, or, if the framework needs it, list "gui::actions" in `constructor_macros` under `[trellis_lints]` in `dylint.toml`
+   = note: `#[warn(code_before_main)]` on by default
+
+warning: `actions_derive::Action` places a `static` in `.init_array`, which runs code before `main`
+  --> $DIR/code_before_main_external_macro.rs:14:10
+   |
+LL | #[derive(gui::Action)]
+   |          ^^^^^^^^^^^
+   |
+   = help: call the code from `main` instead, or, if the framework needs it, list "actions_derive::Action" in `constructor_macros` under `[trellis_lints]` in `dylint.toml`
+
+warning: 2 warnings emitted
+

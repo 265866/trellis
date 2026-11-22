@@ -376,6 +376,14 @@ banned one directly to the ban's `wrappers`, with the reason in a comment, such 
 `wrappers = ["some-crate"]` under `crate = "paste"`. Only that crate may then depend on it, and
 `just deny` passes, with a warning, while the dependency graph doesn't hold the wrapper yet. Then
 add the dependency in a code pull request.
+
+A framework that lets in `ctor` or `inventory` this way may also have its macros place
+constructors, code that runs before `main()`, in this project's own code, which
+`code_before_main` reports. GPUI's `actions!` and `#[derive(Action)]` do. Allow them in the same
+rules pull request as the `wrappers` entry: list each macro in `constructor_macros` in
+`dylint.toml`, by the path the report names, the crate that defines the macro and its name, such as
+`gpui::actions` and `gpui_macros::Action`. A listed macro may place any constructor, so list only
+the macros the framework needs.
 {%- if web_ui %}
 
 An npm package of the web UI under a license `about.toml` doesn't accept lands the same way.

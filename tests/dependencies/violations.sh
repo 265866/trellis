@@ -1033,6 +1033,35 @@ RUST
 check "serde: a cfg! in a string serde parses as a type" \
     '`cfg!` in a string that a macro parses as code'
 
+# A constructor that a dependency holds, outside the workspace as a registry crate is, isn't this
+# project's code: cargo runs the lints over workspace members only, so `just dylint` passes it. The
+# same static in a workspace crate fails.
+constructor='//! Code that runs before `main`.
+
+extern "C" fn start() {}
+
+#[used]
+#[unsafe(link_section = ".init_array")]
+static START: extern "C" fn() = start;'
+startup="$backup/startup"
+mkdir -p "$startup/src"
+printf '[package]\nname = "startup"\nversion = "0.1.0"\nedition = "2024"\npublish = false\n' \
+    >"$startup/Cargo.toml"
+printf '%s\n' "$constructor" >"$startup/src/lib.rs"
+cargo add --quiet --package demo_binary_core --path "$startup"
+if output=$(just dylint 2>&1); then
+    echo "ok   a dependency's constructor passes"
+else
+    echo "FAIL a dependency's constructor: \`just dylint\` failed" >&2
+    printf '%s\n' "$output" | grep -E '^(error|warning)' >&2 || true
+    failures=$((failures + 1))
+fi
+restore
+
+add_core <<<"${constructor#*$'\n\n'}"
+check "a constructor in the workspace's code" \
+    'a `static` in `.init_array`, which runs code before `main`'
+
 if ((failures)); then
     echo "$failures violations got past the checks" >&2
     exit 1

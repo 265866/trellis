@@ -178,6 +178,8 @@ const FIX_THE_CODE: &str = "fix what the lint reports; if the rule itself is wro
                             `template/docs/style.md`";
 const LIST_THE_CRATE: &str = "use a function, type or trait; a macro goes only in a crate that \
                               `macro_crates` in `dylint.toml` lists, which is a rule change";
+const LIST_THE_MACRO: &str = "call the code from `main`; only a macro that `constructor_macros` in \
+                              `dylint.toml` lists may place a constructor, which is a rule change";
 
 /// The lints in this library that have no exceptions, each with what to do instead. `code_comment`,
 /// `disabled_code`, `missing_workspace_lints` and `suppression_policy` guard the checks
@@ -185,7 +187,9 @@ const LIST_THE_CRATE: &str = "use a function, type or trait; a macro goes only i
 /// crate-wide one would silence every report. `doc_after_attribute` and `needless_raw_identifier`
 /// report from the crate root too, and their fix, moving a doc comment or deleting an `r#`, is
 /// always possible. An exception to `macro_definition` would let the code a macro writes past the
-/// lints, which skip it, so only `macro_crates`, a rule change, allows a macro.
+/// lints, which skip it, so only `macro_crates`, a rule change, allows a macro. Likewise only
+/// `constructor_macros` allows a constructor: an exception to `code_before_main` around a macro
+/// call would let it place any.
 const NO_EXCEPTION_LINTS: &[(&str, &str)] = &[
     ("code_comment", FIX_THE_CODE),
     ("disabled_code", FIX_THE_CODE),
@@ -193,6 +197,7 @@ const NO_EXCEPTION_LINTS: &[(&str, &str)] = &[
     ("suppression_policy", FIX_THE_CODE),
     ("doc_after_attribute", FIX_THE_CODE),
     ("macro_definition", LIST_THE_CRATE),
+    ("code_before_main", LIST_THE_MACRO),
     ("needless_raw_identifier", FIX_THE_CODE),
 ];
 

@@ -1,0 +1,75 @@
+warning: a `static` in `.init_array`, which runs code before `main`
+  --> $DIR/code_before_main.rs:10:1
+   |
+LL | static INIT_ARRAY: extern "C" fn() = init;
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: call the code from `main` instead
+   = note: `#[warn(code_before_main)]` on by default
+
+warning: a `static` in `.init_array.00100`, which runs code before `main`
+  --> $DIR/code_before_main.rs:15:1
+   |
+LL | static INIT_ARRAY_PRIORITY: extern "C" fn() = init;
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: call the code from `main` instead
+
+warning: a `static` in `.ctors`, which runs code before `main`
+  --> $DIR/code_before_main.rs:20:1
+   |
+LL | static CTORS: extern "C" fn() = init;
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: call the code from `main` instead
+
+warning: a `static` in `.ctors.65435`, which runs code before `main`
+  --> $DIR/code_before_main.rs:25:1
+   |
+LL | static CTORS_PRIORITY: extern "C" fn() = init;
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: call the code from `main` instead
+
+warning: a `static` in `__DATA,__mod_init_func`, which runs code before `main`
+  --> $DIR/code_before_main.rs:30:1
+   |
+LL | static MOD_INIT_FUNC: extern "C" fn() = init;
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: call the code from `main` instead
+
+warning: a `static` in `__DATA,__mod_init_func,mod_init_funcs`, which runs code before `main`
+  --> $DIR/code_before_main.rs:35:1
+   |
+LL | static MOD_INIT_FUNC_TYPED: extern "C" fn() = init;
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: call the code from `main` instead
+
+warning: a `static` in `.CRT$XCU`, which runs code before `main`
+  --> $DIR/code_before_main.rs:40:1
+   |
+LL | static CRT_XCU: extern "C" fn() = init;
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: call the code from `main` instead
+
+warning: a `static` in `.CRT$XCT`, which runs code before `main`
+  --> $DIR/code_before_main.rs:45:1
+   |
+LL | static CRT_XCT: extern "C" fn() = init;
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: call the code from `main` instead
+
+warning: a `static` in `.init_array`, which runs code before `main`
+  --> $DIR/code_before_main.rs:52:9
+   |
+LL |         static NESTED: extern "C" fn() = init;
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: call the code from `main` instead
+
+warning: 9 warnings emitted
+

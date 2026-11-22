@@ -506,3 +506,14 @@ mod wiring {
 #[derive(Debug)]
 /// A count of coupons.
 struct Tally;
+
+// Flagged: an exception to `code_before_main`, even in the documented form with a reason; only
+// `constructor_macros` in `dylint.toml` allows a constructor.
+fn registered() {
+    #[cfg_attr(
+        dylint_lib = "trellis_lints",
+        expect(code_before_main, reason = "the plugin host registers itself at load time")
+    )]
+    #[used]
+    static REGISTER: u8 = 0;
+}

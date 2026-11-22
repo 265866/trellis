@@ -6,6 +6,7 @@ ambiguous_type_names = ["Error", "Result"]
 owned_crate_prefixes = ["trellis"]
 lowercase_doc_words = ["trellis", "e.g.", "i.e."]
 macro_crates = []
+constructor_macros = []
 # `core`, `alloc` and `std` are the standard library.
 trusted_macro_crates = ["alloc", "core", "std"]
 # CI builds and lints `policy/` on Linux. It runs the tests on macOS and Windows too, but lints

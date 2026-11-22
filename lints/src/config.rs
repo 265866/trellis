@@ -29,6 +29,10 @@ pub(crate) struct Config {
     /// Crates that may define macros (`macro_definition`), by crate name; `-` and `_` are
     /// interchangeable.
     pub(crate) macro_crates: Vec<String>,
+    /// Macros allowed to place a `static` in a section that runs before `main`
+    /// (`code_before_main`), each as the name of the crate that defines it, then `::` and its
+    /// name, such as `gpui::actions`.
+    pub(crate) constructor_macros: Vec<String>,
     /// Crates whose macros may write lint-level attributes and `#[ignore]` into the crate's code
     /// (`suppression_policy`, `disabled_code`), by crate name.
     pub(crate) trusted_macro_crates: Vec<String>,

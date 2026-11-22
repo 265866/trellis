@@ -1,2 +1,2 @@
-error: invalid `[trellis_lints]` table in `dylint.toml`: toml error: unknown field `unsafe_crate`, expected one of `unsafe_crates`, `ambiguous_type_names`, `owned_crate_prefixes`, `lowercase_doc_words`, `macro_crates`, `trusted_macro_crates`, `trusted_macro_lints`, `required_lint_levels`, `ci_targets`
+error: invalid `[trellis_lints]` table in `dylint.toml`: toml error: unknown field `unsafe_crate`, expected one of `unsafe_crates`, `ambiguous_type_names`, `owned_crate_prefixes`, `lowercase_doc_words`, `macro_crates`, `constructor_macros`, `trusted_macro_crates`, `trusted_macro_lints`, `required_lint_levels`, `ci_targets`
 
