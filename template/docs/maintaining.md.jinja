@@ -138,14 +138,16 @@ the minor version and a `fix` the patch version. To ship:
 {%- if not published %}
    At the first release, release-plz leaves out each commit that changed only a crate that
    `changelog_include` in `release-plz.toml` lists: it adds those crates' commits only after a
-   release tag. On the release pull request's branch, add to the new section of `CHANGELOG.md` an
-   entry for each commit that this prints and the section lacks; it also prints commits that
+   release tag. It leaves out each commit that changed only a deploy kit in the root `deploy/` at
+   every release. On the release pull request's branch, add to the new section of `CHANGELOG.md`
+   an entry for each commit that this prints and the section lacks; it also prints commits that
    changed the main crate too, which the section has:
-   `git log --format=%s -- crates ':!crates/{{ crate_name }}'`. Every type is left out, not only
-   `feat` and `fix`. Put each under `### Added` for a `feat`, `### Fixed` for a `fix`, and
+   `git log --format=%s -- crates deploy ':!crates/{{ crate_name }}'`. Every type is left out, not
+   only `feat` and `fix`. Put each under `### Added` for a `feat`, `### Fixed` for a `fix`, and
    `### Other` for any other type, such as a `test` or a `refactor`, and write it as release-plz
    writes the others: `feat(core): parse dates (#12)` becomes `- *(core)* parse dates (#12)`.
-   Later releases list those commits without the edit.
+   Later releases list the crates' commits without the edit, but never the root kit's; add those
+   to each release's notes by hand.
    The first release after you add a crate comes out as a patch when only that crate changed, and
    its notes can repeat older entries; delete those. Renaming the main crate stops the release
    workflow with an error that says what to do by hand.
