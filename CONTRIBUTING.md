@@ -30,7 +30,8 @@ has, it runs:
 | `just shapes` | Generates the project a user gets, with the lints from GitHub, for each set of answers the `shape` recipe lists, and runs the checks that don't fetch them. It also checks the next steps Copier prints, what `just setup-github --dry-run` would set, and what `just check-github` reports for the fixtures in `tests/check-github/`. |
 | `just dependencies` | Generates a binary that uses the crates most projects use, as `tests/dependencies/setup.sh` adds them, runs its checks, then checks that the lints reject each way past them in `tests/dependencies/violations.sh`. |
 | `just update` | Generates a project from one scratch trellis version, edits it as an owner would, updates it to a second, and checks the rules moved, the owner's code didn't, and the owner's lines in trellis's files merged without conflicts. Then it switches the project to private and back, and publishes its crate under each license, which must deliver that license's files to the crate. |
-| `just templates` | `template` for each kind, `shapes`, `dependencies` and `update`. |
+| `just build-extras` | Generates a binary whose `build` answer builds for glibc, runs `.github/setup-build.sh` and raises the timeout, and checks both build jobs run the script after the toolchain, with the timeout and the glibc target and no musl-gcc, that `just actionlint` shellchecks the script, and that the glibc build links dynamically. A binary with the default answer gets none of it. |
+| `just templates` | `template` for each kind, `shapes`, `dependencies`, `update` and `build-extras`. |
 
 A generated project's check that fails is a trellis bug: fix the template, the lints or the
 checker, never the generated project.

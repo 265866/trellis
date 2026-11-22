@@ -8,9 +8,14 @@ platform:
 {% for target in targets %}
 - {{ target.name }}: `{{ project_name }}-<version>-{{ target.triple }}.{{ 'zip' if target.os == 'windows' else 'tar.gz' }}`
 {%- endfor %}
-{%- if 'linux' in platforms %}
+{%- if 'linux' in platforms and build.libc | default('musl') == 'musl' %}
 
 The Linux programs are linked statically, so they run on any Linux distribution, Alpine included.
+{%- elif 'linux' in platforms %}
+
+The Linux programs link glibc and the system's shared libraries, so they need a distribution
+whose glibc is 2.39 or newer, as in Ubuntu 24.04 and Debian 13, with those libraries installed.
+They don't run on Alpine or another musl distribution.
 {%- endif %}
 
 ## Install a release

@@ -243,10 +243,21 @@ new proc macro.
 Code for any other operating system fails `just dylint`, and so does code that only some
 processors or C libraries build. A change to platform-specific code needs a run on that platform
 before it's done.
-{%- if kind == 'binary' and 'linux' in platforms %}
+{%- if kind == 'binary' and 'linux' in platforms and build.libc | default('musl') == 'musl' %}
 
 Linux releases use musl, which links statically, so they run on any distribution. CI tests that
 build, and installs `musl-gcc` (Debian and Ubuntu's `musl-tools`) for crates that compile C code.
+{%- elif kind == 'binary' and 'linux' in platforms %}
+
+Linux releases use glibc, as the `build` answer in `.copier-answers.yml` asks, so they run on a
+distribution whose glibc is at least as new as the release runner's, Ubuntu 24.04's 2.39, and
+that has the shared libraries the program links.
+{%- endif %}
+{%- if build.setup %}
+
+`.github/setup-build.sh` installs what the builds need beyond Rust. CI and the release run it on
+every runner before they build, with the runner's system in `RUNNER_OS` and the target in
+`TARGET`. Install the same on your machine to build here.
 {%- endif %}
 
 ## Send a change

@@ -203,6 +203,30 @@ Every crate you add is published too, and crates.io takes a new crate only by ha
 first version with `cargo publish --package <crate>`, then add this repository's `release.yml` as
 a trusted publisher in its settings on crates.io. Later releases publish it through `release.yml`.
 {%- endif %}
+{%- if kind == 'binary' %}
+
+## Extend what trellis generates
+
+Each of these is a place trellis leaves to the project, so you never edit a file it generates.
+An update leaves them alone.
+
+- **What the builds need.** The `build` answer, a YAML mapping, changes CI's and the release's
+  builds without an edit to the workflows. `libc: gnu` builds for Linux with glibc instead of
+  musl, for a program that links system libraries such as GTK, WebKitGTK or Vulkan, which musl
+  can't; [Install](install.md) then says which systems the release runs on. `setup: true` runs
+  `.github/setup-build.sh`, which you write, in CI's build jobs and the release's, on every runner
+  before the build, with the runner's system in `RUNNER_OS` and the target in `TARGET`. It can
+  install packages with `sudo apt-get`, free disk space, or download a toolchain component such
+  as Xcode's Metal compiler. It is a rule, like the workflows, and `just actionlint` shellchecks
+  it. `timeout` raises those jobs' limit from 60 minutes. Write the script first, then set the
+  answer in the same rules pull request:
+
+  ```sh
+  uvx copier update --defaults --vcs-ref=:current: --data 'build={libc: gnu, setup: true, timeout: 90}'
+  ```
+
+  The answer replaces the whole mapping, so repeat every key you keep.
+{%- endif %}
 
 ## Change an answer
 

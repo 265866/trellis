@@ -454,8 +454,8 @@ lints-comments:
 lints-test:
     cargo test --locked
 
-# Runs `template` for every kind, then `shapes`, `dependencies` and `update`.
-templates: (template "binary") (template "service") (template "service" "ci" "false" "true") (template "library") shapes dependencies update
+# Runs `template` for every kind, then `shapes`, `dependencies`, `update` and `build-extras`.
+templates: (template "binary") (template "service") (template "service" "ci" "false" "true") (template "library") shapes dependencies update build-extras
 
 # Copies the working tree into a scratch repository as two tagged trellis versions, generates a
 # library from the first, and edits it the way an owner would: its code and changelog, and a new
@@ -795,6 +795,75 @@ template kind recipes="ci" publish="false" web="false" target="":
           || { echo "error: the image's install didn't read the web UI's bunfig.toml" >&2; cat "$out/web-image.txt" >&2; exit 1; }
       fi
     fi
+
+# Generates a binary whose `build` answer sets every key, with a .github/setup-build.sh, and checks
+# that CI's build job and the release's run the script after the toolchain, with the timeout,
+# build for Linux with glibc and install no musl-gcc, that `just actionlint` shellchecks the
+# script, and that the release build for glibc links dynamically. Its docs must say the release
+# needs glibc. The answer's checks must refuse what it doesn't take, and a binary with the
+# default answer must get none of it.
+#
+# Checks what a binary's `build` answer changes in its builds.
+build-extras:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    trellis="{{ justfile_directory() }}"
+    out=$(mktemp -d)
+    trap 'rm -rf "$out"' EXIT
+    fail() { echo "error: build-extras: $1" >&2; exit 1; }
+    # Generates a binary for Linux in $1, with the further arguments.
+    generate() {
+      local destination=$1
+      shift
+      uv tool run copier@9.19.1 copy --quiet --defaults --vcs-ref HEAD \
+        --data project_name=demo-binary \
+        --data "description=A demo binary that trellis generates for its tests." \
+        --data kind=binary --data 'platforms=[linux, macos]' --data 'architectures=[x86_64]' \
+        --data trellis_path="$trellis" "$@" "$trellis" "$destination"
+    }
+    while IFS='|' read -r answer message; do
+      if refusal=$(generate "$out/refused" --data "build=$answer" 2>&1); then
+        fail "the build answer took $answer"
+      fi
+      grep --quiet --fixed-strings -- "$message" <<< "$refusal" || fail "the build answer refused $answer for another reason: $refusal"
+    done << 'EOF'
+    [gnu]|Write a mapping
+    {libc: glibc}|`libc` is `musl`, the default, or `gnu`
+    {setup: "yes"}|`setup` is `true` or `false`
+    {timeout: 30}|`timeout` is a number of minutes from 60 to 360
+    {timeout: "90"}|`timeout` is a number of minutes from 60 to 360
+    {image: x}|`image` is not a key it takes
+    EOF
+    generate "$out/default"
+    if grep --quiet --recursive --extended-regexp 'setup-build|linux-gnu|timeout-minutes: 90' "$out/default/.github"; then
+      fail "a binary with the default build answer got build extras"
+    fi
+    project="$out/demo-binary"
+    generate "$project" --data 'build={libc: gnu, setup: true, timeout: 90}'
+    cd "$project"
+    git init --quiet --initial-branch main
+    for workflow in ci build-release; do
+      file=".github/workflows/$workflow.yml"
+      job=$(awk '/^  build:$/ { inside = 1; next } /^  [a-z-]+:$/ { inside = 0 } inside' "$file")
+      grep --quiet '^    timeout-minutes: 90$' <<< "$job" || fail "$file's build job doesn't take 90 minutes"
+      grep --quiet 'target: x86_64-unknown-linux-gnu$' <<< "$job" || fail "$file doesn't build for Linux with glibc"
+      ! grep --quiet --extended-regexp "musl-(gcc|tools)|linux-musl" <<< "$job" || fail "$file still builds for or installs musl"
+      setup=$(grep --line-number '^        run: bash .github/setup-build.sh$' <<< "$job" | cut -d: -f1) \
+        || fail "$file's build job doesn't run .github/setup-build.sh"
+      toolchain=$(grep --line-number 'rustup target add "$TARGET"' <<< "$job" | cut -d: -f1)
+      [ "$setup" -gt "$toolchain" ] || fail "$file runs the setup before the toolchain"
+    done
+    grep --quiet 'glibc is 2.39 or newer' docs/install.md || fail "docs/install.md doesn't say the release needs glibc"
+    printf '#!/usr/bin/env bash\nset -euo pipefail\necho "Setting up $TARGET on $RUNNER_OS"\n' > .github/setup-build.sh
+    just actionlint zizmor
+    printf '#!/usr/bin/env bash\necho Setting up $TARGET\n' > .github/setup-build.sh
+    if just actionlint > "$out/actionlint.txt" 2>&1 || ! grep --quiet SC2086 "$out/actionlint.txt"; then
+      cat "$out/actionlint.txt" >&2
+      fail "just actionlint passed a setup script that shellcheck faults"
+    fi
+    CARGO_BUILD_TARGET=x86_64-unknown-linux-gnu just build-release
+    file target/x86_64-unknown-linux-gnu/release/demo-binary | grep --quiet 'dynamically linked' \
+      || fail "the glibc build isn't dynamically linked: $(file target/x86_64-unknown-linux-gnu/release/demo-binary)"
 
 # A generated service's CI builds the image for every architecture on an x86-64 runner, as its
 # release does, cross-compiling for the others. CI's `Service image` jobs build the arm64 one here
