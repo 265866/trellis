@@ -246,7 +246,9 @@ stale-licenses:{% endraw %}{{ ' web-install install-policy' if web_ui else '' }}
     count=$(grep --count --line-regexp --fixed-strings 'warning: config found for a crate not present in the graph' <<< "$log")
     if [ "$count" -gt 0 ]; then
       stale=$(for line in $lines; do sed -n "${line}p" about.toml; done | tr '\n' ' ' | sed 's/ $//')
-      echo "error: about.toml has $count entries for crates the dependency graph doesn't hold: ${stale:-see above}. Remove each in a rules pull request, unless the code pull request that adds its crate is still open; land that instead." >&2
+      entries="$count entries for crates" each=each
+      if [ "$count" -eq 1 ]; then entries="an entry for a crate" each=it; fi
+      echo "error: about.toml has $entries the dependency graph doesn't hold: ${stale:-see above}. Remove $each in a rules pull request, unless the code pull request that adds its crate is still open; land that instead." >&2
       echo "$log" >&2
       exit 1
     fi
