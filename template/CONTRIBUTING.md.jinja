@@ -131,8 +131,9 @@ The Advisories workflow also runs `just deny` every week. A new advisory can fai
 that changed nothing; fix it with `cargo update -p <crate>`{% if web_ui %}, or for the web UI
 `bun update <package>` in its directory,{% endif %} in its own pull request.
 {%- if kind != 'library' %} It also runs
-`just stale-licenses`, which fails on an entry in `about.toml` for a crate the dependency graph no
-longer holds; remove the entry, and its exception in `deny.toml`, in a rules pull request.
+`just stale-licenses`, which fails on an entry in `about.toml` for a crate the dependency graph
+doesn't hold. Unless the code pull request that adds that crate is still open, remove the entry,
+and its exception in `deny.toml`, in a rules pull request.
 {%- endif %}
 
 ## Code
@@ -293,15 +294,14 @@ proc-macro dependency is code: list the crate in `proc_macro_crates` in one pull
 the dependency and its first use in the next. Run `just rule-changes` to see how your changes
 sort: it counts the rule and code files, and lists both when a change mixes them.
 
-A dependency under a license that `deny.toml` and `about.toml` don't accept lands in two pull
+A dependency under a license that `deny.toml`{% if kind != 'library' %} and `about.toml`{% endif %} {{ "don't" if kind != 'library' else "doesn't" }} accept lands in two pull
 requests. First, in a rules pull request, accept the license for that crate alone, with the
-reason in a comment: an exception in `deny.toml`, such as
-`[[licenses.exceptions]]` with `crate = "webpki-roots"` and `allow = ["CDLA-Permissive-2.0"]`{% if kind != 'library' %},
-and an entry in `about.toml`, such as `[webpki-roots]` with `accepted = ["CDLA-Permissive-2.0"]`{% endif %}.
-`just deny`{% if kind != 'library' %} and `just notices`{% endif %} pass with an entry for a crate
-the dependency graph doesn't hold yet. Then add the dependency in a code pull request. Accepting
-the license for every crate, in `allow`{% if kind != 'library' %} or `accepted`{% endif %}, lets
-any later dependency use it too, so do that only when the owner decides it.
+reason in a comment: an exception in `deny.toml`, such as `[[licenses.exceptions]]` with
+`crate = "webpki-roots"` and `allow = ["CDLA-Permissive-2.0"]`{% if kind != 'library' %}, and an entry in `about.toml`, such
+as `[webpki-roots]` with `accepted = ["CDLA-Permissive-2.0"]`{% endif %}. {% if kind != 'library' %}`just deny` and `just notices` pass{% else %}`just deny` passes{% endif %}
+with an entry for a crate the dependency graph doesn't hold yet. Then add the dependency in a code
+pull request. Accepting the license for every crate, in `allow`{% if kind != 'library' %} or `accepted`{% endif %}, lets any later
+dependency use it too, so do that only when the owner decides it.
 {%- if license == 'MIT' %}
 
 ## License

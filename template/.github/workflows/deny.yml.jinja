@@ -41,4 +41,5 @@ jobs:
       - run: just deny
 {%- if kind != 'library' %}
       - run: just stale-licenses
+        if: {% raw %}${{ !cancelled() }}{% endraw %}
 {%- endif %}

@@ -242,7 +242,7 @@ pins:
     # The template's Advisories workflow adds a step only a project with a web UI gets.
     if ! diff .github/workflows/deny.yml \
       <(sed "/^{%- if web_ui %}$/,/^{%- endif %}$/d; /^{%- if kind != 'library' %}$/,/^{%- endif %}$/d
-        s/{{{{ ',cargo-about@0.9.3' if kind != 'library' else '' }}//" template/.github/workflows/deny.yml.jinja) >&2; then
+        s/{{{{ ',cargo-about@[^']*' if kind != 'library' else '' }}//" template/.github/workflows/deny.yml.jinja) >&2; then
       echo "error: .github/workflows/deny.yml differs from template/.github/workflows/deny.yml.jinja" >&2
       status=1
     fi
@@ -741,19 +741,26 @@ template kind recipes="ci" publish="false" web="false" target="":
       git update-ref refs/remotes/origin/main HEAD
       just rule-changes
     fi
-    if [ "{{ recipes }}" = ci ] && [ -f about.toml ]; then
+    if [[ "{{ recipes }}" = ci || " {{ recipes }} " = *" notices "* ]] && [ -f about.toml ]; then
       # A rules pull request accepts a license for a crate before the code pull request adds it:
       # `just notices` passes the entry, and `just stale-licenses` fails until the crate arrives.
       cp about.toml "$out/about.toml"
+      # The second entry sits on line 99, where cargo-about widens its line numbers.
       printf '\n[not-a-dependency]\naccepted = ["CC0-1.0"]\n' >> about.toml
+      while [ "$(wc -l < about.toml)" -lt 98 ]; do echo >> about.toml; done
+      printf '[gone-dependency]\naccepted = ["MIT"]\n' >> about.toml
       just notices
-      if just stale-licenses > "$out/stale.txt" 2>&1 || ! grep --quiet 'not-a-dependency' "$out/stale.txt"; then
-        cat "$out/stale.txt" >&2
-        echo "error: just stale-licenses passed an entry for a crate the graph doesn't hold" >&2
-        exit 1
+      if [ "$(uname -s)" = Linux ]; then
+        if just stale-licenses > "$out/stale.txt" 2>&1 || ! grep --quiet 'has 2 entries' "$out/stale.txt" \
+          || ! grep --quiet '^error: .*\[not-a-dependency\]' "$out/stale.txt" \
+          || ! grep --quiet '^error: .*\[gone-dependency\]' "$out/stale.txt"; then
+          cat "$out/stale.txt" >&2
+          echo "error: just stale-licenses didn't name every entry for a crate the graph doesn't hold" >&2
+          exit 1
+        fi
       fi
       cp "$out/about.toml" about.toml
-      just stale-licenses
+      if [ "$(uname -s)" = Linux ]; then just stale-licenses; fi
       echo "just notices passed an about.toml entry ahead of its crate, and just stale-licenses named it."
     fi
     if [ "{{ recipes }}" = ci ] && [ "{{ kind }}" = service ] && command -v docker > /dev/null; then
