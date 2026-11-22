@@ -5,7 +5,7 @@
 [![Latest release](https://img.shields.io/github/v/release/{{ github_owner }}/{{ project_name }})](https://github.com/{{ github_owner }}/{{ project_name }}/releases/latest)
 {%- endif %}
 
-{{ description }}
+{{ description | wordwrap(100, break_long_words=False, break_on_hyphens=False) }}
 {% if kind == 'binary' %}
 ## Install
 {%- if release.files %}
@@ -94,7 +94,7 @@ your option.
 Each release archive holds `THIRD-PARTY-LICENSES.html`, the licenses of the crates it is built
 with{% if web_ui %}, and `THIRD-PARTY-LICENSES-WEB.txt`, those of the web UI's packages{% endif %}.
 {%- elif kind == 'binary' %}{{ '\n' if license != 'none' }}
-`just notices` writes the licenses of the crates it is built with to
+Built from source, `just notices` writes the licenses of the crates it is built with to
 `target/THIRD-PARTY-LICENSES.html`{% if web_ui %}, and those of the web UI's packages to
 `target/THIRD-PARTY-LICENSES-WEB.txt`{% endif %}.
 {%- elif kind == 'service' %}{{ '\n' if license != 'none' }}
