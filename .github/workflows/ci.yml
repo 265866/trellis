@@ -235,7 +235,7 @@ jobs:
   shapes:
     name: Template shapes
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -258,6 +258,7 @@ jobs:
       - run: just shapes
       - run: just update
       - run: just build-extras
+      - run: just image-extras
 
   # A generated binary's workflows build C code for musl after the musl-gcc step this job copies.
   # `just pins` keeps the two the same.

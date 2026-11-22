@@ -31,7 +31,8 @@ has, it runs:
 | `just dependencies` | Generates a binary that uses the crates most projects use, as `tests/dependencies/setup.sh` adds them, runs its checks, then checks that the lints reject each way past them in `tests/dependencies/violations.sh`. |
 | `just update` | Generates a project from one scratch trellis version, edits it as an owner would, updates it to a second, and checks the rules moved, the owner's code didn't, and the owner's lines in trellis's files merged without conflicts. Then it switches the project to private and back, and publishes its crate under each license, which must deliver that license's files to the crate. |
 | `just build-extras` | Generates a binary whose `build` answer builds for glibc, runs `.github/setup-build.sh` and raises the timeout, and checks both build jobs run the script after the toolchain, with the timeout and the glibc target and no musl-gcc, that `just actionlint` shellchecks the script, and that the glibc build links dynamically. A binary with the default answer gets none of it. |
-| `just templates` | `template` for each kind, `shapes`, `dependencies`, `update` and `build-extras`. |
+| `just image-extras` | Generates a service whose `image` answer sets environment defaults, a working directory, ports and files, builds its image, and checks the image carries each, keeps its nonroot user and trellis's license file, and lets that user read the files. A service with the default answer gets none of them. |
+| `just templates` | `template` for each kind, `shapes`, `dependencies`, `update`, `build-extras` and `image-extras`. |
 
 A generated project's check that fails is a trellis bug: fix the template, the lints or the
 checker, never the generated project.
