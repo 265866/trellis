@@ -601,7 +601,8 @@ fn a_version_on_a_path_dependency_fails_in_every_code_table() {
             Expected {
                 file: "crates/client/Cargo.toml",
                 message: "gives the workspace crate `core` a `version` beside its `path`. \
-                          release-plz rewrites that `version` whenever it bumps `core`",
+                          release-plz rewrites that `version` when it bumps `core` past what the \
+                          requirement allows",
             },
             Expected {
                 file: "crates/library/Cargo.toml",
@@ -637,7 +638,7 @@ fn a_version_on_a_path_dependency_fails_in_every_code_table() {
                 "server unpublished"
             } else if message.contains("out of the published package") {
                 "dev-dependency"
-            } else if message.contains("to `[workspace.dependencies]`") {
+            } else if message.contains("give it in `[workspace.dependencies]`") {
                 "workspace dependency"
             } else {
                 "none"
@@ -654,6 +655,15 @@ fn a_version_on_a_path_dependency_fails_in_every_code_table() {
             "server unpublished",
         ],
         "each message gives the fix for its case: {violations:?}"
+    );
+    assert!(
+        mentions(
+            &violations,
+            "as `published = { path = \"crates/published\", version = \"0.1.0\" }`, with the \
+             `path` from the root, and write `published.workspace = true` here"
+        ),
+        "the published crate's message gives both lines, the root's path read from the root: \
+         {violations:?}"
     );
 }
 
