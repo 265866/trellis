@@ -353,7 +353,9 @@ An update leaves them alone.
   paths through `cygpath -w`.
 {%- endif %}
   The script is a rule, like the workflows, and `just actionlint` shellchecks it. Write it, then
-  set the answer in the same rules pull request, with files for each of the project's targets:
+  set the answer in the same rules pull request, with files for each of the project's targets.
+  This is a starter, not the project's current answer: it names one archive per target, so put in
+  the names your script writes, and every key of a `release` answer the project already has:
 
   ```sh
   uvx copier update --defaults --vcs-ref=:current: \
