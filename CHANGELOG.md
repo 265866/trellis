@@ -6,6 +6,18 @@ part lists what a project's owner must do around the update: a rule that can fla
 a setting to change, or a step to do by hand. [CONTRIBUTING.md](CONTRIBUTING.md#release-trellis)
 has the versioning rule.
 
+## v0.16.1
+
+### Fixed
+
+- `non_exhaustive_wildcard` no longer crashes rustc on a `match` that holds a struct's pattern,
+  such as axum's `Ok(Path(value))` or a local unit struct in `Err(TooDeep)`. `just dylint` failed
+  with "internal compiler error: … get_adt_def called on a non-ADT", naming the module that holds
+  the struct. A tuple or unit struct's pattern names its constructor, whose parent is the struct,
+  and the lint took that struct for a variant and read its parent, the module, as the enum. Only a
+  variant's constructor counts now. The crash was there since the lint was added, so every earlier
+  version has it too. The first `just dylint` after this update rebuilds the lints once.
+
 ## v0.16.0
 
 ### Action required in projects
