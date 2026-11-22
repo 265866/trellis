@@ -451,8 +451,9 @@ hold need more than the update, and two can't change this way at all:
 - **Web UI.** The update doesn't add the app, so land it first, in a code pull request:
   `crates/{{ crate_name }}/web` with a `package.json` that has `check` and `build` scripts, its
   `bun.lock` and its sources. Leave out its `tsconfig.json`, and any `.gitignore`, `bunfig.toml`
-  or `.npmrc`, which are rules. Write the `bun.lock` with `bun install --lockfile-only` in the
-  app's directory, and don't run a plain `bun install` or `just web-build` on that branch: until
+  or `.npmrc`, which are rules. In the app's directory, write the `bun.lock` with
+  `bun install --save-text-lockfile --lockfile-only`, the command `just web-install` names when
+  it's missing, and don't run a plain `bun install` or `just web-build` on that branch: until
   the update merges, `.gitignore` doesn't ignore the app's `node_modules/` and `dist/`, so
   `just rule-changes` counts what they write. Then run the update with `--data web_ui=true`, and
   add the app's settings files to its pull request.

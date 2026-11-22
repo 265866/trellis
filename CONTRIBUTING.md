@@ -25,7 +25,7 @@ has, it runs:
 
 | Recipe | Checks |
 | --- | --- |
-| `just pins` | The template pins the same toolchains as this repository and `lints/`. The config files, workflows and `[workspace.lints]` tables both keep agree, apart from what only some answers get. The template's two lists of accepted licenses agree. The versions `template/dylint.toml.jinja` says trellis read each trusted macro crate at are the ones `tests/dependencies/setup.sh` pins. Every tool and runner image has one version wherever it's pinned in a form the recipe reads, such as `name@version`, in every file git has or would add, binary ones included, apart from `CHANGELOG.md`, `policy/` and the web starter's lockfile, and a conflict names the file and line of each version. A value it can't find or read fails. |
+| `just pins` | The template pins the same toolchains as this repository and `lints/`. The config files, workflows and `[workspace.lints]` tables both keep agree, apart from what only some answers get. The template's two lists of accepted licenses agree. The versions `template/dylint.toml.jinja` says trellis read each trusted macro crate at are the ones `tests/dependencies/setup.sh` pins. The Web UI guide in `template/docs/maintaining.md.jinja` writes `bun.lock` with the command the `web-install` recipe's error names. Every tool and runner image has one version wherever it's pinned in a form the recipe reads, such as `name@version`, in every file git has or would add, binary ones included, apart from `CHANGELOG.md`, `policy/` and the web starter's lockfile, and a conflict names the file and line of each version. A value it can't find or read fails. |
 | `just lints-lint`, `just lints-comments`, `just lints-test` | clippy, `code_comment` and the UI tests for the custom lints. The lints' own code has no code comments either; the UI fixtures in `lints/ui/` keep theirs, since their test directives are comments. |
 | `just template <kind> [recipes] [publish] [web] [target]` | Generates a `binary`, `service` or `library` project from the working tree and runs its `just ci`, or the recipes you name. `true` as `publish` makes a library a published one, `true` as `web` gives a binary or service a web UI, whose build and notices must reach its image or, for a binary, the archive its release build's steps write for this machine's target. A service's image must give its user read access to its license files, even under umask 077. A `target` runs `test` and `build-release` for that target. |
 | `just shapes` | Generates the project a user gets, with the lints from GitHub, for each set of answers the `shape` recipe lists, and runs the checks that don't fetch them. It also checks the next steps Copier prints, what `just setup-github --dry-run` would set, and what `just check-github` reports for the fixtures in `tests/check-github/`. |
@@ -95,8 +95,8 @@ Two of these pull requests need a step by hand before they merge, which their de
 
 - **Bun's**: move the web UI starter's packages, in its `package.json.jinja`, and regenerate its
   lockfile, `bun.lock.jinja`, with the new Bun, since Renovate reads neither. Install the
-  starter's `package.json` in a scratch directory and copy the lockfile back, with the project's
-  name templated.
+  starter's `package.json` in a scratch directory with `bun install --save-text-lockfile` and copy
+  the lockfile back, with the project's name templated.
 - **The crates `just dependencies` adds**: for each crate that `trusted_macro_crates` in
   `template/dylint.toml.jinja` lists, read what its macros write at the new version, as that
   file's comments describe, and update the comment's version and its description. A crate whose

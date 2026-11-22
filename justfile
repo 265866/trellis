@@ -170,7 +170,9 @@ links:
 # step and what only a project with license notices runs, that both `[workspace.lints]` tables
 # agree apart from the library-only lints, that the template's two lists of accepted licenses
 # agree, that the versions template/dylint.toml.jinja says trellis read each trusted macro crate
-# at are the ones tests/dependencies/setup.sh pins, and that every tool and runner image has one version wherever it's pinned in a form the recipe reads,
+# at are the ones tests/dependencies/setup.sh pins, that the Web UI guide in
+# template/docs/maintaining.md.jinja writes bun.lock with the command web-install names in
+# template/justfile.jinja, and that every tool and runner image has one version wherever it's pinned in a form the recipe reads,
 # such as `name@version`. A value it can't find or read fails, as does a file it reads that's gone.
 #
 # Checks that pinned versions and the shared config files agree.
@@ -206,6 +208,10 @@ pins:
       "$(channel template/rust-toolchain.toml)" "$(channel rust-toolchain.toml)"
     check "lints_nightly in template/justfile.jinja and lints/rust-toolchain.toml" \
       "$(variable lints_nightly template/justfile.jinja)" "$(channel lints/rust-toolchain.toml)"
+    lockfile() { extract "bun.lock command" "$1" "$2"; }
+    check "the bun.lock command in template/docs/maintaining.md.jinja and template/justfile.jinja's web-install" \
+      "$(lockfile 's/^ *`\(bun install [^`]*\)`, the command `just web-install` names.*/\1/p' template/docs/maintaining.md.jinja)" \
+      "$(lockfile 's/.*Write it there with \(bun install [^.]*\) and commit it\..*/\1/p' template/justfile.jinja)"
     check "rust-version in template/Cargo.toml.jinja and Cargo.toml" \
       "$(key rust-version template/Cargo.toml.jinja)" "$(key rust-version Cargo.toml)"
     check "rust-version in Cargo.toml and the stable toolchain" \

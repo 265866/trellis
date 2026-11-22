@@ -28,6 +28,8 @@ inside `{% raw %}`.
   their copies in `template/`, and the `[workspace.lints]` tables of `Cargo.toml` and
   `template/Cargo.toml.jinja`.
 - Every pinned version, as "Update pinned versions" in [CONTRIBUTING.md](CONTRIBUTING.md) lists.
+- The command that writes `bun.lock` in the Web UI guide of `template/docs/maintaining.md.jinja`
+  and in the `web-install` recipe's error in `template/justfile.jinja`.
 
 `just pins` fails until each copy agrees.
 
