@@ -6,6 +6,43 @@ part lists what a project's owner must do around the update: a rule that can fla
 a setting to change, or a step to do by hand. [CONTRIBUTING.md](CONTRIBUTING.md#release-trellis)
 has the versioning rule.
 
+## v0.14.0
+
+### Action required in projects
+
+- **In a service with a web UI, make sure no package provides a `bun` command.** `just web-install`
+  now fails when a `node_modules/.bin`, in `crates/<crate>/web` or in a directory above it, holds a
+  `bun` or `bunx` command, and the image's build fails when the web UI's own `node_modules/.bin`
+  holds one. Every recipe that checks or builds the web UI runs `web-install` first, so `just ci`,
+  `just notices`, `just image` and the release's builds fail too. `bun run` finds a script's
+  commands there before the Bun the project pins, so a `build` script that calls `bun build` runs
+  on that Bun instead, in CI and in the image, and until now nothing noticed. The npm `bun` package
+  provides both commands. Bun 1.4.3 and older install it for a package that names `bun` as a peer
+  dependency, such as `bun-plugin-tailwind`, and write it into `bun.lock`. Bun 1.4.4 leaves that
+  peer out of a new lockfile but keeps one an older Bun wrote, and keeps the package in
+  `node_modules` once it is there. Before the update, run `bun why bun` in the web UI's directory.
+  When it prints `error: No packages matching 'bun' found in lockfile`, the lockfile is fine. When
+  it names a package that asks for `bun` only as a peer, delete `bun.lock` and `node_modules` and
+  run `bun install` with Bun 1.4.4, in a code pull request. That also moves every other package to
+  the newest version its range allows, so read the lockfile's diff. When a package depends on `bun`
+  outright, run `bun remove` with the name of the web UI's own dependency that leads to it, in a
+  code pull request too. In every other clone, delete the web UI's `node_modules` after you pull
+  that change, since Bun keeps the package there. If `just web-install` then names a
+  `node_modules/.bin` in a directory above the web UI, delete that `node_modules`. After the
+  update, the project's CONTRIBUTING.md lists these steps under Set up. A project without a web UI
+  is not affected.
+
+### Changed
+
+- A service image's web stage copies the web UI's whole directory before
+  `bun install --frozen-lockfile`, so the image's install reads the app's `bunfig.toml` and
+  `.npmrc`, as `just web-install` does. Before, it copied only `package.json` and `bun.lock` first.
+  The image could then install other packages than CI from the same lockfile: with
+  `[install] peer = false`, CI left a peer out and the image installed it. The final image gets no
+  new files. If those files hold a setting the image's build can't meet, such as a registry it
+  can't reach, the image's install now fails where it used to ignore the setting. A cached local
+  `just image` now runs the install again whenever a file in the web UI changes.
+
 ## v0.13.1
 
 ### Changed
