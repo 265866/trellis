@@ -6,6 +6,99 @@ part lists what a project's owner must do around the update: a rule that can fla
 a setting to change, or a step to do by hand. [CONTRIBUTING.md](CONTRIBUTING.md#release-trellis)
 has the versioning rule.
 
+## v0.17.0
+
+### Action required in projects
+
+- **A deploy kit in `deploy/` becomes code, and `just policy` checks its scripts with shellcheck.**
+  Files under the root `deploy/` now count as code in `just rule-changes`, so a kit change lands
+  with the code change it needs. Files that are rules by their names stay rules there: a
+  `justfile` or `*.just` module, an `action.yml`, `.gitignore`, `.ignore`, `bunfig.toml`,
+  `.npmrc`, `build.rs`, TypeScript settings files, agent instruction files and tool configuration
+  files. `just policy` runs shellcheck 0.11.0 on every script there and on the files they source,
+  in a copy of `deploy/` alone. A script is a file that ends in `.sh`, `.bash`, `.dash`, `.ksh` or
+  `.bats`, starts with a `#!` line for `sh`, `bash`, `dash`, `ksh`, `ash` or `bats`, or sets its
+  shell with a `# shellcheck shell=<shell>` line. Container files, unit files, a `Caddyfile` and
+  other files are left alone. shellcheck reads no `.shellcheckrc` and no `SHELLCHECK_OPTS`, and a
+  finding in a host file a script sources, such as `/etc/os-release`, isn't reported.
+
+  A project that already has `deploy/` should expect the update's pull request to fail
+  `just policy` until its scripts pass. On the update's branch, run `just policy`, then fix what
+  it names in a code pull request, before or after the update, since the update's own pull request
+  is a rules change. These are refused:
+
+  - every shellcheck finding not silenced by a `# shellcheck disable=SC<code> # <reason>` line
+    as close above it as shellcheck takes a directive. `just policy` asks shellcheck whether a
+    directive closer to the finding would silence it alone, so a directive above a function, a
+    block, a `. ./file` line or before the first command is reported at each finding it hides
+    further down, even with another directive for the code between them. Where shellcheck takes
+    no closer one, such as after a `|`, `&&` or `||`, inside `[[ ]]`, an array or a heredoc, above
+    a `case` pattern or above the `done` that ends a loop, the directive passes;
+  - a directive with no reason, or one that disables anything but codes, such as `all` or a range;
+  - a directive that disables a parse check, SC1000 to SC1999, other than SC1090 and SC1091;
+  - a directive after code on its line, or spelled with a space other than an ASCII space or tab;
+  - `shell=` in a file with a `#!` line;
+  - `source=` or `source-path=` that leaves `deploy/`, such as `source=/dev/null`. A file outside
+    the kit that a script sources is reported as missing (SC1091), which a directive with a
+    reason may silence;
+  - any directive key but `disable`, `enable`, `shell`, `source` and `source-path`;
+  - a symbolic link in `deploy/`, and a file that sources a kit file by its absolute path in the
+    checkout, which shellcheck would read there instead of in the kit's copy.
+
+  Known limits:
+  - A script with no extension, no `#!` line and no `shell=` line isn't checked, since a kit's
+    container files, units and configuration look the same. Give each script a `#!` line.
+  - A library sourced through a path shellcheck can't follow, with SC1090 or SC1091 silenced, is
+    checked only if it is a script by itself. Give it a `.sh` name or a `shell=` line.
+  - A directive above a `case` covers its pattern lines, one-line bodies included, since
+    shellcheck takes no directive above a pattern. Put a body on its own line to silence it alone.
+  - The check reads the lines right above a command for the directive, so a deliberately crafted
+    script whose string or heredoc ends with a line that reads like one, right above a command,
+    can pass for it. Review reads the kit as code.
+- **In a project whose `image` or `release` answer sets `env`, sort those lines by hand once.**
+  The `ENV` lines of `Containerfile` and the release build's environment in
+  `.github/workflows/build-release.yml` now list the names in code-point order, capitals before
+  lowercase, as `.copier-answers.yml` stores them. The update keeps a different order as your
+  own edit, so on the update's branch, put them in that order, which makes the files trellis's
+  render again.
+- **In a project generated before this release, pass the new copyright holder to keep the
+  license current.** The `author` answer now defaults to `265866`, but a project keeps the author
+  it stored, so its `LICENSE` or `LICENSE-MIT` still names the old one. Run
+  `uvx copier update --defaults --vcs-ref=:current: --data author=265866` on the update's branch,
+  or with the update, and the license and `.copier-answers.yml` move together.
+
+### Changed
+
+- trellis's own `LICENSE` and the template's default `author` name `265866` as the copyright
+  holder.
+
+### Fixed
+
+- A binary with `build.setup` runs `.github/setup-build.sh` in CI right after the checkout,
+  before the cache is restored. It ran after the restore, so once a project's cache grew large,
+  restoring it filled the Linux runner's disk before the script could free space, and every build
+  job failed. A project needs nothing beyond the update.
+- The example `release` answer in the generated `docs/maintaining.md` names a file for each of
+  the project's own targets. It named only Windows, so pasted as written in a project without
+  Windows it broke the release build, which fails for a target `files` doesn't list. The advice on
+  Git Bash, `iscc`, `MSYS_NO_PATHCONV` and `cygpath` shows only when Windows is a platform.
+- An `image` or `release` answer's `env` renders in one order. The first render wrote the names in
+  the order they were typed and every later one sorted them, so `copier update` kept the first
+  order as the project's own edit.
+- `non_exhaustive_wildcard` counts a variant a `match` names through a type alias or `Self::`,
+  such as `KindAlias::Empty`, so it no longer asks for a variant the match already names, and it
+  checks a match that names its variants only that way. `foreign_doc_hidden` reports a hidden
+  variant or associated constant of another crate reached that way in a pattern, a range
+  pattern's ends included.
+- The Web UI guide in the generated `docs/maintaining.md` writes `bun.lock` with
+  `bun install --save-text-lockfile --lockfile-only`, the command `just web-install` names when
+  it's missing, so it writes the text lockfile whatever the user's Bun settings say.
+- The generated `docs/maintaining.md` says to add the other crates' commits to the first
+  release's `CHANGELOG.md` by hand. release-plz takes in the commits of the crates
+  `changelog_include` lists only after a release tag, so a project's first release left out every
+  commit, of any type, that changed only a crate other than the main package. "Each release" gives
+  the command that lists them and the heading each goes under; later releases need no edit.
+
 ## v0.16.1
 
 ### Fixed
