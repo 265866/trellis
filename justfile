@@ -1305,6 +1305,15 @@ shape answers:
       --data "project_name=$name" \
       --data "description=A demo that trellis generates for its tests." \
       "${data[@]}" "$trellis" "$project" 2>&1) || { echo "$copied" >&2; exit 1; }
+    # With the default author, every license file names 265866 as the copyright holder.
+    holders=$(find "$project" -name .git -prune -o -name 'LICENSE*' -type f -exec grep --no-filename '^Copyright (c)' {} +) || true
+    case "{{ answers }}" in
+      *-unlicensed) [ -z "$holders" ] || fail "an unlicensed project has a license file: $holders" ;;
+      *) [ -n "$holders" ] || fail "no license file names a copyright holder" ;;
+    esac
+    if grep --invert-match --line-regexp --fixed-strings 'Copyright (c) 265866' <<< "$holders" | grep --quiet .; then
+      fail "a license file names another copyright holder: $holders"
+    fi
     if [ "${#name}" -eq 55 ]; then
       longer=$(uv tool run copier@9.19.1 copy --defaults --vcs-ref HEAD \
         --data "project_name=${name}x" \

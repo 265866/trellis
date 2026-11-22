@@ -279,7 +279,7 @@ license:
 author:
   type: str
   help: The copyright holder
-  default: Colton
+  default: "265866"
 
 github_owner:
   type: str
