@@ -25,30 +25,6 @@ has the versioning rule.
   error, `gh api` writes GitHub's JSON body to stdout even with `--jq`, and the recipe read that
   body as the ruleset's ID and enforcement, so `just check-github` could never pass there.
 
-## Unreleased
-
-### Action required in projects
-
-- **In a binary whose workflows you edited to build for glibc, install system packages or raise
-  the build timeout, move those edits to the new `build` answer.** Write
-  `.github/setup-build.sh` with what your edited steps did, such as the `apt-get install` of the
-  libraries GTK or GPUI link, freeing disk space and the macOS Metal Toolchain download, keyed on
-  `RUNNER_OS`. Then run
-  `uvx copier update --defaults --data 'build={libc: gnu, setup: true, timeout: 90}'`, keeping
-  the keys you need, and resolve `.github/workflows/ci.yml` and `build-release.yml` to trellis's
-  version, keeping none of your own lines. Both land in one rules pull request. A binary that
-  didn't edit its workflows needs nothing: the answer defaults to `{}`, which keeps musl, no setup
-  and 60 minutes.
-
-### Added
-
-- A binary's `build` answer: `libc: gnu` builds and releases for Linux with glibc, for a program
-  that links system libraries musl can't, such as GTK, WebKitGTK or a GPUI app's Vulkan and
-  Wayland stack; `setup: true` runs the project's `.github/setup-build.sh` in CI's build jobs and
-  the release's, on every runner, and `just actionlint` shellchecks it; `timeout` raises those
-  jobs' limit from 60 minutes. The generated `docs/install.md` says which systems a glibc release
-  runs on.
-
 ## v0.15.0
 
 ### Action required in projects
