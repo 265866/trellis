@@ -32,6 +32,10 @@ const RULE_NAMES: [&str; 6] = [
     ".npmrc",
 ];
 
+/// The name of a deploy kit's directory, at the root or in a crate's directory, as
+/// [`deploy_scripts::kit_of`] reads it.
+const KIT_NAME: &str = "deploy";
+
 /// The names of the files in a deploy kit that are rules all the same, since a tool reads them as
 /// configuration: a composite action's definition, which a workflow can run with
 /// `uses: ./deploy` or `uses: ./crates/<crate>/deploy`, and a justfile module, which a justfile
@@ -89,8 +93,9 @@ const OTHER_FILES: [&str; 5] = [
 /// crate's `crates/<crate>/deploy/`, which ships with the code it deploys and that
 /// `deploy_scripts` shellchecks, and every Rust file elsewhere. A Rust file whose change only adds,
 /// removes, moves or changes lint expectations is neither, and so is every file of a crate whose
-/// directory moved whole. A pull request changes one or the other, so review sees every loosened
-/// rule apart from the code that might have needed it.
+/// directory moved whole and of a root deploy kit that moved whole into a crate. A pull request
+/// changes one or the other, so review sees every loosened rule apart from the code that might
+/// have needed it.
 #[derive(Debug, Default)]
 pub struct ChangedFiles {
     /// The changed rule files.
@@ -129,18 +134,18 @@ impl ChangedFiles {
         };
         let merge_base = git::run(&top, &["merge-base", base, head_revision])?;
         let merge_base = merge_base.trim();
-        let mut changed_paths = ChangedPaths::between(&top, merge_base, head)?;
-        changed_paths.leave_out(&moved_crates(&top, merge_base, head)?);
-        let mut changed = Self {
-            rules: changed_paths.nested_repository_rules(),
-            code: Vec::new(),
-        };
         let head_commit = match head {
             Head::WorkingTree => None,
             Head::Commit(revision) => Some(revision.as_str()),
         };
         let mut build_scripts = named_build_scripts(&top, Some(merge_base))?;
         build_scripts.extend(named_build_scripts(&top, head_commit)?);
+        let mut changed_paths = ChangedPaths::between(&top, merge_base, head)?;
+        changed_paths.leave_out(&moved_directories(&top, merge_base, head, &build_scripts)?);
+        let mut changed = Self {
+            rules: changed_paths.nested_repository_rules(),
+            code: Vec::new(),
+        };
         let mut nesting = BTreeMap::new();
         let versions = |path: &str| {
             let before = show(&top, merge_base, path);
@@ -811,25 +816,19 @@ impl Side<'_> {
 /// relative path, can mean something else after the move. A code change can already change what
 /// such a file does by filling a path it names, so review weighs that file when it lands.
 ///
+/// [`moved_directories`] applies the conditions on `.gitattributes` files and on a working-tree
+/// head's uncommitted `.gitattributes`; `uncommitted` lists a working-tree head's uncommitted
+/// paths, and `head_revision` is `HEAD` for one.
+///
 /// # Errors
 ///
 /// Fails if git fails, other than when it can't read attributes.
-fn moved_crates(top: &Path, merge_base: &str, head: &Head) -> Result<Vec<String>, PolicyError> {
-    let head_revision = match head {
-        Head::Commit(revision) => revision.as_str(),
-        Head::WorkingTree => "HEAD",
-    };
-    let uncommitted = match head {
-        Head::Commit(_) => Vec::new(),
-        Head::WorkingTree => uncommitted_paths(top)?,
-    };
-    let attributes_changed = uncommitted.iter().any(|path| {
-        let name = path.rsplit('/').next().unwrap_or(path);
-        case_insensitive::eq(name, ".gitattributes")
-    });
-    if attributes_changed {
-        return Ok(Vec::new());
-    }
+fn moved_crates(
+    top: &Path,
+    merge_base: &str,
+    head_revision: &str,
+    uncommitted: &[String],
+) -> Result<Vec<String>, PolicyError> {
     let before = crate_entries(top, merge_base)?;
     let after = crate_entries(top, head_revision)?;
     let mut moved = Vec::new();
@@ -840,7 +839,7 @@ fn moved_crates(top: &Path, merge_base: &str, head: &Head) -> Result<Vec<String>
         if only(before.iter().filter(|entry| entry.id == old.id)).is_none() {
             continue;
         }
-        let near = |entries: &[CrateEntry]| -> Vec<String> {
+        let near = |entries: &[TreeEntry]| -> Vec<String> {
             entries
                 .iter()
                 .filter(|entry| {
@@ -882,12 +881,171 @@ fn moved_crates(top: &Path, merge_base: &str, head: &Head) -> Result<Vec<String>
             moved.push(new_directory);
         }
     }
+    Ok(moved)
+}
+
+/// The directories that moved whole from `merge_base` to `head`, whose files are neither rules
+/// nor code: the crates' directories that [`moved_crates`] finds and the root deploy kit and its
+/// new place that [`moved_kit`] finds, given `build_scripts`, the files a member's `build` key
+/// names at either end. Nothing moved whole while a working-tree head holds a staged, changed or
+/// untracked file named `.gitattributes`, in any letters, or while either end holds a
+/// `.gitattributes` spelled in other letters, which a case-insensitive file system can read as
+/// one.
+///
+/// # Errors
+///
+/// Fails if git fails, other than when it can't read attributes.
+fn moved_directories(
+    top: &Path,
+    merge_base: &str,
+    head: &Head,
+    build_scripts: &BTreeSet<String>,
+) -> Result<Vec<String>, PolicyError> {
+    let head_revision = match head {
+        Head::Commit(revision) => revision.as_str(),
+        Head::WorkingTree => "HEAD",
+    };
+    let uncommitted = match head {
+        Head::Commit(_) => Vec::new(),
+        Head::WorkingTree => uncommitted_paths(top)?,
+    };
+    let attributes_changed = uncommitted.iter().any(|path| {
+        let name = path.rsplit('/').next().unwrap_or(path);
+        case_insensitive::eq(name, ".gitattributes")
+    });
+    if attributes_changed {
+        return Ok(Vec::new());
+    }
+    let mut moved = moved_crates(top, merge_base, head_revision, &uncommitted)?;
+    moved.extend(moved_kit(
+        top,
+        merge_base,
+        head_revision,
+        &uncommitted,
+        build_scripts,
+    )?);
     if !moved.is_empty()
         && (misspells_attributes(top, merge_base)? || misspells_attributes(top, head_revision)?)
     {
         return Ok(Vec::new());
     }
     Ok(moved)
+}
+
+/// The root deploy kit, `deploy` at `merge_base`, and its new place, `crates/<crate>/deploy` at
+/// the head, when the kit moved there whole, so that their files are neither rules nor code. The
+/// kit moved whole when:
+///
+/// - `deploy` at `merge_base` and `crates/<crate>/deploy` at the head are the same git tree, so
+///   every file in it has the same bytes, name and mode at both ends;
+/// - at `merge_base`, `deploy` is the one entry of the root that a case-insensitive file system
+///   reads as `deploy`, and at the head the root holds none, so the old place is gone;
+/// - at the head, `crates/<crate>` is the one entry of `crates/` that a case-insensitive file
+///   system reads as `<crate>`, `<crate>` is an ASCII name every system reads as written, and
+///   `deploy` is the one entry of `crates/<crate>` read as `deploy`; at `merge_base`, no entry of
+///   `crates/` read as `<crate>` holds an entry read as `deploy`, so the new place was empty;
+/// - no other `crates/<crate>/deploy` is that tree at the head, so the move pairs one directory
+///   with one;
+/// - the tree holds no symbolic link or submodule, whose target or contents would depend on where
+///   it sits, and no file named `Cargo.toml` or `build.rs`, in any letters, or that a member's
+///   `build` key names at either end, since a package or a build script below a crate can mean
+///   something else than one below the root;
+/// - git gives every file the same attributes at both ends, as [`moved_crates`] says.
+///
+/// A working-tree head is judged at `HEAD`, and the kit didn't move whole while a path below
+/// `deploy` or `crates/<crate>/deploy`, in any letters, is staged, changed in the working tree or
+/// untracked; `uncommitted` lists those paths, and `head_revision` is `HEAD` for one.
+///
+/// A rename only moves the kit, but a script that names its own place, such as `deploy/install.sh`
+/// in a unit or a README, now names a path the kit left; a later code change fixes it, as review
+/// of that change sees.
+///
+/// # Errors
+///
+/// Fails if git fails, other than when it can't read attributes.
+fn moved_kit(
+    top: &Path,
+    merge_base: &str,
+    head_revision: &str,
+    uncommitted: &[String],
+    build_scripts: &BTreeSet<String>,
+) -> Result<Vec<String>, PolicyError> {
+    let is_kit_name = |entry: &&TreeEntry| case_insensitive::eq(&entry.name, KIT_NAME);
+    let before = tree_entries(top, merge_base)?;
+    let Some(old) = only(before.iter().filter(is_kit_name)) else {
+        return Ok(Vec::new());
+    };
+    if old.name != KIT_NAME
+        || !old.is_tree
+        || tree_entries(top, head_revision)?
+            .iter()
+            .any(|entry| is_kit_name(&entry))
+    {
+        return Ok(Vec::new());
+    }
+    let crates_after = crate_entries(top, head_revision)?;
+    let mut places = Vec::new();
+    let crate_directories = crates_after.iter().filter(|entry| entry.is_tree);
+    for krate in crate_directories {
+        let entries = tree_entries(top, &format!("{head_revision}:crates/{}", krate.name))?;
+        let kits: Vec<&TreeEntry> = entries.iter().filter(is_kit_name).collect();
+        if kits.iter().any(|kit| kit.id == old.id) {
+            let one_kit = matches!(kits[..], [kit] if kit.name == KIT_NAME);
+            places.push((krate, one_kit));
+        }
+    }
+    let Some((krate, one_kit)) = only(places.into_iter()) else {
+        return Ok(Vec::new());
+    };
+    let near_crate = |entry: &&TreeEntry| case_insensitive::eq(&entry.name, &krate.name);
+    let mut was_empty = true;
+    let crates_before = crate_entries(top, merge_base)?;
+    let old_crate_entries = crates_before.iter().filter(near_crate);
+    for entry in old_crate_entries {
+        if entry.is_tree {
+            let entries = tree_entries(top, &format!("{merge_base}:crates/{}", entry.name))?;
+            was_empty &= !entries.iter().any(|entry| is_kit_name(&entry));
+        }
+    }
+    let new_directory = format!("crates/{}/{KIT_NAME}", krate.name);
+    let touched = |directory: &str| {
+        let below = format!("{directory}/");
+        uncommitted
+            .iter()
+            .any(|path| case_insensitive::strip_prefix(path, &below).is_some())
+    };
+    let eligible = was_empty
+        && plain_name(&krate.name)
+        && crates_after.iter().filter(near_crate).count() == 1
+        && one_kit
+        && !touched(KIT_NAME)
+        && !touched(&new_directory);
+    if !eligible {
+        return Ok(Vec::new());
+    }
+    let Some(files) = plain_files(top, &old.id)? else {
+        return Ok(Vec::new());
+    };
+    let builds = files.iter().any(|file| {
+        let name = file.rsplit('/').next().unwrap_or(file);
+        is_manifest(name)
+            || is_named_build_script(name)
+            || [KIT_NAME, new_directory.as_str()].iter().any(|directory| {
+                let path = format!("{directory}/{file}");
+                build_scripts
+                    .iter()
+                    .any(|script| case_insensitive::eq(script, &path))
+            })
+    });
+    let same_attributes = [false, true].iter().all(|&ignore_case| {
+        let before = attributes(top, merge_base, KIT_NAME, &files, ignore_case);
+        before.is_some()
+            && before == attributes(top, head_revision, &new_directory, &files, ignore_case)
+    });
+    if builds || !same_attributes {
+        return Ok(Vec::new());
+    }
+    Ok(vec![KIT_NAME.to_owned(), new_directory])
 }
 
 /// Whether `path` lies below `directory`, matched exactly, as the paths git lists are.
@@ -909,31 +1067,52 @@ fn plain_name(name: &str) -> bool {
     name.is_ascii() && !source_path::windows_reads_as_another(name)
 }
 
-/// An entry of `crates/` at one end of a change.
-struct CrateEntry {
-    /// Its name, without `crates/`.
+/// An entry of a git tree at one end of a change.
+struct TreeEntry {
+    /// Its name, without the directory that holds it.
     name: String,
     /// The id of its git object.
     id: String,
+    /// Whether it is a directory.
+    is_tree: bool,
 }
 
-/// The entries of `crates/` in the tree of `revision`.
+/// The entries of `crates/` in the tree of `revision`, none when it has no `crates/`.
 ///
 /// # Errors
 ///
 /// Fails if git fails.
-fn crate_entries(top: &Path, revision: &str) -> Result<Vec<CrateEntry>, PolicyError> {
+fn crate_entries(top: &Path, revision: &str) -> Result<Vec<TreeEntry>, PolicyError> {
     let output = git::run(top, &["ls-tree", "-z", revision, "crates/"])?;
-    let entries = git::paths(&output).filter_map(|entry| {
-        let (metadata, path) = entry.split_once('\t')?;
-        let mut fields = metadata.split(' ');
-        let id = fields.nth(2)?;
-        Some(CrateEntry {
-            name: path.strip_prefix("crates/")?.to_owned(),
-            id: id.to_owned(),
+    Ok(parse_tree_entries(&output, "crates/"))
+}
+
+/// The entries of the git tree `tree`, such as `<revision>` for its root or
+/// `<revision>:crates/<crate>` for a directory in it.
+///
+/// # Errors
+///
+/// Fails if git fails, such as when `tree` names no tree.
+fn tree_entries(top: &Path, tree: &str) -> Result<Vec<TreeEntry>, PolicyError> {
+    let output = git::run(top, &["ls-tree", "-z", tree])?;
+    Ok(parse_tree_entries(&output, ""))
+}
+
+/// The entries `git ls-tree -z` lists in `output`, each name without `prefix`.
+fn parse_tree_entries(output: &str, prefix: &str) -> Vec<TreeEntry> {
+    git::paths(output)
+        .filter_map(|entry| {
+            let (metadata, path) = entry.split_once('\t')?;
+            let mut fields = metadata.split(' ');
+            let kind = fields.nth(1)?;
+            let id = fields.next()?;
+            Some(TreeEntry {
+                name: path.strip_prefix(prefix)?.to_owned(),
+                id: id.to_owned(),
+                is_tree: kind == "tree",
+            })
         })
-    });
-    Ok(entries.collect())
+        .collect()
 }
 
 /// Whether `directory/Cargo.toml` at `revision` is a manifest with a package name.

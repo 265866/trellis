@@ -379,14 +379,21 @@ An update leaves them alone.
   commit that changes only that kit releases nothing, and its fix ships with the next release of
   the crate. Add the fix's line to that release's notes by hand, in `CHANGELOG.md` on the release
   pull request's branch, as [Each release](#each-release) says. To move the kit into the crate,
-  open one pull request that renames it, a code change:
+  open one pull request that moves it with every file unchanged:
 
   ```sh
   git mv deploy crates/{{ crate_name }}/deploy
   ```
 
-  In the same pull request, change any path in the kit's files that names the kit's own place,
-  such as `deploy/install.sh` in a unit or a README.
+  `just rule-changes` counts a kit moved whole as neither rules nor code. In the same pull
+  request, change each reference to the kit's path outside it, such as a workflow's
+  `uses: ./deploy` or a justfile's `import 'deploy/tasks.just'`. Those files are rules, so the
+  pull request is a rules change. A kit file changed in that pull request makes it no longer a
+  move: the kit's files count again at both paths, and a kit that holds a file that is a rule by
+  its name, such as an `action.yml` or a `*.just` module, then mixes rules and code. So change a
+  path in the kit's own files, such as `deploy/install.sh` in a unit or a README, in a code pull
+  request after the move. A kit that holds a symbolic link, a `Cargo.toml` or a `build.rs`, or
+  whose files git checks out differently at the new place, doesn't count as moved either.
 {%- endif %}
 
 ## Change an answer
