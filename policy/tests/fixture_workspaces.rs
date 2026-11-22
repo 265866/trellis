@@ -9,7 +9,8 @@ use std::{env, fs};
 use tempfile::TempDir;
 use trellis_policy::{
     Violation, Workspace, agent_files, build_scripts, config_files, docs_layout,
-    internal_dependencies, internal_dependency_versions, proc_macros, release_changelog,
+    internal_dependencies, internal_dependency_versions, license_files, proc_macros,
+    release_changelog,
 };
 
 /// The manifest of the member `app`, which depends on the member `derive` only for its tests.
@@ -806,4 +807,112 @@ fn a_docs_layout_that_holds_passes() {
         "the listed files exist, the sections match and the page opens with a paragraph: \
          {violations:?}"
     );
+}
+
+/// The violations of `license_files::check` on `fixture`, sorted by file.
+fn license_violations(fixture: &Fixture) -> Vec<Violation> {
+    let mut violations = license_files::check(&fixture.workspace())
+        .unwrap_or_else(|error| panic!("the check should run, but {error}"));
+    violations.sort_by(|left, right| left.file().cmp(right.file()));
+    violations
+}
+
+/// Gives the fixture's workspace the `[workspace.package]` license `license`.
+fn license_workspace(fixture: &Fixture, license: &str) {
+    fixture.write(
+        "Cargo.toml",
+        &format!(
+            "[workspace]\nresolver = \"3\"\nmembers = [\"crates/*\"]\n\n\
+             [workspace.package]\nlicense = \"{license}\"\n\n[workspace.metadata.policy]\n"
+        ),
+    );
+}
+
+#[test]
+fn a_published_crate_without_its_license_file_fails() {
+    let fixture = Fixture::new("");
+    license_workspace(&fixture, "MIT");
+    fixture.write("LICENSE", "MIT License\n");
+    let inherits = "license.workspace = true\n";
+    fixture.member("bare", inherits);
+    fixture.write("crates/sole/LICENSE", "MIT License\n");
+    fixture.member("sole", inherits);
+    fixture.write("crates/named/LICENSE-MIT", "MIT License\n");
+    fixture.member("named", inherits);
+    fixture.write("crates/lower/license", "MIT License\n");
+    fixture.member("lower", inherits);
+    fixture.write("crates/folder/LICENSE/MIT", "MIT License\n");
+    fixture.member("folder", inherits);
+    fixture.member("private", "license.workspace = true\npublish = false\n");
+    fixture.member("nowhere", "license.workspace = true\npublish = []\n");
+    fixture.member("own_file", "license-file = \"../../LICENSE\"\n");
+    let violations = license_violations(&fixture);
+    let message = "is published under `MIT`, but `crates/bare/` has neither `LICENSE` nor \
+                   `LICENSE-MIT`. Cargo packages only the files under a crate's directory, so the \
+                   crate would reach crates.io without its license text, which the license asks \
+                   every copy to carry. Copy `LICENSE` from the repository root into \
+                   `crates/bare/`.";
+    assert_violations(
+        &violations,
+        &[
+            Expected {
+                file: "crates/bare/Cargo.toml",
+                message,
+            },
+            Expected {
+                file: "crates/folder/Cargo.toml",
+                message: "`folder` is published under `MIT`, but `crates/folder/` has neither",
+            },
+        ],
+        "a published crate that inherits MIT needs LICENSE or LICENSE-MIT, in any case, as a \
+         file; a crate that isn't published, or names its own license file, needs neither",
+    );
+}
+
+#[test]
+fn a_dual_licensed_crate_needs_both_files() {
+    let fixture = Fixture::new("");
+    license_workspace(&fixture, "MIT OR Apache-2.0");
+    fixture.write("LICENSE-MIT", "MIT License\n");
+    fixture.write("LICENSE-APACHE", "Apache License\n");
+    let inherits = "license.workspace = true\n";
+    fixture.write("crates/both/LICENSE-MIT", "MIT License\n");
+    fixture.write("crates/both/LICENSE-APACHE", "Apache License\n");
+    fixture.member("both", inherits);
+    fixture.write("crates/half/LICENSE-MIT", "MIT License\n");
+    fixture.member("half", inherits);
+    fixture.write("crates/sole/LICENSE", "MIT License\n");
+    fixture.member("sole", inherits);
+    fixture.member("mit", "license = \"MIT\"\n");
+    let violations = license_violations(&fixture);
+    assert_violations(
+        &violations,
+        &[
+            Expected {
+                file: "crates/half/Cargo.toml",
+                message: "`half` is published under `MIT OR Apache-2.0`, but `crates/half/` lacks \
+                          `LICENSE-APACHE`. Cargo packages",
+            },
+            Expected {
+                file: "crates/mit/Cargo.toml",
+                message: "Copy `LICENSE-MIT` from the repository root into `crates/mit/`.",
+            },
+            Expected {
+                file: "crates/sole/Cargo.toml",
+                message: "but `crates/sole/` lacks `LICENSE-MIT` and `LICENSE-APACHE`. Cargo \
+                          packages",
+            },
+        ],
+        "under two licenses, a crate needs a file named for each, a sole LICENSE doesn't do, and a \
+         crate under MIT alone is told to copy the root's LICENSE-MIT when the root has no LICENSE",
+    );
+    for text in [
+        "Copy `LICENSE-APACHE` from the repository root into `crates/half/`.",
+        "Copy `LICENSE-MIT` and `LICENSE-APACHE` from the repository root into `crates/sole/`.",
+    ] {
+        assert!(
+            mentions(&violations, text),
+            "a message should say {text:?}: {violations:?}"
+        );
+    }
 }

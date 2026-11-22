@@ -437,7 +437,7 @@ fn symbolic_link(target: impl AsRef<Path>, link: &Path) {
 fn a_generated_project_passes() {
     let run = Project::new().check();
     run.assert_passes();
-    run.assert_reports(0, "All 15 structure rules hold");
+    run.assert_reports(0, "All 16 structure rules hold");
 }
 
 #[test]
@@ -823,6 +823,35 @@ fn a_member_version_of_its_own_fails() {
         &member_manifest("demo_core", ""),
     );
     project.lock();
+    project.check().assert_passes();
+}
+
+#[test]
+fn a_published_crate_without_its_license_files_fails() {
+    let project = Project::new();
+    project.edit_root_manifest(
+        "publish = false\n",
+        "license = \"MIT OR Apache-2.0\"\npublish = true\n",
+    );
+    for (name, dependencies) in [("demo", "demo_core.workspace = true\n"), ("demo_core", "")] {
+        let manifest = member_manifest(name, dependencies).replace(
+            "publish.workspace = true\n",
+            "license.workspace = true\npublish.workspace = true\n",
+        );
+        project.write(&format!("crates/{name}/Cargo.toml"), &manifest);
+    }
+    project.write("LICENSE-MIT", "MIT License\n");
+    project.write("LICENSE-APACHE", "Apache License\n");
+    project.write("crates/demo/LICENSE-MIT", "MIT License\n");
+    project.write("crates/demo/LICENSE-APACHE", "Apache License\n");
+    project.write("crates/demo_core/LICENSE-MIT", "MIT License\n");
+    project.lock();
+    project.check().assert_reports(
+        1,
+        "error: [license_files] crates/demo_core/Cargo.toml: `demo_core` is published under \
+         `MIT OR Apache-2.0`, but `crates/demo_core/` lacks `LICENSE-APACHE`.",
+    );
+    project.write("crates/demo_core/LICENSE-APACHE", "Apache License\n");
     project.check().assert_passes();
 }
 
