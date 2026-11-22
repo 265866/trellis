@@ -31,7 +31,9 @@ _exclude:
   - "{% if kind != 'binary' %}/.github/workflows/build-release.yml{% endif %}"
   - "{% if not (kind == 'binary' and 'windows' in platforms) %}/.cargo{% endif %}"
   - "{% if kind != 'service' %}/.dockerignore{% endif %}"
-  - "{% if not (kind == 'binary' and build.setup) %}/.github/setup-build.sh{% endif %}"
+  # Copier also matches these against the files of the trellis version a project updates from,
+  # with that version's answers, so an answer it didn't have yet is read with a default.
+  - "{% if not (kind == 'binary' and (build | default({})).setup | default(false)) %}/.github/setup-build.sh{% endif %}"
   - "{% if kind != 'service' %}/Containerfile{% endif %}"
   - "{% if kind == 'library' %}/about.hbs{% endif %}"
   - "{% if kind == 'library' %}/about.toml{% endif %}"
