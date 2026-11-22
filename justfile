@@ -458,10 +458,11 @@ lints-test:
 # Runs `template` for each kind, then `shapes`, `dependencies`, `update` and the extras checks.
 templates: (template "binary") (template "service") (template "service" "ci" "false" "true") (template "library") shapes dependencies update build-extras image-extras
 
-# Copies the working tree into a scratch repository as two tagged trellis versions, generates a
-# library from the first, and edits it the way an owner would: its code and changelog, and a new
-# crate and docs page with their lines in CONTRIBUTING.md, Cargo.toml, release-plz.toml and
-# README.md.
+# Checks that every exclusion in copier.yml renders with only the answers an older trellis asked,
+# as Copier renders them when a project updates from it. Then copies the working tree into a
+# scratch repository as two tagged trellis versions, generates a library from the first, and
+# edits it the way an owner would: its code and changelog, and a new crate and docs page with their
+# lines in CONTRIBUTING.md, Cargo.toml, release-plz.toml and README.md.
 # Then it changes the template's scaffold, a rule file, a docs page and lines near the owner's,
 # and runs `copier update` to the second. The update must merge each file with no conflict
 # markers, keep the owner's lines, bring v2's, and pass `trellis-policy check`; the owner's code
@@ -483,6 +484,8 @@ update:
     commit() { git -c user.name=trellis -c user.email=trellis@localhost "$@"; }
     copier() { uv tool run copier@9.19.1 "$@"; }
     policy() { cargo run --locked --quiet --manifest-path "$trellis/Cargo.toml" --package trellis-policy -- "$@"; }
+    uv run --quiet --no-project --with jinja2==3.1.6 --with pyyaml==6.0.3 python -I \
+      tests/exclusions/check.py copier.yml
     mkdir "$out/trellis"
     tar --create --exclude=./.git --exclude=./target --exclude=./lints/target --file=- . \
       | tar --extract --directory="$out/trellis" --file=-
