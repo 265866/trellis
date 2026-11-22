@@ -12,10 +12,11 @@ platform:
 
 The Linux programs are linked statically, so they run on any Linux distribution, Alpine included.
 {%- elif 'linux' in platforms %}
+{%- set ubuntu = (targets | selectattr('os', 'equalto', 'linux') | first).runner | replace('ubuntu-', '') | replace('-arm', '') %}
 
 The Linux programs link glibc and the system's shared libraries, so they need a distribution
-whose glibc is 2.39 or newer, as in Ubuntu 24.04 and Debian 13, with those libraries installed.
-They don't run on Alpine or another musl distribution.
+whose glibc is at least as new as Ubuntu {{ ubuntu }}'s, which builds them, with those libraries
+installed. They don't run on Alpine or another musl distribution.
 {%- endif %}
 
 ## Install a release
@@ -34,6 +35,9 @@ To update, install the new release the same way.
 ## Build from source
 
 You need [Rust](https://rustup.rs/).
+{%- if build.setup %} You also need what the release build installs first, which
+[.github/setup-build.sh](../.github/setup-build.sh) lists for each system.
+{%- endif %}
 
 ```sh
 {%- if visibility == 'private' %}

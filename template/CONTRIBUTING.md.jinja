@@ -250,8 +250,8 @@ build, and installs `musl-gcc` (Debian and Ubuntu's `musl-tools`) for crates tha
 {%- elif kind == 'binary' and 'linux' in platforms %}
 
 Linux releases use glibc, as the `build` answer in `.copier-answers.yml` asks, so they run on a
-distribution whose glibc is at least as new as the release runner's, Ubuntu 24.04's 2.39, and
-that has the shared libraries the program links.
+distribution whose glibc is at least as new as the release runner's, and that has the shared
+libraries the program links.
 {%- endif %}
 {%- if build.setup %}
 

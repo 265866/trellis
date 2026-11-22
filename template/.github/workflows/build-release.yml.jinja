@@ -23,6 +23,11 @@ on:
       - about.toml
       - crates/*/Cargo.toml
       - crates/*/build.rs
+{%- endraw %}
+{%- if build.setup %}
+      - .github/setup-build.sh
+{%- endif %}
+{%- raw %}
       - rust-toolchain.toml
 
 permissions:
@@ -69,7 +74,6 @@ jobs:
       # .github/setup-build.sh installs what the build needs beyond Rust on each runner, such as
       # system libraries; docs/maintaining.md says what it gets.
       - name: Set up the build
-        shell: bash
         env:
           TARGET: {% raw %}${{ matrix.target }}{% endraw %}
         run: bash .github/setup-build.sh

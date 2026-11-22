@@ -796,11 +796,13 @@ template kind recipes="ci" publish="false" web="false" target="":
       fi
     fi
 
-# Generates a binary whose `build` answer sets every key, with a .github/setup-build.sh, and checks
-# that CI's build job and the release's run the script after the toolchain, with the timeout,
-# build for Linux with glibc and install no musl-gcc, that `just actionlint` shellchecks the
-# script, and that the release build for glibc links dynamically. Its docs must say the release
-# needs glibc. The answer's checks must refuse what it doesn't take, and a binary with the
+# Generates a binary whose `build` answer sets every key, and checks that CI's build job and the
+# release's run .github/setup-build.sh between the toolchain and the first build, with the
+# timeout, build for Linux with glibc and install no musl-gcc, that the release build runs on a
+# change to the script, that the starter script does nothing on every runner, that a failing one
+# fails with its output, that `just actionlint` shellchecks it, and, on a glibc Linux host, that
+# the glibc build links dynamically. Its docs must say the release needs glibc. The answer's
+# checks must refuse what it doesn't take, and another kind's answer, and a binary with the
 # default answer must get none of it.
 #
 # Checks what a binary's `build` answer changes in its builds.
@@ -848,22 +850,47 @@ build-extras:
       grep --quiet '^    timeout-minutes: 90$' <<< "$job" || fail "$file's build job doesn't take 90 minutes"
       grep --quiet 'target: x86_64-unknown-linux-gnu$' <<< "$job" || fail "$file doesn't build for Linux with glibc"
       ! grep --quiet --extended-regexp "musl-(gcc|tools)|linux-musl" <<< "$job" || fail "$file still builds for or installs musl"
-      setup=$(grep --line-number '^        run: bash .github/setup-build.sh$' <<< "$job" | cut -d: -f1) \
-        || fail "$file's build job doesn't run .github/setup-build.sh"
-      toolchain=$(grep --line-number 'rustup target add "$TARGET"' <<< "$job" | cut -d: -f1)
-      [ "$setup" -gt "$toolchain" ] || fail "$file runs the setup before the toolchain"
+      line() { grep --line-number --max-count 1 --fixed-strings -- "$1" <<< "$job" | cut -d: -f1; }
+      setup=$(line 'run: bash .github/setup-build.sh')
+      toolchain=$(line 'rustup target add "$TARGET"')
+      first_build=$(line "$([ "$workflow" = ci ] && echo 'run: just lint' || echo 'run: just notices')")
+      [ -n "$setup" ] || fail "$file's build job doesn't run .github/setup-build.sh"
+      [ -n "$toolchain" ] && [ -n "$first_build" ] || fail "$file's build job has no toolchain step or first build"
+      [ "$toolchain" -lt "$setup" ] && [ "$setup" -lt "$first_build" ] \
+        || fail "$file doesn't run the setup between the toolchain and the first build"
     done
-    grep --quiet 'glibc is 2.39 or newer' docs/install.md || fail "docs/install.md doesn't say the release needs glibc"
-    printf '#!/usr/bin/env bash\nset -euo pipefail\necho "Setting up $TARGET on $RUNNER_OS"\n' > .github/setup-build.sh
+    grep --quiet '^      - .github/setup-build.sh$' .github/workflows/build-release.yml \
+      || fail "a pull request that changes the setup script doesn't run the release build"
+    grep --quiet "at least as new as Ubuntu 24.04's" docs/install.md || fail "docs/install.md doesn't say the release needs glibc"
+    # The starter does nothing, on every runner, and passes; a failing script fails its step, with
+    # its own output.
+    [ -f .github/setup-build.sh ] || fail "the project has no starter .github/setup-build.sh"
+    for os in Linux macOS Windows; do
+      RUNNER_OS=$os TARGET=x86_64-unknown-linux-gnu bash .github/setup-build.sh || fail "the starter failed on $os"
+    done
     just actionlint zizmor
+    printf '#!/usr/bin/env bash\necho "error: no libgtk-3-dev for $TARGET" >&2\nexit 1\n' > .github/setup-build.sh
+    if RUNNER_OS=Linux TARGET=x86_64-unknown-linux-gnu bash .github/setup-build.sh 2> "$out/setup.txt" \
+      || ! grep --quiet 'no libgtk-3-dev' "$out/setup.txt"; then
+      fail "a failing setup script passed or hid its output"
+    fi
     printf '#!/usr/bin/env bash\necho Setting up $TARGET\n' > .github/setup-build.sh
     if just actionlint > "$out/actionlint.txt" 2>&1 || ! grep --quiet SC2086 "$out/actionlint.txt"; then
       cat "$out/actionlint.txt" >&2
       fail "just actionlint passed a setup script that shellcheck faults"
     fi
-    CARGO_BUILD_TARGET=x86_64-unknown-linux-gnu just build-release
-    file target/x86_64-unknown-linux-gnu/release/demo-binary | grep --quiet 'dynamically linked' \
-      || fail "the glibc build isn't dynamically linked: $(file target/x86_64-unknown-linux-gnu/release/demo-binary)"
+    host=$(rustc -vV | sed -n 's/^host: //p')
+    if [[ $host == *-linux-gnu ]]; then
+      CARGO_BUILD_TARGET=$host just build-release
+      file "target/$host/release/demo-binary" | grep --quiet 'dynamically linked' \
+        || fail "the glibc build isn't dynamically linked: $(file "target/$host/release/demo-binary")"
+    fi
+    # A `build` answer for another kind is refused, since that kind's files would ignore it.
+    if refusal=$(uv tool run copier@9.19.1 copy --quiet --defaults --vcs-ref HEAD --data project_name=demo-service \
+      --data "description=A demo service." --data kind=service --data 'build={setup: true}' "$trellis" "$out/service" 2>&1); then
+      fail "a service took a build answer"
+    fi
+    grep --quiet 'Only a binary takes a `build` answer' <<< "$refusal" || fail "a service's build answer was refused for another reason: $refusal"
 
 # A generated service's CI builds the image for every architecture on an x86-64 runner, as its
 # release does, cross-compiling for the others. CI's `Service image` jobs build the arm64 one here

@@ -1,6 +1,9 @@
 _min_copier_version: "9.10.0"
 _subdirectory: template
 _answers_file: .copier-answers.yml
+# The project's own once generated: a starter that an update never overwrites.
+_skip_if_exists:
+  - .github/setup-build.sh
 # Copier prints this after an interactive copy, but not under `--quiet`, so docs/maintaining.md
 # stays the full procedure.
 _message_after_copy: |
@@ -28,6 +31,7 @@ _exclude:
   - "{% if kind != 'binary' %}/.github/workflows/build-release.yml{% endif %}"
   - "{% if not (kind == 'binary' and 'windows' in platforms) %}/.cargo{% endif %}"
   - "{% if kind != 'service' %}/.dockerignore{% endif %}"
+  - "{% if not (kind == 'binary' and build.setup) %}/.github/setup-build.sh{% endif %}"
   - "{% if kind != 'service' %}/Containerfile{% endif %}"
   - "{% if kind == 'library' %}/about.hbs{% endif %}"
   - "{% if kind == 'library' %}/about.toml{% endif %}"
@@ -147,10 +151,13 @@ build:
     minutes. Most binaries need nothing. Example: `{libc: gnu, setup: true, timeout: 90}`.
   default: {}
   when: "{{ kind == 'binary' }}"
+  # Copier runs this even when it doesn't ask, so a `--data` answer can't reach another kind.
   validator: >-
     {%- set ns = namespace(error='') -%}
     {%- if build is not mapping -%}
     {%- set ns.error = 'Write a mapping, such as `{libc: gnu, setup: true}`, or `{}` for nothing.' -%}
+    {%- elif build and kind != 'binary' -%}
+    {%- set ns.error = 'Only a binary takes a `build` answer.' -%}
     {%- else -%}
     {%- for key in build if key not in ['libc', 'setup', 'timeout'] -%}
     {%- set ns.error = '`' ~ key ~ '` is not a key it takes; use `libc`, `setup` or `timeout`.' -%}

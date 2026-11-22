@@ -214,12 +214,13 @@ An update leaves them alone.
   builds without an edit to the workflows. `libc: gnu` builds for Linux with glibc instead of
   musl, for a program that links system libraries such as GTK, WebKitGTK or Vulkan, which musl
   can't; [Install](install.md) then says which systems the release runs on. `setup: true` runs
-  `.github/setup-build.sh`, which you write, in CI's build jobs and the release's, on every runner
-  before the build, with the runner's system in `RUNNER_OS` and the target in `TARGET`. It can
-  install packages with `sudo apt-get`, free disk space, or download a toolchain component such
-  as Xcode's Metal compiler. It is a rule, like the workflows, and `just actionlint` shellchecks
-  it. `timeout` raises those jobs' limit from 60 minutes. Write the script first, then set the
-  answer in the same rules pull request:
+  `.github/setup-build.sh` in CI's build jobs and the release's, on every runner before the
+  build, with the runner's system in `RUNNER_OS` and the target in `TARGET`. trellis writes a
+  starter that installs nothing, and an update never overwrites your version. It can install
+  packages with `sudo apt-get`, free disk space, or download a toolchain component such as
+  Xcode's Metal compiler; a step that fails fails the build, with its output. It is a rule, like
+  the workflows, and `just actionlint` shellchecks it. `timeout` raises those jobs' limit from 60
+  minutes. Set the answer and fill in the script in one rules pull request:
 
   ```sh
   uvx copier update --defaults --vcs-ref=:current: --data 'build={libc: gnu, setup: true, timeout: 90}'
