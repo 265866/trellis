@@ -129,8 +129,12 @@ Beyond the Google guide, the workspace also turns on:
 - `trellis-policy check` (`just policy`): every crate has an entry in `internal_dependencies` and
   depends directly only on the workspace crates its entry lists, dev and build dependencies
   included; a crate in `dev_only_crates` is allowed to every crate, but only as a dev-dependency. So
-  a new crate or a new edge between crates is a rule change. It also checks that every crate's
-  `[lints]` table is exactly `workspace = true`; that no crate has a build script unless
+  a new crate or a new edge between crates is a rule change. No crate's `[dependencies]` or
+  `[dev-dependencies]` gives a path dependency on another crate a `version`, on any platform, since
+  release-plz rewrites it when a release moves past what it allows, and the release pull request
+  would then change code beside the root `Cargo.toml`'s version, a rule; a published crate gives the
+  `version` in `[workspace.dependencies]` instead. It also checks that every crate's `[lints]` table
+  is exactly `workspace = true`; that no crate has a build script unless
   `build_script_crates` lists it, since a build script can set a `cfg` that hides code from the lint
   runs, and that a listed crate's `build` key names a file in the crate's own directory, in ASCII,
   with no `\`, no part that ends in a dot or a space and no part of the form of a Windows short

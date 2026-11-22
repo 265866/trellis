@@ -233,6 +233,26 @@ one:
   rule change. To rename a crate, follow "Rename a crate" in
   [docs/maintaining.md](docs/maintaining.md#rename-a-crate).
 {%- if kind == 'library' and publish_crate %}
+- **Dependencies on other crates.** crates.io needs the `version` of a dependency on another
+  workspace crate, and release-plz rewrites it when a release moves past what it allows. In the
+  crate's own `Cargo.toml`, that rewrite would change code beside the version in the root
+  `Cargo.toml`, a rule, and the release pull request would fail "Rule changes stand alone". So
+  give the `path` and `version` in `[workspace.dependencies]` of the root `Cargo.toml`, as
+  `<crate> = { path = "crates/<crate>", version = "<version>" }` with the workspace's version
+  from `[workspace.package]`, and write `<crate>.workspace = true` in the crate, which keeps any
+  `optional`, `features` or `default-features`. A dev-dependency needs only its `path`, since
+  cargo leaves it out of the published package. `just policy` fails on a `version` in the crate's
+  own `Cargo.toml`, which `cargo add --path` writes, until you move it to the root or, for a
+  dev-dependency, remove it.
+{%- else %}
+- **Dependencies on other crates.** Name a workspace crate by its `path` alone, as
+  `<crate> = { path = "../<crate>" }`, with no `version`: cargo needs one only to publish.
+  release-plz rewrites that `version` when a release moves past what it allows, so the release
+  pull request would change the crate's `Cargo.toml`, which is code, beside the version in the
+  root `Cargo.toml`, a rule, and fail "Rule changes stand alone". `cargo add --path` writes the
+  `version`, and `just policy` fails until you remove it.
+{%- endif %}
+{%- if kind == 'library' and publish_crate %}
 - **Publishing.** Every crate is published to crates.io. A new crate needs a first manual publish
   and a trusted publisher on crates.io before the next release, which only the owner can set up;
   [docs/maintaining.md](docs/maintaining.md#add-a-crate-to-a-published-library) has the steps.
