@@ -166,7 +166,9 @@ Beyond the Google guide, the workspace also turns on:
   only on proc-macro crates listed in `proc_macro_crates`, since a proc macro writes code the custom
   lints don't check; that the root `AGENTS.md` is the only file of instructions for coding agents;
   that every crate's commits reach the release notes through `changelog_include` in
-  `release-plz.toml`; that every shell script under `deploy/` passes shellcheck, with no
+  `release-plz.toml`; that no crate but the ones `restricted_crates` lists for a package reaches
+  it, directly or through other packages, when that setting is there; that every shell script
+  under `deploy/` passes shellcheck, with no
   `.shellcheckrc` or `SHELLCHECK_OPTS` read, the files they source included, and that each
   shellcheck directive there silences named codes, with a reason, as close above its finding as
   shellcheck takes one, since a deploy kit is code no other check reads; and that the docs keep the

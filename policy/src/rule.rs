@@ -6,7 +6,7 @@ use crate::workspace::Workspace;
 use crate::{
     agent_files, build_scripts, config_files, deploy_scripts, docs_index, docs_layout,
     internal_dependencies, lints_tables, member_manifests, member_sources, proc_macros,
-    release_changelog, workspace_shape,
+    release_changelog, restricted_crates, workspace_shape,
 };
 
 /// A structure rule of the workspace, which one check enforces.
@@ -45,11 +45,14 @@ pub enum Rule {
     ReleaseChangelog,
     /// The shell scripts under `deploy/` pass shellcheck.
     DeployScripts,
+    /// Only the members `restricted_crates` allows reach a restricted package, directly or
+    /// through others.
+    RestrictedCrates,
 }
 
 impl Rule {
     /// Every rule, in the order `trellis-policy check` runs them.
-    pub const ALL: [Self; 13] = [
+    pub const ALL: [Self; 14] = [
         Self::WorkspaceShape,
         Self::LintsTables,
         Self::MemberManifests,
@@ -57,6 +60,7 @@ impl Rule {
         Self::BuildScripts,
         Self::ProcMacros,
         Self::InternalDependencies,
+        Self::RestrictedCrates,
         Self::ConfigFiles,
         Self::AgentFiles,
         Self::DocsIndex,
@@ -82,6 +86,7 @@ impl Rule {
             Self::DocsLayout => "docs_layout",
             Self::ReleaseChangelog => "release_changelog",
             Self::DeployScripts => "deploy_scripts",
+            Self::RestrictedCrates => "restricted_crates",
         }
     }
 
@@ -105,6 +110,7 @@ impl Rule {
             Self::DocsLayout => docs_layout::check(workspace),
             Self::ReleaseChangelog => release_changelog::check(workspace),
             Self::DeployScripts => deploy_scripts::check(workspace),
+            Self::RestrictedCrates => Ok(restricted_crates::check(workspace)),
         }
     }
 }

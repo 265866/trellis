@@ -397,7 +397,7 @@ fn symbolic_link(target: impl AsRef<Path>, link: &Path) {
 fn a_generated_project_passes() {
     let run = Project::new().check();
     run.assert_passes();
-    run.assert_reports(0, "All 13 structure rules hold");
+    run.assert_reports(0, "All 14 structure rules hold");
 }
 
 #[test]
@@ -3159,4 +3159,87 @@ fn a_checkout_path_sourced_where_a_command_starts_fails() {
              path in the checkout",
         );
     }
+}
+
+/// Writes the members `demo_ui`, a UI toolkit stand-in, and `demo_widgets`, which depends on it,
+/// and lets every member depend on the others as `internal_dependencies` asks, with the line
+/// `restricted` added to the policy table.
+fn restricted_project(core_dependencies: &str, restricted: &str) -> Project {
+    let project = Project::new();
+    project.write("crates/demo_ui/Cargo.toml", &member_manifest("demo_ui", ""));
+    project.write("crates/demo_ui/src/lib.rs", "//! The UI toolkit.\n");
+    project.write(
+        "crates/demo_widgets/Cargo.toml",
+        &member_manifest("demo_widgets", "demo_ui = { path = \"../demo_ui\" }\n"),
+    );
+    project.write("crates/demo_widgets/src/lib.rs", "//! Widgets.\n");
+    project.write(
+        "crates/demo_core/Cargo.toml",
+        &member_manifest("demo_core", core_dependencies),
+    );
+    project.edit_root_manifest(
+        "demo = [\"demo_core\"]\ndemo_core = []\n",
+        "demo = [\"demo_core\", \"demo_widgets\"]\n\
+         demo_core = [\"demo_widgets\"]\ndemo_ui = []\ndemo_widgets = [\"demo_ui\"]\n",
+    );
+    project.write(
+        "crates/demo/Cargo.toml",
+        &member_manifest(
+            "demo",
+            "demo_core.workspace = true\ndemo_widgets = { path = \"../demo_widgets\" }\n",
+        ),
+    );
+    project.write(
+        "release-plz.toml",
+        "[workspace]\n\n[[package]]\nname = \"demo\"\nchangelog_update = true\n\
+         changelog_include = [\"demo_core\", \"demo_ui\", \"demo_widgets\"]\n",
+    );
+    project.policy_setting(restricted);
+    project.lock();
+    project
+}
+
+/// A member that reaches a restricted package through another member fails, at its manifest,
+/// with the path; the members its entry lists, and the package itself, pass.
+#[test]
+fn a_member_that_reaches_a_restricted_crate_fails() {
+    let restricted = "restricted_crates = { \"demo_ui\" = [\"demo\", \"demo_widgets\"] }";
+    restricted_project("", restricted).check().assert_passes();
+    restricted_project(
+        "demo_widgets = { path = \"../demo_widgets\" }\n",
+        restricted,
+    )
+    .check()
+    .assert_reports(
+        1,
+        "error: [restricted_crates] crates/demo_core/Cargo.toml: `demo_core` reaches \
+             `demo_ui` (demo_core -> demo_widgets -> demo_ui), which `restricted_crates` lets \
+             only `demo`, `demo_widgets` reach, through its key `demo_ui`.",
+    );
+    restricted_project(
+        "[dev-dependencies]\ndemo_widgets = { path = \"../demo_widgets\" }\n",
+        "restricted_crates = { \"demo_u*\" = [\"demo\", \"demo_widgets\"] }",
+    )
+    .check()
+    .assert_reports(
+        1,
+        "`demo_core` reaches `demo_ui` (demo_core -> demo_widgets -> demo_ui)",
+    );
+}
+
+/// A key that names no package, and a list that names no member, fail as malformed settings.
+#[test]
+fn a_restricted_crates_setting_that_names_nothing_fails() {
+    restricted_project("", "restricted_crates = { \"demo*ui\" = [\"demo\"] }")
+        .check()
+        .assert_reports(2, "has a key `demo*ui` that names no package");
+    restricted_project(
+        "",
+        "restricted_crates = { \"demo_ui\" = [\"demo_widget\"] }",
+    )
+    .check()
+    .assert_reports(
+        2,
+        "names `demo_widget`, which isn't a key of `internal_dependencies`",
+    );
 }
