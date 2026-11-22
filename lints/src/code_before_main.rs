@@ -1,5 +1,6 @@
 use clippy_utils::diagnostics::span_lint_and_help;
 use rustc_attr_ir::find_attr;
+use rustc_hir::def_id::LOCAL_CRATE;
 use rustc_hir::{Item, ItemKind};
 use rustc_lint::{LateContext, LateLintPass};
 use rustc_lint_defs::{declare_lint, declare_lint_pass};
@@ -9,10 +10,13 @@ use std::path::Path;
 
 declare_lint! {
     /// Checks for a `static` placed in a section the loader runs before `main`: `.preinit_array`,
-    /// `.init_array` and `.ctors` on ELF targets, `__DATA,__mod_init_func` on Apple targets, and on
-    /// Windows the CRT's `.CRT$XI*` and `.CRT$XC*` initializers and its `.CRT$XL*` TLS callbacks,
-    /// which run as the process starts, each with any suffix. Each target's build sees only its own `cfg_attr` branch, so
-    /// every platform's names are matched, and a Linux build catches all of them.
+    /// `.init_array` and `.ctors` on ELF targets; on Apple targets a `__mod_init_func` section, or
+    /// a section of type `mod_init_funcs`, in any segment; and on Windows the CRT's `.CRT$XI*` and
+    /// `.CRT$XC*` initializers, its `.CRT$XD*` dynamic TLS initializers and its `.CRT$XL*` TLS
+    /// callbacks, which run as the process starts. Each may have any suffix. A `cfg_attr` gives
+    /// each target only its own branch, so every platform's names are matched: each target's run
+    /// of `just dylint`, which the template's CI makes on every target's runner, catches the
+    /// branch that target compiles.
     ///
     /// The Google Rust Style Guide: don't run code before `main()`. Such code runs in no order
     /// anyone chose, before logging, arguments or the runtime are set up. The `ctor`, `inventory`
@@ -25,10 +29,14 @@ declare_lint! {
     /// A static a macro writes is reported at the outermost macro call in the source, naming that
     /// macro. The `constructor_macros` list in `dylint.toml` names the macros allowed to place
     /// constructors, as the crate that defines them and their name, such as `gpui::actions` or
-    /// `gpui_macros::Action` for a derive that `gpui` re-exports. A static passes if any macro it
-    /// was expanded from is listed. The list has no default, and the template ships it empty. The
-    /// lint has no exceptions, since an `expect` around a macro call would let it place any
-    /// constructor, so listing a macro, a rule change, is the only way past it:
+    /// `gpui_macros::Action` for a derive that `gpui` re-exports. A static passes if a macro it
+    /// was expanded from is listed and no macro inside the first listed one is defined in the
+    /// workspace, in the crate itself or one `macro_crates` lists: a workspace macro there could
+    /// write any constructor into a listed macro that takes tokens. The help names the outermost
+    /// macro inside every workspace macro, so a wrapper around `gpui::actions!` is told to list
+    /// `gpui::actions`. The list has no default, and the template ships it empty. The lint has no
+    /// exceptions, since an `expect` around a macro call would let it place any constructor, so
+    /// listing a macro, a rule change, is the only way past it:
     ///
     /// ```toml
     /// [trellis_lints]
@@ -70,72 +78,129 @@ impl<'tcx> LateLintPass<'tcx> for CodeBeforeMain {
         if !is_constructor_section(section.as_str()) {
             return;
         }
-        let macros = expanded_from(cx, item.span);
-        let allowed = &crate::config::get(cx.tcx.sess).constructor_macros;
-        if macros.iter().any(|(_, path)| allowed.contains(path)) {
+        let config = crate::config::get(cx.tcx.sess);
+        let macros = expanded_from(cx, item.span, &config.macro_crates);
+        if is_allowed(&macros, &config.constructor_macros) {
             return;
         }
-        match macros.last() {
-            Some((call, path)) => span_lint_and_help(
-                cx,
-                CODE_BEFORE_MAIN,
-                *call,
-                format!("`{path}` places a `static` in `{section}`, which runs code before `main`"),
-                None,
-                format!(
-                    "call the code from `main` instead, or, if the framework needs it, list \
-                     \"{path}\" in `constructor_macros` under `[trellis_lints]` in `dylint.toml`"
-                ),
-            ),
-            None => span_lint_and_help(
+        let Some(outermost) = macros.last() else {
+            span_lint_and_help(
                 cx,
                 CODE_BEFORE_MAIN,
                 item.span,
                 format!("a `static` in `{section}`, which runs code before `main`"),
                 None,
                 "call the code from `main` instead",
+            );
+            return;
+        };
+        let own = macros.iter().position(|expansion| expansion.in_workspace);
+        let listable = &macros[..own.unwrap_or(macros.len())];
+        let help = match (listable.last(), own) {
+            (Some(framework), _) => format!(
+                "call the code from `main` instead, or, if the framework needs it, list \
+                 \"{}\" in `constructor_macros` under `[trellis_lints]` in `dylint.toml`",
+                framework.path
             ),
-        }
+            (None, Some(own)) => format!(
+                "call the code from `main` instead: the workspace's own macro `{}` writes it",
+                macros[own].path
+            ),
+            (None, None) => "call the code from `main` instead".to_owned(),
+        };
+        span_lint_and_help(
+            cx,
+            CODE_BEFORE_MAIN,
+            outermost.call_site,
+            format!(
+                "`{}` places a `static` in `{section}`, which runs code before `main`",
+                outermost.path
+            ),
+            None,
+            help,
+        );
     }
 }
 
+/// Whether `constructor_macros`, as `allowed`, lets a static expanded from `macros`, innermost
+/// first, pass: it must list one of them, and no macro inside the first one it lists may be
+/// defined in the workspace. A workspace macro there may write any tokens, so a listed framework
+/// macro that takes tokens, such as one that wraps an app's items, can't pass a constructor the
+/// workspace's own macro writes inside it.
+fn is_allowed(macros: &[Expansion], allowed: &[String]) -> bool {
+    macros
+        .iter()
+        .position(|expansion| allowed.contains(&expansion.path))
+        .is_some_and(|listed| {
+            !macros[..listed]
+                .iter()
+                .any(|expansion| expansion.in_workspace)
+        })
+}
+
 /// Whether a static in `section` runs before `main` on some target: ELF's `.preinit_array`,
-/// `.init_array` and `.ctors`, Apple's `__DATA,__mod_init_func`, and the Windows CRT's `.CRT$XI*`
-/// and `.CRT$XC*` initializers and `.CRT$XL*` TLS callbacks, with any priority or other suffix the
-/// linker accepts.
+/// `.init_array` and `.ctors`; on Apple targets a `__mod_init_func` section, or any section of
+/// type `mod_init_funcs`, in any segment; and on Windows the CRT's `.CRT$XI*` and `.CRT$XC*`
+/// initializers, its `.CRT$XD*` dynamic TLS initializers and its `.CRT$XL*` TLS callbacks. Each
+/// may have any priority or other suffix the linker accepts. A Mach-O name is
+/// `segment,section[,type[,attributes]]`, and LLVM trims the space around each part.
 fn is_constructor_section(section: &str) -> bool {
-    let has_prefix = |prefix: &str, separator: char| {
+    if section.contains(',') {
+        let parts: Vec<&str> = section.split(',').map(str::trim).collect();
+        return parts.get(1) == Some(&"__mod_init_func") || parts.get(2) == Some(&"mod_init_funcs");
+    }
+    let has_prefix = |prefix: &str| {
         section
             .strip_prefix(prefix)
-            .is_some_and(|rest| rest.is_empty() || rest.starts_with(separator))
+            .is_some_and(|rest| rest.is_empty() || rest.starts_with('.'))
     };
-    has_prefix(".preinit_array", '.')
-        || has_prefix(".init_array", '.')
-        || has_prefix(".ctors", '.')
-        || has_prefix("__DATA,__mod_init_func", ',')
-        || [".CRT$XI", ".CRT$XC", ".CRT$XL"]
+    has_prefix(".preinit_array")
+        || has_prefix(".init_array")
+        || has_prefix(".ctors")
+        || [".CRT$XI", ".CRT$XC", ".CRT$XD", ".CRT$XL"]
             .iter()
             .any(|prefix| section.starts_with(prefix))
 }
 
-/// The macros `span` was expanded from, innermost first, each with its call site and its path as
-/// `constructor_macros` spells it: the name of the crate that defines it, then its own name. A
-/// re-export doesn't change either, and neither does the module a `#[macro_export]` macro is
-/// written in. The last one's call site is in the source.
-fn expanded_from(cx: &LateContext<'_>, span: Span) -> Vec<(Span, String)> {
+/// A macro a static was expanded from.
+struct Expansion {
+    /// Where it was called.
+    call_site: Span,
+    /// Its path as `constructor_macros` spells it: the name of the crate that defines it, then its
+    /// own name. A re-export doesn't change either, and neither does the module a
+    /// `#[macro_export]` macro is written in.
+    path: String,
+    /// Whether a workspace crate defines it: the crate being compiled, or one `macro_crates`
+    /// lists. A macro whose definition the compiler doesn't name counts as one, so it never lets
+    /// a listed macro outside it pass.
+    in_workspace: bool,
+}
+
+/// The macros `span` was expanded from, innermost first. The last one's call site is in the
+/// source.
+fn expanded_from(cx: &LateContext<'_>, span: Span, macro_crates: &[String]) -> Vec<Expansion> {
     span.macro_backtrace()
         .filter_map(|expansion| {
             let ExpnKind::Macro(_, written) = expansion.kind else {
                 return None;
             };
-            let path = expansion
-                .macro_def_id
-                .and_then(|id| Some((cx.tcx.crate_name(id.krate), cx.tcx.opt_item_name(id)?)))
-                .map_or_else(
-                    || written.to_string(),
-                    |(krate, name)| format!("{krate}::{name}"),
-                );
-            Some((expansion.call_site, path))
+            let defined = expansion.macro_def_id.and_then(|id| {
+                let krate = cx.tcx.crate_name(id.krate);
+                let in_workspace = id.krate == LOCAL_CRATE
+                    || macro_crates
+                        .iter()
+                        .any(|listed| listed.replace('-', "_") == krate.as_str());
+                Some((
+                    format!("{krate}::{}", cx.tcx.opt_item_name(id)?),
+                    in_workspace,
+                ))
+            });
+            let (path, in_workspace) = defined.unwrap_or_else(|| (written.to_string(), true));
+            Some(Expansion {
+                call_site: expansion.call_site,
+                path,
+                in_workspace,
+            })
         })
         .collect()
 }
@@ -170,15 +235,18 @@ fn ui_external_macro_unmatched() {
 }
 
 /// Listing the macros the source calls passes their statics, as does listing the macro inside
-/// them that writes the static, since any macro a static was expanded from counts.
+/// them that writes the static, since any macro a static was expanded from counts, until a
+/// workspace macro is inside it: the statics the workspace's own macro writes are still reported,
+/// even inside a listed framework macro that takes them as tokens. Each fixture's expected output
+/// here is its `.listed.stderr`, and none means nothing is reported.
 #[test]
 fn ui_external_macro_listed() {
     for listed in [
-        r#"["gui::actions", "actions_derive::Action"]"#,
-        r#"["registry::submit"]"#,
+        r#"["gui::actions", "actions_derive::Action", "fw::app", "fw_macros::app"]"#,
+        r#"["registry::submit", "fw_macros::app"]"#,
     ] {
         let fixture = crate::ui_harness::temp_dir().join("code_before_main_listed");
-        copy_without_stderr(Path::new(EXTERNAL_MACRO), &fixture);
+        copy_fixture(Path::new(EXTERNAL_MACRO), &fixture, "listed");
         crate::ui_harness::ui_test_of(CODE_BEFORE_MAIN, &fixture)
             .dylint_toml(crate::ui_harness::dylint_toml_with(
                 "constructor_macros",
@@ -189,21 +257,25 @@ fn ui_external_macro_listed() {
     }
 }
 
-/// Copies the fixture directory `from`, its `auxiliary` directory included, to `to`, leaving out
-/// the expected output so that the test passes only if nothing is reported.
+/// Copies the fixture directory `from`, its `auxiliary` directory included, to `to`, with each
+/// fixture's `<name>.<variant>.stderr` as its expected output, `<name>.stderr`, in place of the
+/// one it has.
 #[cfg(test)]
-fn copy_without_stderr(from: &Path, to: &Path) {
+fn copy_fixture(from: &Path, to: &Path, variant: &str) {
     std::fs::create_dir_all(to).expect("the temporary directory should be writable");
     for entry in std::fs::read_dir(from).expect("the fixture should be readable") {
         let path = entry.expect("the fixture should be readable").path();
-        let target = to.join(path.file_name().expect("a directory entry has a name"));
+        let name = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .expect("a fixture file has a UTF-8 name");
         if path.is_dir() {
-            copy_without_stderr(&path, &target);
-        } else if path
-            .extension()
-            .is_none_or(|extension| extension != "stderr")
-        {
-            std::fs::copy(&path, &target).expect("the fixture should be copyable");
+            copy_fixture(&path, &to.join(name), variant);
+        } else if let Some(stem) = name.strip_suffix(&format!(".{variant}.stderr")) {
+            std::fs::copy(&path, to.join(format!("{stem}.stderr")))
+                .expect("the fixture should be copyable");
+        } else if !name.ends_with(".stderr") {
+            std::fs::copy(&path, to.join(name)).expect("the fixture should be copyable");
         }
     }
 }

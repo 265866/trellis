@@ -383,7 +383,8 @@ constructors, code that runs before `main()`, in this project's own code, which
 rules pull request as the `wrappers` entry: list each macro in `constructor_macros` in
 `dylint.toml`, by the path the report names, the crate that defines the macro and its name, such as
 `gpui::actions` and `gpui_macros::Action`. A listed macro may place any constructor, so list only
-the macros the framework needs.
+the macros the framework needs. A constructor that one of this project's own macros writes stays
+reported, even inside a listed macro.
 {%- if web_ui %}
 
 An npm package of the web UI under a license `about.toml` doesn't accept lands the same way.

@@ -87,13 +87,45 @@ LL | static CRT_XLB: extern "C" fn() = init;
    |
    = help: call the code from `main` instead
 
+warning: a `static` in `.CRT$XDU`, which runs code before `main`
+  --> $DIR/code_before_main.rs:65:1
+   |
+LL | static CRT_XDU: extern "C" fn() = init;
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: call the code from `main` instead
+
+warning: a `static` in `__DATA, __mod_init_func`, which runs code before `main`
+  --> $DIR/code_before_main.rs:70:1
+   |
+LL | static MOD_INIT_FUNC_SPACED: extern "C" fn() = init;
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: call the code from `main` instead
+
+warning: a `static` in `__DATA_CONST,__mod_init_func`, which runs code before `main`
+  --> $DIR/code_before_main.rs:75:1
+   |
+LL | static MOD_INIT_FUNC_CONST: extern "C" fn() = init;
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: call the code from `main` instead
+
+warning: a `static` in `__DATA,__mystuff,mod_init_funcs`, which runs code before `main`
+  --> $DIR/code_before_main.rs:80:1
+   |
+LL | static MYSTUFF_INIT_FUNCS: extern "C" fn() = init;
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: call the code from `main` instead
+
 warning: a `static` in `.init_array`, which runs code before `main`
-  --> $DIR/code_before_main.rs:67:9
+  --> $DIR/code_before_main.rs:87:9
    |
 LL |         static NESTED: extern "C" fn() = init;
    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    |
    = help: call the code from `main` instead
 
-warning: 12 warnings emitted
+warning: 16 warnings emitted
 

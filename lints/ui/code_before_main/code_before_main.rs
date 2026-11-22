@@ -59,6 +59,26 @@ static CRT_XIU: extern "C" fn() = init;
 #[unsafe(link_section = ".CRT$XLB")]
 static CRT_XLB: extern "C" fn() = init;
 
+// Flagged: the Windows CRT's dynamic TLS initializers, which run as the process starts.
+#[used]
+#[unsafe(link_section = ".CRT$XDU")]
+static CRT_XDU: extern "C" fn() = init;
+
+// Flagged: Apple's constructors with spaces around the parts, which LLVM trims.
+#[used]
+#[unsafe(link_section = "__DATA, __mod_init_func")]
+static MOD_INIT_FUNC_SPACED: extern "C" fn() = init;
+
+// Flagged: Apple's constructors in another segment.
+#[used]
+#[unsafe(link_section = "__DATA_CONST,__mod_init_func")]
+static MOD_INIT_FUNC_CONST: extern "C" fn() = init;
+
+// Flagged: a section of any name whose type makes dyld run it.
+#[used]
+#[unsafe(link_section = "__DATA,__mystuff,mod_init_funcs")]
+static MYSTUFF_INIT_FUNCS: extern "C" fn() = init;
+
 // Flagged: inside a function, the way a macro might write it.
 fn nested() {
     const _: () = {
@@ -89,6 +109,11 @@ static MOD_INIT_FUNCS: u32 = 1;
 #[used]
 #[unsafe(link_section = ".preinit_arrays")]
 static PREINIT_ARRAYS: u32 = 1;
+
+// Not flagged: an Apple section of another name and an ordinary type.
+#[used]
+#[unsafe(link_section = "__DATA,__mystuff,regular")]
+static MYSTUFF: u32 = 1;
 
 // Not flagged: a static in no section of its own.
 static PLAIN: extern "C" fn() = init;

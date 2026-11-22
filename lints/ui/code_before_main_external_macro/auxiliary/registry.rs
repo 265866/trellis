@@ -12,7 +12,10 @@ macro_rules! submit {
             }
             #[used]
             #[cfg_attr(target_os = "linux", link_section = ".init_array")]
-            #[cfg_attr(target_vendor = "apple", link_section = "__DATA,__mod_init_func,mod_init_funcs")]
+            #[cfg_attr(
+                target_vendor = "apple",
+                link_section = "__DATA,__mod_init_func,mod_init_funcs"
+            )]
             #[cfg_attr(windows, link_section = ".CRT$XCU")]
             static CONSTRUCTOR: unsafe extern "C" fn() = constructor;
         };
