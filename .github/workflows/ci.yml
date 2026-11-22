@@ -275,6 +275,36 @@ jobs:
       - run: just image-extras
       - run: just release-extras
 
+  # A project on Windows installs its checker through the PowerShell form of `install-policy`,
+  # which no other job runs.
+  checker-install:
+    name: Checker install (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux
+            os: ubuntu-24.04
+          - name: Windows
+            os: windows-2025
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2.90.5
+        with:
+          tool: just@1.59.0,uv@0.13.8
+
+      - name: Install the pinned toolchain
+        shell: bash
+        run: rustup toolchain install
+
+      - run: just checker-install
+        shell: bash
+
   # A generated binary's workflows build C code for musl after the musl-gcc step this job copies.
   # `just pins` keeps the two the same.
   musl-c:
@@ -365,7 +395,7 @@ jobs:
   # counts a skipped required check as passing.
   passed:
     name: CI passed
-    needs: [quick, policy, template, dependencies, shapes, musl-c, service-image, service-image-run]
+    needs: [quick, policy, template, dependencies, shapes, checker-install, musl-c, service-image, service-image-run]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5

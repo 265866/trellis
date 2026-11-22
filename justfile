@@ -475,7 +475,7 @@ lints-test:
     cargo test --locked
 
 # Runs `template` for each kind, then `shapes`, `dependencies`, `update` and the extras checks.
-templates: (template "binary") (template "binary" "ci" "false" "true") (template "service") (template "service" "ci" "false" "true") (template "library") shapes dependencies update build-extras image-extras release-extras
+templates: (template "binary") (template "binary" "ci" "false" "true") (template "service") (template "service" "ci" "false" "true") (template "library") shapes dependencies update build-extras image-extras release-extras checker-install
 
 # Checks that every exclusion in copier.yml renders with only the answers an older trellis asked,
 # as Copier renders them when a project updates from it. Then copies the working tree into a
@@ -1365,6 +1365,103 @@ release-extras:
       cat "$out/actionlint.txt" >&2
       fail "just actionlint passed a release/package.sh that shellcheck faults"
     fi
+
+# Generates a library as a user gets it, with its checker fetched from a scratch copy of this
+# checkout in place of GitHub, and checks that `just install-policy` installs the pinned checker
+# whatever an earlier install left. The copy has two commits: the pinned one is this working tree,
+# and the one before has a checker that says it is stale. Installed one after the other through
+# trellis 0.17.3's recipe with one shared target directory, cargo installs the stale build, records
+# the pinned commit as installed, and that recipe then keeps the stale checker. With
+# CARGO_TARGET_DIR and CARGO_BUILD_BUILD_DIR still naming that directory, `just policy` must install
+# the pinned checker without writing there, and pass. Then `just install-policy` must print nothing
+# and run no cargo, and must start an install when the binary is missing, has changed at the same
+# size, or was recorded at another commit. A failed install must leave neither the record nor its build directory.
+#
+# Checks that installing the checker recovers from a stale build and a stale record.
+checker-install:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    out=$(mktemp -d)
+    trap 'rm -rf "$out"' EXIT
+    # Git Bash on Windows: a `C:/...` path means the same directory to bash, git, Copier and Cargo.
+    if command -v cygpath > /dev/null; then
+      out=$(cygpath --mixed "$out")
+    fi
+    fail() { echo "error: checker-install: $1" >&2; exit 1; }
+    commit() { git -c user.name=trellis -c user.email=trellis@localhost "$@"; }
+    mkdir "$out/trellis"
+    tar --create --exclude=./.git --exclude=./target --exclude=./lints/target --file=- . \
+      | tar --extract --directory="$out/trellis" --file=-
+    cd "$out/trellis"
+    git init --quiet --initial-branch main
+    cp policy/src/main.rs "$out/main.rs"
+    line='        "All {} structure rules hold in {root}.",'
+    awk -v old="$line" '!done && $0 == old { sub(/"All/, "\"The stale checker: all"); done = 1 } { print } END { exit !done }' \
+      "$out/main.rs" > policy/src/main.rs || fail "policy/src/main.rs has no line $line"
+    git add --all
+    commit commit --quiet --message stale
+    stale=$(git rev-parse HEAD)
+    cp "$out/main.rs" policy/src/main.rs
+    commit commit --quiet --all --message pinned
+    pinned=$(git rev-parse HEAD)
+    export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0="url.$out/trellis.insteadOf" \
+      GIT_CONFIG_VALUE_0=https://github.com/265866/trellis CARGO_NET_GIT_FETCH_WITH_CLI=true
+    uv tool run copier@9.19.1 copy --quiet --defaults --vcs-ref HEAD --data project_name=demo-checker \
+      --data "description=A demo library that trellis generates for its tests." --data kind=library \
+      "$out/trellis" "$out/demo"
+    cd "$out/demo"
+    git init --quiet --initial-branch main
+    git add --all
+    commit commit --quiet --message "chore: generate from trellis"
+    [ "$(just --evaluate trellis_rev | tr -d '\r\n')" = "$pinned" ] || fail "the project doesn't pin the scratch commit"
+    old() {
+      cargo install --quiet --locked --root target/trellis-policy --git https://github.com/265866/trellis \
+        --rev "$1" trellis-policy
+    }
+    stale_checker() { grep --quiet 'The stale checker' <<< "$(target/trellis-policy/bin/trellis-policy check)"; }
+    CARGO_TARGET_DIR="$out/shared" old "$stale"
+    CARGO_TARGET_DIR="$out/shared" old "$pinned"
+    stale_checker || fail "trellis 0.17.3's recipe installed the pinned checker, so this test no longer builds the state it repairs"
+    old "$pinned"
+    stale_checker || fail "trellis 0.17.3's recipe left the stale checker without the shared target directory, so this test no longer builds the state it repairs"
+    touch "$out/before"
+    CARGO_TARGET_DIR="$out/shared" CARGO_BUILD_BUILD_DIR="$out/shared" just policy > "$out/policy.txt" 2> "$out/policy.err" \
+      || { cat "$out/policy.txt" "$out/policy.err" >&2; fail "just policy failed over a stale checker and its record"; }
+    written=$(find "$out/shared" -newer "$out/before")
+    [ -z "$written" ] || fail "the install wrote to the target directory CARGO_TARGET_DIR names: $written"
+    if grep --quiet 'The stale checker' "$out/policy.txt" || ! grep --quiet 'structure rules hold' "$out/policy.txt"; then
+      cat "$out/policy.txt" >&2
+      fail "just policy ran a checker other than the pinned one"
+    fi
+    tr -d '\r' < "$out/policy.err" | grep --quiet --line-regexp --fixed-strings "Installing trellis-policy at $pinned." \
+      || { cat "$out/policy.err" >&2; fail "just policy didn't say it installed the checker"; }
+    # With RUSTC naming no file, cargo fails as soon as it starts, so a run that succeeds ran none.
+    install() { RUSTC="$out/no-rustc" just install-policy > "$out/install.txt" 2>&1; }
+    install || { cat "$out/install.txt" >&2; fail "just install-policy started an install over the pinned checker"; }
+    [ ! -s "$out/install.txt" ] || { cat "$out/install.txt" >&2; fail "just install-policy printed something when it had nothing to install"; }
+    bin=target/trellis-policy/bin/trellis-policy
+    if [ -f "$bin.exe" ]; then bin=$bin.exe; fi
+    stamp=target/trellis-policy/trellis-rev
+    cp "$bin" "$out/checker"
+    cp "$stamp" "$out/stamp"
+    reinstalls() {
+      if install; then fail "just install-policy kept the checker when $1"; fi
+      grep --quiet --fixed-strings "Installing trellis-policy at $pinned." "$out/install.txt" \
+        || { cat "$out/install.txt" >&2; fail "just install-policy failed without starting an install when $1"; }
+      [ ! -e "$stamp" ] || fail "a failed install left $stamp"
+      [ ! -e target/trellis-policy/build ] || fail "a failed install left target/trellis-policy/build"
+      cp "$out/checker" "$bin"
+      cp "$out/stamp" "$stamp"
+    }
+    rm "$bin"
+    reinstalls "its binary was missing"
+    byte=$(dd if="$bin" bs=1 skip=4096 count=1 2> /dev/null | od -An -tu1 | tr -d ' ')
+    printf "\\$(printf '%03o' $(( byte ^ 1 )))" | dd of="$bin" bs=1 seek=4096 conv=notrunc 2> /dev/null
+    reinstalls "its binary had changed at the same size"
+    awk '{ $1 = "an-older-commit"; print }' "$out/stamp" > "$stamp"
+    reinstalls "it was recorded at another commit"
+    install || { cat "$out/install.txt" >&2; fail "just install-policy started an install over the restored checker"; }
+    echo "just install-policy replaced a stale checker and its record, and skipped only the pinned one."
 
 # A generated service's CI builds the image for every architecture on an x86-64 runner, as its
 # release does, cross-compiling for the others. CI's `Service image` jobs build the arm64 one here
