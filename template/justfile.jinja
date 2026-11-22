@@ -171,9 +171,9 @@ links:
     lychee --offline --include-fragments --no-progress --exclude-path target{{ ' --exclude-path crates/' ~ crate_name ~ '/web/node_modules' if web_ui else '' }} './**/*.md'
 {%- raw %}
 
-# The structure rules: workspace lints, manifests, build scripts, config files, crate
-# dependencies, the release changelog, the docs index, and the docs layout that `docs_files` and
-# `readme_sections` in Cargo.toml set.
+# The structure rules: workspace lints, manifests, a published crate's license files, build
+# scripts, config files, crate dependencies, the release changelog, the docs index, and the docs
+# layout that `docs_files` and `readme_sections` in Cargo.toml set.
 #
 # Checks the structure rules.
 policy: install-policy
@@ -367,23 +367,25 @@ web-notices: web-install install-policy
 {%- endif %}
 {%- if kind == 'library' and publish_crate %}
 
-# The license files have to be inside the crate's directory, since a package holds only the files
+# The license files have to be inside each crate's directory, since a package holds only the files
 # under it; the README comes from `readme.workspace`.
 #
-# Checks the crate packages its README and license files.
+# Checks every crate packages its README and license files.
 [unix]
 package:
     #!/usr/bin/env bash
     set -euo pipefail
-    files=$(cargo package --locked --allow-dirty --list --package {{ crate_name }})
-    for file in README.md {{ {'MIT': 'LICENSE', 'MIT OR Apache-2.0': 'LICENSE-MIT LICENSE-APACHE'}[license] }}; do
-      grep --quiet --line-regexp "$file" <<< "$files" || { echo "error: the package lacks $file" >&2; exit 1; }
+    for manifest in crates/*/Cargo.toml; do
+      files=$(cargo package --locked --allow-dirty --list --manifest-path "$manifest")
+      for file in README.md {{ {'MIT': 'LICENSE', 'MIT OR Apache-2.0': 'LICENSE-MIT LICENSE-APACHE'}[license] }}; do
+        grep --quiet --line-regexp "$file" <<< "$files" || { echo "error: the package of ${manifest%/Cargo.toml} lacks $file" >&2; exit 1; }
+      done
     done
 
-# Checks the crate packages its README and license files.
+# Checks every crate packages its README and license files.
 [windows]
 package:
-    $files = cargo package --locked --allow-dirty --list --package {{ crate_name }}; if ($LASTEXITCODE -ne 0) { exit 1 }; foreach ($file in @('README.md', {{ {'MIT': "'LICENSE'", 'MIT OR Apache-2.0': "'LICENSE-MIT', 'LICENSE-APACHE'"}[license] }})) { if ($files -notcontains $file) { Write-Error "the package lacks $file"; exit 1 } }
+    foreach ($manifest in Get-ChildItem crates/*/Cargo.toml) { $crate = "crates/$($manifest.Directory.Name)"; $files = cargo package --locked --allow-dirty --list --manifest-path $manifest.FullName; if ($LASTEXITCODE -ne 0) { exit 1 }; foreach ($file in @('README.md', {{ {'MIT': "'LICENSE'", 'MIT OR Apache-2.0': "'LICENSE-MIT', 'LICENSE-APACHE'"}[license] }})) { if ($files -notcontains $file) { Write-Error "the package of $crate lacks $file"; exit 1 } } }
 {%- endif %}
 {%- if kind == 'service' %}
 

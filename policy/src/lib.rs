@@ -27,6 +27,7 @@ mod head;
 mod html;
 pub mod internal_dependencies;
 pub mod internal_dependency_versions;
+pub mod license_files;
 mod lint_expectations;
 pub mod lints_tables;
 mod markdown;

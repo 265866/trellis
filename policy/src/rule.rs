@@ -5,8 +5,9 @@ use crate::violation::Violation;
 use crate::workspace::Workspace;
 use crate::{
     agent_files, build_scripts, config_files, deploy_scripts, docs_index, docs_layout,
-    internal_dependencies, internal_dependency_versions, lints_tables, member_manifests,
-    member_sources, proc_macros, release_changelog, restricted_crates, workspace_shape,
+    internal_dependencies, internal_dependency_versions, license_files, lints_tables,
+    member_manifests, member_sources, proc_macros, release_changelog, restricted_crates,
+    workspace_shape,
 };
 
 /// A structure rule of the workspace, which one check enforces.
@@ -27,6 +28,9 @@ pub enum Rule {
     MemberManifests,
     /// Every member reads its sources only from its own directory.
     MemberSources,
+    /// Every published member's directory holds the license files its `license` names, since its
+    /// package holds only the files under that directory.
+    LicenseFiles,
     /// Members depend directly only on the proc-macro crates in `proc_macro_crates`.
     ProcMacros,
     /// The root `AGENTS.md` is the only file of instructions for coding agents.
@@ -57,11 +61,12 @@ pub enum Rule {
 
 impl Rule {
     /// Every rule, in the order `trellis-policy check` runs them.
-    pub const ALL: [Self; 15] = [
+    pub const ALL: [Self; 16] = [
         Self::WorkspaceShape,
         Self::LintsTables,
         Self::MemberManifests,
         Self::MemberSources,
+        Self::LicenseFiles,
         Self::BuildScripts,
         Self::ProcMacros,
         Self::InternalDependencies,
@@ -85,6 +90,7 @@ impl Rule {
             Self::WorkspaceShape => "workspace_shape",
             Self::MemberManifests => "member_manifests",
             Self::MemberSources => "member_sources",
+            Self::LicenseFiles => "license_files",
             Self::ProcMacros => "proc_macros",
             Self::AgentFiles => "agent_files",
             Self::InternalDependencies => "internal_dependencies",
@@ -110,6 +116,7 @@ impl Rule {
             Self::WorkspaceShape => workspace_shape::check(workspace),
             Self::MemberManifests => Ok(member_manifests::check(workspace)),
             Self::MemberSources => member_sources::check(workspace),
+            Self::LicenseFiles => license_files::check(workspace),
             Self::ProcMacros => Ok(proc_macros::check(workspace)),
             Self::AgentFiles => agent_files::check(workspace),
             Self::InternalDependencies => Ok(internal_dependencies::check(workspace)),

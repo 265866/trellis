@@ -92,6 +92,14 @@ impl Workspace {
         &self.metadata
     }
 
+    /// Whether `member` is published: its `publish` is neither `false` nor `[]`.
+    pub(crate) fn publishes(&self, member: &WorkspaceMember) -> bool {
+        self.metadata[member.id()]
+            .publish
+            .as_ref()
+            .is_none_or(|registries| !registries.is_empty())
+    }
+
     /// `path` relative to the workspace root, with `/` separators, as violations name files. A
     /// path outside the root is written in full.
     pub(crate) fn relative(&self, path: &Path) -> String {

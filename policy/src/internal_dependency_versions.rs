@@ -31,13 +31,6 @@ use crate::workspace::{Workspace, WorkspaceMember};
 /// and the check leaves it alone.
 #[must_use]
 pub fn check(workspace: &Workspace) -> Vec<Violation> {
-    let metadata = workspace.metadata();
-    let publishes = |member: &WorkspaceMember| {
-        metadata[member.id()]
-            .publish
-            .as_ref()
-            .is_none_or(|registries| !registries.is_empty())
-    };
     let members: Vec<(PathBuf, &WorkspaceMember)> = workspace
         .members()
         .iter()
@@ -51,9 +44,9 @@ pub fn check(workspace: &Workspace) -> Vec<Violation> {
             let Some((_, target)) = members.iter().find(|(dir, _)| *dir == target) else {
                 continue;
             };
-            let unpublished = if !publishes(member) {
+            let unpublished = if !workspace.publishes(member) {
                 Some(member.name())
-            } else if !publishes(target) {
+            } else if !workspace.publishes(target) {
                 Some(target.name())
             } else {
                 None

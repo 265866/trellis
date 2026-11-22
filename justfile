@@ -487,8 +487,10 @@ templates: (template "binary") (template "binary" "ci" "false" "true") (template
 # markers, keep the owner's lines, bring v2's, and pass `trellis-policy check`; the owner's code
 # and changelog must not move. Then it makes the project private and public again with
 # `--vcs-ref=:current:`, which must keep v2 and the owner's edits, and publishes the crate under
-# each license, which must deliver only that license's files to the crate's directory; each of
-# these answer changes must pass `trellis-policy check`. Last, it generates a library with no
+# each license, which must deliver only that license's files to the crate's directory and fail
+# `trellis-policy check` on the owner's crate until the owner swaps in the root's there too, from
+# no files and from the other license's; each of these answer changes must then pass
+# `trellis-policy check`. Last, it generates a library with no
 # license and publishes it: the update must refuse `publish_crate=true` without a license, and
 # with `license=MIT` it must fail `trellis-policy check` until the crate inherits the license,
 # then pass it and `trellis-policy rule-changes` as one rule change.
@@ -661,6 +663,16 @@ update:
       [ ! -e "$lib/added.rs" ] || fail "publishing under $license added a scaffold file to the owner's crate"
       if grep --recursive --quiet '^<<<<<<<' --exclude-dir=.git .; then fail "publishing under $license left conflict markers"; fi
       kept "publishing under $license"
+      # demo_text, which the owner added, keeps the license files it had: none when first
+      # published, and then the dual license's, which aren't `LICENSE`. So `trellis-policy check`
+      # fails until the owner swaps in the root's files, as the docs say.
+      if policy check > "$out/license.txt" \
+        || ! grep --quiet "\[license_files\] crates/demo_text/Cargo.toml: \`demo_text\` is published under \`$license\`, but \`crates/demo_text/\` lacks \`${delivered[0]}\`" "$out/license.txt"; then
+        cat "$out/license.txt" >&2
+        fail "trellis-policy check passed a published crate without the files of $license"
+      fi
+      rm -f crates/demo_text/LICENSE crates/demo_text/LICENSE-MIT crates/demo_text/LICENSE-APACHE
+      cp "${delivered[@]}" crates/demo_text/
       policy check
     done
     git add --all
@@ -688,7 +700,7 @@ update:
     done
     kept "unlicensing it"
     sed -i.bak '/^license.workspace = true$/d' crates/demo/Cargo.toml crates/demo_text/Cargo.toml
-    rm crates/demo/Cargo.toml.bak crates/demo_text/Cargo.toml.bak
+    rm crates/demo/Cargo.toml.bak crates/demo_text/Cargo.toml.bak crates/demo_text/LICENSE
     policy check
     policy rule-changes HEAD
     copier copy --quiet --defaults --vcs-ref v2 --data project_name=unlicensed \
@@ -731,8 +743,9 @@ update:
 # nothing more than no kit, while a script shellcheck faults in either fails `just policy`, and so
 # does the `version` that `cargo add --path` gives a binary's or service's dependency on its other
 # crate, a `release-plz.toml` that would write that crate's changelog into it, a crate's own
-# `[package] version`, and a missing `release-plz.toml`. A `target` runs `test` and
-# `build-release` for that target, as a project's CI does for the target a release ships.
+# `[package] version`, and a missing `release-plz.toml`. A published library's crate without its
+# `LICENSE` fails `just policy` and `just package`. A `target` runs `test` and `build-release` for
+# that target, as a project's CI does for the target a release ships.
 #
 # Generates a project of one kind and runs its checks.
 template kind recipes="ci" publish="false" web="false" target="":
@@ -835,6 +848,24 @@ template kind recipes="ci" publish="false" web="false" target="":
         exit 1
       fi
       git checkout --quiet -- crates
+      if [ "{{ publish }}" = true ]; then
+        # A published crate's package holds only the files under its directory, so without its
+        # license file there it would reach crates.io without the license text: `just policy`
+        # and `just package` fail.
+        crate="${source%%/src/*}"
+        rm "$crate/LICENSE"
+        if just policy > "$out/policy.txt" 2>&1 || ! grep --quiet "\[license_files\] $crate/Cargo.toml: .* but \`$crate/\` lacks \`LICENSE\`" "$out/policy.txt"; then
+          cat "$out/policy.txt" >&2
+          echo "error: just policy passed a published crate without its license file" >&2
+          exit 1
+        fi
+        if just package > "$out/package.txt" 2>&1 || ! grep --quiet "the package of $crate lacks LICENSE" "$out/package.txt"; then
+          cat "$out/package.txt" >&2
+          echo "error: just package passed a published crate without its license file" >&2
+          exit 1
+        fi
+        git checkout --quiet -- crates
+      fi
       # Without release-plz.toml, release-plz falls back to its defaults, which write each crate's
       # changelog into the crate, so `just policy` fails.
       mv release-plz.toml "$out/release-plz.toml"
