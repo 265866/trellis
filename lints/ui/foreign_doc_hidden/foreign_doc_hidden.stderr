@@ -199,5 +199,13 @@ LL |         hidden_fields::Limits::HIDDEN => secret,
    |
    = help: use the crate's documented API instead, as the Google Rust Style Guide's "Do not access items marked `#[doc(hidden)]` that you don't own" asks
 
-warning: 25 warnings emitted
+warning: `hidden_fields::Limits::HIDDEN` is `#[doc(hidden)]` in `hidden_fields`
+  --> $DIR/foreign_doc_hidden.rs:176:32
+   |
+LL |         hidden_fields::Limits::HIDDEN..=100 => at_limit,
+   |                                ^^^^^^
+   |
+   = help: use the crate's documented API instead, as the Google Rust Style Guide's "Do not access items marked `#[doc(hidden)]` that you don't own" asks
+
+warning: 26 warnings emitted
 

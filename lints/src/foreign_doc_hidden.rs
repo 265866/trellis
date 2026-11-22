@@ -158,6 +158,13 @@ impl<'tcx> LateLintPass<'tcx> for ForeignDocHidden {
                 hir_id,
                 ..
             }) => check_type_relative(cx, qpath, hir_id, written),
+            PatKind::Range(start, end, _) => {
+                for bound in [start, end].into_iter().flatten() {
+                    if let PatExprKind::Path(ref qpath) = bound.kind {
+                        check_type_relative(cx, qpath, bound.hir_id, written);
+                    }
+                }
+            }
             _ => {}
         }
     }

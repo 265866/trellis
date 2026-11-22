@@ -167,8 +167,13 @@ fn levels(level: hidden_fields::Level, limit: u32) -> u32 {
         LevelAlias::Secret => 1,
         LevelAlias::Low => 0,
     };
-    match limit {
+    let at_limit = match limit {
         hidden_fields::Limits::HIDDEN => secret,
+        _ => 0,
+    };
+    // Flagged: the hidden constant at the start of a range pattern.
+    match limit {
+        hidden_fields::Limits::HIDDEN..=100 => at_limit,
         _ => 0,
     }
 }
