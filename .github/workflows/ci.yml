@@ -257,6 +257,7 @@ jobs:
 
       - run: just shapes
       - run: just update
+      - run: just build-extras
 
   # A generated binary's workflows build C code for musl after the musl-gcc step this job copies.
   # `just pins` keeps the two the same.

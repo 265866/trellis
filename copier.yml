@@ -1,6 +1,9 @@
 _min_copier_version: "9.10.0"
 _subdirectory: template
 _answers_file: .copier-answers.yml
+# The project's own once generated: a starter that an update never overwrites.
+_skip_if_exists:
+  - .github/setup-build.sh
 # Copier prints this after an interactive copy, but not under `--quiet`, so docs/maintaining.md
 # stays the full procedure.
 _message_after_copy: |
@@ -28,6 +31,7 @@ _exclude:
   - "{% if kind != 'binary' %}/.github/workflows/build-release.yml{% endif %}"
   - "{% if not (kind == 'binary' and 'windows' in platforms) %}/.cargo{% endif %}"
   - "{% if kind != 'service' %}/.dockerignore{% endif %}"
+  - "{% if not (kind == 'binary' and build.setup) %}/.github/setup-build.sh{% endif %}"
   - "{% if kind != 'service' %}/Containerfile{% endif %}"
   - "{% if kind == 'library' %}/about.hbs{% endif %}"
   - "{% if kind == 'library' %}/about.toml{% endif %}"
@@ -137,6 +141,39 @@ web_ui:
   default: false
   when: "{{ kind == 'service' }}"
 
+build:
+  type: yaml
+  help: >-
+    What a binary's builds need beyond Rust, as a YAML mapping, or {} for nothing. `libc: gnu`
+    builds for Linux with glibc instead of musl, for a program that links system libraries such as
+    GTK or Vulkan. `setup: true` runs `.github/setup-build.sh` before every CI and release build,
+    on each runner, to install what they need. `timeout` raises those builds' limit from 60
+    minutes. Most binaries need nothing. Example: `{libc: gnu, setup: true, timeout: 90}`.
+  default: {}
+  when: "{{ kind == 'binary' }}"
+  # Copier runs this even when it doesn't ask, so a `--data` answer can't reach another kind.
+  validator: >-
+    {%- set ns = namespace(error='') -%}
+    {%- if build is not mapping -%}
+    {%- set ns.error = 'Write a mapping, such as `{libc: gnu, setup: true}`, or `{}` for nothing.' -%}
+    {%- elif build and kind != 'binary' -%}
+    {%- set ns.error = 'Only a binary takes a `build` answer.' -%}
+    {%- else -%}
+    {%- for key in build if key not in ['libc', 'setup', 'timeout'] -%}
+    {%- set ns.error = '`' ~ key ~ '` is not a key it takes; use `libc`, `setup` or `timeout`.' -%}
+    {%- endfor -%}
+    {%- if 'libc' in build and build.libc not in ['musl', 'gnu'] -%}
+    {%- set ns.error = '`libc` is `musl`, the default, or `gnu`.' -%}
+    {%- endif -%}
+    {%- if 'setup' in build and build.setup is not boolean -%}
+    {%- set ns.error = '`setup` is `true` or `false`.' -%}
+    {%- endif -%}
+    {%- if 'timeout' in build and (build.timeout is not integer or build.timeout is boolean or build.timeout < 60 or build.timeout > 360) -%}
+    {%- set ns.error = '`timeout` is a number of minutes from 60 to 360.' -%}
+    {%- endif -%}
+    {%- endif -%}
+    {{ ns.error }}
+
 publish_crate:
   type: bool
   help: >-
@@ -188,12 +225,13 @@ crate_name:
 
 # What CI tests on, a binary's release builds and a service's image runs on, one entry per target,
 # in the order the docs list them. A binary's Linux builds use musl, which links statically, so its
-# archives run on any Linux; a library's consumers and a service's image use glibc.
+# archives run on any Linux, unless its `build` answer asks for glibc; a library's consumers and a
+# service's image use glibc.
 targets:
   type: yaml
   default: >-
     {%- set os_list = ['linux'] if kind == 'service' else platforms -%}
-    {%- set libc = 'musl' if kind == 'binary' else 'gnu' -%}
+    {%- set libc = 'musl' if kind == 'binary' and build.libc | default('musl') == 'musl' else 'gnu' -%}
     {%- set names = {'x86_64': 'x86-64', 'aarch64': 'ARM64'} -%}
     {%- set ns = namespace(targets=[]) -%}
     {%- if 'linux' in os_list -%}

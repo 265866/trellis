@@ -96,6 +96,11 @@ typos:
 actionlint:
     shellcheck --version
     actionlint
+{%- endraw %}
+{%- if build.setup %}
+    shellcheck --norc .github/setup-build.sh
+{%- endif %}
+{%- raw %}
 
 # Audits the GitHub workflows for security problems.
 zizmor:

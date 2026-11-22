@@ -23,6 +23,11 @@ on:
       - about.toml
       - crates/*/Cargo.toml
       - crates/*/build.rs
+{%- endraw %}
+{%- if build.setup %}
+      - .github/setup-build.sh
+{%- endif %}
+{%- raw %}
       - rust-toolchain.toml
 
 permissions:
@@ -35,7 +40,9 @@ jobs:
   build:
     name: ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 60
+{%- endraw %}
+    timeout-minutes: {{ build.timeout | default(60) }}
+{%- raw %}
     strategy:
       fail-fast: false
       matrix:
@@ -62,7 +69,16 @@ jobs:
           rustup toolchain install
           rustup target add "$TARGET"
 {%- endraw %}
-{%- if 'linux' in platforms %}
+{%- if build.setup %}
+
+      # .github/setup-build.sh installs what the build needs beyond Rust on each runner, such as
+      # system libraries; docs/maintaining.md says what it gets.
+      - name: Set up the build
+        env:
+          TARGET: {% raw %}${{ matrix.target }}{% endraw %}
+        run: bash .github/setup-build.sh
+{%- endif %}
+{%- if 'linux' in platforms and build.libc | default('musl') == 'musl' %}
 
       # cc, which builds the C code some crates have, needs musl-gcc to build for musl, and finds it
       # on its own only for x86-64, so `CC_<target>` names it.
