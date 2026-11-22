@@ -487,9 +487,10 @@ templates: (template "binary") (template "binary" "ci" "false" "true") (template
 # markers, keep the owner's lines, bring v2's, and pass `trellis-policy check`; the owner's code
 # and changelog must not move. Then it makes the project private and public again with
 # `--vcs-ref=:current:`, which must keep v2 and the owner's edits, and publishes the crate under
-# each license, which must deliver only that license's files to the crate's directory. The first
-# must fail `trellis-policy check` on the owner's crate until the owner copies them there too; each
-# of these answer changes must then pass `trellis-policy check`. Last, it generates a library with no
+# each license, which must deliver only that license's files to the crate's directory and fail
+# `trellis-policy check` on the owner's crate until the owner swaps in the root's there too, from
+# no files and from the other license's; each of these answer changes must then pass
+# `trellis-policy check`. Last, it generates a library with no
 # license and publishes it: the update must refuse `publish_crate=true` without a license, and
 # with `license=MIT` it must fail `trellis-policy check` until the crate inherits the license,
 # then pass it and `trellis-policy rule-changes` as one rule change.
@@ -663,12 +664,10 @@ update:
       if grep --recursive --quiet '^<<<<<<<' --exclude-dir=.git .; then fail "publishing under $license left conflict markers"; fi
       kept "publishing under $license"
       # demo_text, which the owner added, keeps the license files it had: none when first
-      # published, so `trellis-policy check` fails until the owner copies the root's, and then
-      # LICENSE-MIT, which MIT alone takes too. The owner swaps in the root's files, as the docs say.
-      if [ "$license" = MIT ]; then
-        policy check
-      elif policy check > "$out/license.txt" \
-        || ! grep --quiet "\[license_files\] crates/demo_text/Cargo.toml: \`demo_text\` is published under \`$license\`" "$out/license.txt"; then
+      # published, and then the dual license's, which aren't `LICENSE`. So `trellis-policy check`
+      # fails until the owner swaps in the root's files, as the docs say.
+      if policy check > "$out/license.txt" \
+        || ! grep --quiet "\[license_files\] crates/demo_text/Cargo.toml: \`demo_text\` is published under \`$license\`, but \`crates/demo_text/\` lacks \`${delivered[0]}\`" "$out/license.txt"; then
         cat "$out/license.txt" >&2
         fail "trellis-policy check passed a published crate without the files of $license"
       fi
@@ -855,7 +854,7 @@ template kind recipes="ci" publish="false" web="false" target="":
         # and `just package` fail.
         crate="${source%%/src/*}"
         rm "$crate/LICENSE"
-        if just policy > "$out/policy.txt" 2>&1 || ! grep --quiet "\[license_files\] $crate/Cargo.toml: .* but \`$crate/\` has neither \`LICENSE\` nor \`LICENSE-MIT\`" "$out/policy.txt"; then
+        if just policy > "$out/policy.txt" 2>&1 || ! grep --quiet "\[license_files\] $crate/Cargo.toml: .* but \`$crate/\` lacks \`LICENSE\`" "$out/policy.txt"; then
           cat "$out/policy.txt" >&2
           echo "error: just policy passed a published crate without its license file" >&2
           exit 1

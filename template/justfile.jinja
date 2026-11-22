@@ -171,9 +171,9 @@ links:
     lychee --offline --include-fragments --no-progress --exclude-path target{{ ' --exclude-path crates/' ~ crate_name ~ '/web/node_modules' if web_ui else '' }} './**/*.md'
 {%- raw %}
 
-# The structure rules: workspace lints, manifests, build scripts, config files, crate
-# dependencies, the release changelog, the docs index, and the docs layout that `docs_files` and
-# `readme_sections` in Cargo.toml set.
+# The structure rules: workspace lints, manifests, a published crate's license files, build
+# scripts, config files, crate dependencies, the release changelog, the docs index, and the docs
+# layout that `docs_files` and `readme_sections` in Cargo.toml set.
 #
 # Checks the structure rules.
 policy: install-policy

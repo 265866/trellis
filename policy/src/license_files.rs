@@ -7,7 +7,6 @@ use std::path::Path;
 
 use spdx::{Expression, LicenseItem, ParseMode};
 
-use crate::case_insensitive;
 use crate::policy_error::PolicyError;
 use crate::violation::Violation;
 use crate::workspace::{Workspace, WorkspaceMember};
@@ -21,8 +20,8 @@ struct KnownLicense {
     file: &'static str,
 }
 
-/// The licenses whose files the check knows: the two that trellis's `license` answer offers,
-/// alone or together.
+/// The licenses whose files the check knows, in the order it names them: the two that trellis's
+/// `license` answer offers, alone or together.
 const KNOWN_LICENSES: [KnownLicense; 2] = [
     KnownLicense {
         id: "MIT",
@@ -37,19 +36,24 @@ const KNOWN_LICENSES: [KnownLicense; 2] = [
 /// The file that holds a crate's only license, whichever it is.
 const SOLE_LICENSE_FILE: &str = "LICENSE";
 
-/// The files a crate under a license expression carries: each entry is a requirement, met by any
-/// one of its files.
-type Requirements = Vec<Vec<&'static str>>;
+/// How crates.io parses a crate's `license`: the `spdx` crate's lax mode, which reads `/` as `OR`,
+/// but with the license names exact, so `Apache 2.0` or `mit` doesn't parse.
+const CRATES_IO: ParseMode = ParseMode {
+    allow_imprecise_license_names: false,
+    ..ParseMode::LAX
+};
 
 /// Checks that every published member's directory holds the license files its `license`
-/// expression names, in any case: under one license, such as `MIT`, `LICENSE` or
-/// `LICENSE-<license>`, here `LICENSE-MIT`; under several, such as `MIT OR Apache-2.0`, a
+/// expression names, by the names trellis gives them and `just package` checks, in that case:
+/// under one license, such as `MIT`, `LICENSE`; under several, such as `MIT OR Apache-2.0`, a
 /// `LICENSE-<license>` for each, here `LICENSE-MIT` and `LICENSE-APACHE`.
 ///
 /// Cargo packages only the files under a crate's directory, so a crate whose license files sit
 /// only at the repository root reaches crates.io without the text its license asks every copy to
 /// carry, and nothing in `cargo package` or `cargo publish` says so. The root keeps the files for
-/// the repository, and each published crate keeps its own copy.
+/// the repository, and each published crate keeps its own copy. Another name, such as `license`,
+/// `LICENSE.md` or, under MIT alone, `LICENSE-MIT`, would carry the text too, but trellis's
+/// license files have one name each, so a crate's match the generated crate's and the root's.
 ///
 /// It leaves alone a crate that isn't published, since no package of it is made; a crate with no
 /// `license`, which `cargo publish` refuses on its own; a crate with a `license-file`, whose file
@@ -70,17 +74,13 @@ pub fn check(workspace: &Workspace) -> Result<Vec<Violation>, PolicyError> {
         let Some(expression) = package.license.as_deref() else {
             continue;
         };
-        let Some(requirements) = requirements(expression) else {
+        let Some(files) = license_files(expression) else {
             continue;
         };
         let present = file_names(member.dir())?;
-        let missing: Requirements = requirements
+        let missing: Vec<&str> = files
             .into_iter()
-            .filter(|files| {
-                !files
-                    .iter()
-                    .any(|file| present.iter().any(|name| case_insensitive::eq(name, file)))
-            })
+            .filter(|file| !present.iter().any(|name| name == file))
             .collect();
         if !missing.is_empty() {
             violations.push(Violation::new(
@@ -93,27 +93,29 @@ pub fn check(workspace: &Workspace) -> Result<Vec<Violation>, PolicyError> {
 }
 
 /// The files a crate under the SPDX expression `expression` carries, or nothing when the
-/// expression doesn't parse or names a license the check doesn't know. It parses as crates.io
-/// takes it, so `MIT/Apache-2.0` reads as `MIT OR Apache-2.0`, and a `WITH` exception asks for no
-/// file beyond its license's.
-fn requirements(expression: &str) -> Option<Requirements> {
-    let parsed = Expression::parse_mode(expression, ParseMode::LAX).ok()?;
-    let mut licenses: Vec<&KnownLicense> = Vec::new();
+/// expression doesn't parse as crates.io parses it or names a license the check doesn't know. So
+/// `MIT/Apache-2.0` reads as `MIT OR Apache-2.0`, and a `WITH` exception asks for no file beyond
+/// its license's.
+fn license_files(expression: &str) -> Option<Vec<&'static str>> {
+    let parsed = Expression::parse_mode(expression, CRATES_IO).ok()?;
+    let mut ids = Vec::new();
     for requirement in parsed.requirements() {
         let LicenseItem::Spdx { id, .. } = requirement.req.license else {
             return None;
         };
-        let license = KNOWN_LICENSES
-            .iter()
-            .find(|license| license.id == id.name)?;
-        if !licenses.iter().any(|known| known.id == license.id) {
-            licenses.push(license);
+        if !KNOWN_LICENSES.iter().any(|license| license.id == id.name) {
+            return None;
         }
+        ids.push(id.name);
     }
+    let licenses: Vec<&KnownLicense> = KNOWN_LICENSES
+        .iter()
+        .filter(|license| ids.contains(&license.id))
+        .collect();
     match licenses.as_slice() {
         [] => None,
-        [license] => Some(vec![vec![SOLE_LICENSE_FILE, license.file]]),
-        _ => Some(licenses.iter().map(|license| vec![license.file]).collect()),
+        [_] => Some(vec![SOLE_LICENSE_FILE]),
+        _ => Some(licenses.iter().map(|license| license.file).collect()),
     }
 }
 
@@ -135,44 +137,27 @@ fn file_names(directory: &Path) -> Result<Vec<String>, PolicyError> {
     Ok(names)
 }
 
-/// What is wrong with `member`, published under `expression`, whose directory lacks the files of
-/// `missing`, and where to copy each from: the root's file for the requirement, or its first file
-/// when the root has none.
+/// What is wrong with `member`, published under `expression`, whose directory lacks `missing`.
 fn problem(
     workspace: &Workspace,
     member: &WorkspaceMember,
     expression: &str,
-    missing: &Requirements,
+    missing: &[&str],
 ) -> String {
     let directory = format!("{}/", workspace.relative(member.dir()));
-    let quoted = |files: &[&str], separator: &str| {
-        files
-            .iter()
-            .map(|file| format!("`{file}`"))
-            .collect::<Vec<_>>()
-            .join(separator)
-    };
-    let lacks = match missing.as_slice() {
-        [files] if files.len() > 1 => format!("has neither {}", quoted(files, " nor ")),
-        _ => format!("lacks {}", quoted(&missing.concat(), " and ")),
-    };
-    let copies: Vec<&str> = missing
+    let files = missing
         .iter()
-        .filter_map(|files| {
-            files
-                .iter()
-                .copied()
-                .find(|file| workspace.root().join(file).is_file())
-                .or_else(|| files.first().copied())
-        })
-        .collect();
+        .map(|file| format!("`{file}`"))
+        .collect::<Vec<_>>()
+        .join(" and ");
     format!(
-        "`{name}` is published under `{expression}`, but `{directory}` {lacks}. Cargo packages \
-         only the files under a crate's directory, so the crate would reach crates.io without its \
-         license text, which the license asks every copy to carry. Copy {copies} from the \
-         repository root into `{directory}`.",
+        "`{name}` is published under `{expression}`, but `{directory}` lacks {files}. Cargo \
+         packages only the files under a crate's directory, so the crate would reach crates.io \
+         without its license text, which the license asks every copy to carry. Copy {files} from \
+         the repository root into `{directory}`, under the same {names}, which `just package` \
+         checks too.",
         name = member.name(),
-        copies = quoted(&copies, " and "),
+        names = if missing.len() == 1 { "name" } else { "names" },
     )
 }
 
@@ -181,75 +166,53 @@ mod tests {
     use super::*;
 
     #[test]
-    fn one_license_takes_its_sole_file_or_its_named_one() {
-        assert_eq!(
-            requirements("MIT"),
-            Some(vec![vec!["LICENSE", "LICENSE-MIT"]]),
-            "MIT alone is met by LICENSE or LICENSE-MIT"
-        );
-        assert_eq!(
-            requirements("Apache-2.0"),
-            Some(vec![vec!["LICENSE", "LICENSE-APACHE"]]),
-            "Apache-2.0 alone is met by LICENSE or LICENSE-APACHE"
-        );
+    fn one_license_takes_the_sole_license_file() {
+        for expression in [
+            "MIT",
+            "Apache-2.0",
+            "MIT OR MIT",
+            "Apache-2.0 WITH LLVM-exception",
+        ] {
+            assert_eq!(
+                license_files(expression),
+                Some(vec!["LICENSE"]),
+                "{expression:?} names one license, whose text goes in LICENSE"
+            );
+        }
     }
 
     #[test]
-    fn several_licenses_take_a_named_file_each() {
-        let both = Some(vec![vec!["LICENSE-MIT"], vec!["LICENSE-APACHE"]]);
-        assert_eq!(
-            requirements("MIT OR Apache-2.0"),
-            both,
-            "the template's dual license needs both files"
-        );
-        assert_eq!(
-            requirements("(MIT AND Apache-2.0)"),
-            both,
-            "operators and parentheses separate the licenses"
-        );
-        assert_eq!(
-            requirements("Apache-2.0 OR MIT"),
-            Some(vec![vec!["LICENSE-APACHE"], vec!["LICENSE-MIT"]]),
-            "the order of the expression doesn't matter"
-        );
+    fn several_licenses_take_a_named_file_each_in_one_order() {
+        for expression in [
+            "MIT OR Apache-2.0",
+            "Apache-2.0 OR MIT",
+            "(MIT AND Apache-2.0)",
+            "MIT/Apache-2.0",
+        ] {
+            assert_eq!(
+                license_files(expression),
+                Some(vec!["LICENSE-MIT", "LICENSE-APACHE"]),
+                "{expression:?} names MIT and Apache-2.0, whose texts go in LICENSE-MIT and \
+                 LICENSE-APACHE, in the template's order"
+            );
+        }
     }
 
     #[test]
-    fn an_expression_reads_as_crates_io_reads_it() {
-        assert_eq!(
-            requirements("MIT/Apache-2.0"),
-            Some(vec![vec!["LICENSE-MIT"], vec!["LICENSE-APACHE"]]),
-            "crates.io reads a slash as OR"
-        );
-        assert_eq!(
-            requirements("Apache-2.0 WITH LLVM-exception"),
-            Some(vec![vec!["LICENSE", "LICENSE-APACHE"]]),
-            "an exception asks for no file of its own"
-        );
-    }
-
-    #[test]
-    fn a_license_named_twice_counts_once() {
-        assert_eq!(
-            requirements("MIT OR MIT"),
-            Some(vec![vec!["LICENSE", "LICENSE-MIT"]]),
-            "MIT twice is still one license"
-        );
-    }
-
-    #[test]
-    fn an_unknown_license_leaves_the_crate_alone() {
+    fn an_unknown_or_imprecise_license_leaves_the_crate_alone() {
         for expression in [
             "BSD-3-Clause",
             "MIT OR BSD-3-Clause",
             "",
             "OR",
             "LicenseRef-Own",
+            "Apache 2.0",
+            "mit",
         ] {
             assert_eq!(
-                requirements(expression),
+                license_files(expression),
                 None,
-                "the check doesn't know the files of {expression:?}"
+                "crates.io doesn't take {expression:?}, or the check doesn't know its files"
             );
         }
     }

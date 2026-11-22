@@ -837,35 +837,52 @@ fn a_published_crate_without_its_license_file_fails() {
     fixture.member("bare", inherits);
     fixture.write("crates/sole/LICENSE", "MIT License\n");
     fixture.member("sole", inherits);
-    fixture.write("crates/named/LICENSE-MIT", "MIT License\n");
-    fixture.member("named", inherits);
-    fixture.write("crates/lower/license", "MIT License\n");
-    fixture.member("lower", inherits);
-    fixture.write("crates/folder/LICENSE/MIT", "MIT License\n");
-    fixture.member("folder", inherits);
+    for (name, file) in [
+        ("named", "LICENSE-MIT"),
+        ("lower", "license"),
+        ("title", "License"),
+        ("markdown", "LICENSE.md"),
+        ("text", "LICENSE.txt"),
+        ("folder", "LICENSE/MIT"),
+    ] {
+        fixture.write(&format!("crates/{name}/{file}"), "MIT License\n");
+        fixture.member(name, inherits);
+    }
     fixture.member("private", "license.workspace = true\npublish = false\n");
     fixture.member("nowhere", "license.workspace = true\npublish = []\n");
     fixture.member("own_file", "license-file = \"../../LICENSE\"\n");
     let violations = license_violations(&fixture);
-    let message = "is published under `MIT`, but `crates/bare/` has neither `LICENSE` nor \
-                   `LICENSE-MIT`. Cargo packages only the files under a crate's directory, so the \
-                   crate would reach crates.io without its license text, which the license asks \
-                   every copy to carry. Copy `LICENSE` from the repository root into \
-                   `crates/bare/`.";
+    let expected: Vec<Expected> = [
+        "crates/bare/Cargo.toml",
+        "crates/folder/Cargo.toml",
+        "crates/lower/Cargo.toml",
+        "crates/markdown/Cargo.toml",
+        "crates/named/Cargo.toml",
+        "crates/text/Cargo.toml",
+        "crates/title/Cargo.toml",
+    ]
+    .into_iter()
+    .map(|file| Expected {
+        file,
+        message: "` is published under `MIT`, but `crates/",
+    })
+    .collect();
     assert_violations(
         &violations,
-        &[
-            Expected {
-                file: "crates/bare/Cargo.toml",
-                message,
-            },
-            Expected {
-                file: "crates/folder/Cargo.toml",
-                message: "`folder` is published under `MIT`, but `crates/folder/` has neither",
-            },
-        ],
-        "a published crate that inherits MIT needs LICENSE or LICENSE-MIT, in any case, as a \
-         file; a crate that isn't published, or names its own license file, needs neither",
+        &expected,
+        "a published crate that inherits MIT needs a file named exactly LICENSE, the name \
+         `just package` checks; a crate that isn't published, or names its own license file, \
+         needs none",
+    );
+    let message = "`bare` is published under `MIT`, but `crates/bare/` lacks `LICENSE`. Cargo \
+                   packages only the files under a crate's directory, so the crate would reach \
+                   crates.io without its license text, which the license asks every copy to \
+                   carry. Copy `LICENSE` from the repository root into `crates/bare/`, under the \
+                   same name, which `just package` checks too.";
+    assert_eq!(
+        violations[0].message(),
+        message,
+        "the message names the file and where to copy it from"
     );
 }
 
@@ -883,19 +900,25 @@ fn a_dual_licensed_crate_needs_both_files() {
     fixture.member("half", inherits);
     fixture.write("crates/sole/LICENSE", "MIT License\n");
     fixture.member("sole", inherits);
-    fixture.member("mit", "license = \"MIT\"\n");
+    fixture.write("crates/reversed/LICENSE-MIT", "MIT License\n");
+    fixture.write("crates/reversed/LICENSE-APACHE", "Apache License\n");
+    fixture.member("reversed", "license = \"Apache-2.0 OR MIT\"\n");
+    fixture.write("crates/dual_left/LICENSE-MIT", "MIT License\n");
+    fixture.write("crates/dual_left/LICENSE-APACHE", "Apache License\n");
+    fixture.member("dual_left", "license = \"MIT\"\n");
     let violations = license_violations(&fixture);
     assert_violations(
         &violations,
         &[
             Expected {
+                file: "crates/dual_left/Cargo.toml",
+                message: "`dual_left` is published under `MIT`, but `crates/dual_left/` lacks \
+                          `LICENSE`. Cargo packages",
+            },
+            Expected {
                 file: "crates/half/Cargo.toml",
                 message: "`half` is published under `MIT OR Apache-2.0`, but `crates/half/` lacks \
                           `LICENSE-APACHE`. Cargo packages",
-            },
-            Expected {
-                file: "crates/mit/Cargo.toml",
-                message: "Copy `LICENSE-MIT` from the repository root into `crates/mit/`.",
             },
             Expected {
                 file: "crates/sole/Cargo.toml",
@@ -903,16 +926,15 @@ fn a_dual_licensed_crate_needs_both_files() {
                           packages",
             },
         ],
-        "under two licenses, a crate needs a file named for each, a sole LICENSE doesn't do, and a \
-         crate under MIT alone is told to copy the root's LICENSE-MIT when the root has no LICENSE",
+        "under two licenses, in either order, a crate needs a file named for each and a sole \
+         LICENSE doesn't do; under MIT alone, the files a dual license left don't do either",
     );
-    for text in [
-        "Copy `LICENSE-APACHE` from the repository root into `crates/half/`.",
-        "Copy `LICENSE-MIT` and `LICENSE-APACHE` from the repository root into `crates/sole/`.",
-    ] {
-        assert!(
-            mentions(&violations, text),
-            "a message should say {text:?}: {violations:?}"
-        );
-    }
+    assert!(
+        mentions(
+            &violations,
+            "Copy `LICENSE-MIT` and `LICENSE-APACHE` from the repository root into \
+             `crates/sole/`, under the same names"
+        ),
+        "the message names both files: {violations:?}"
+    );
 }
