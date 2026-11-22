@@ -326,13 +326,19 @@ A deploy kit, the scripts, container files and systemd units in `deploy/` that i
 project on a host, is code too, like `crates/`. A kit change lands with the code change it needs,
 and review reads it as code. `just policy` runs shellcheck on each of its scripts, the files that
 end in `.sh`, `.bash`, `.dash`, `.ksh` or `.bats`, start with a `#!` line that names `sh`,
-`bash`, `dash`, `ksh`, `ash` or `bats`, or have neither an extension nor another `#!` line, and
-on the files they source, in a copy of `deploy/` alone, so a file outside the kit counts as
-missing. It reads no `.shellcheckrc` and no `SHELLCHECK_OPTS`. Silence one finding with
-`# shellcheck disable=SC<code> # <reason>` on the line right above it. shellcheck applies a
-directive to the whole command below it, so `just policy` runs it again with every `disable`
-taken out, and fails a directive that hides a finding anywhere but on the line below it, such as
-in a function, a block, a sourced file or the rest of the file. It also fails a directive after
+`bash`, `dash`, `ksh`, `ash` or `bats`, or set their shell with a `# shellcheck shell=<shell>`
+line, and on the files they source, in a copy of `deploy/` alone, so a file outside the kit counts
+as missing. A library a script sources through a path shellcheck can't follow, with SC1090
+silenced, is checked only if it is a script by itself, so give it a `.sh` name or a `shell=` line,
+and give every other script a `#!` line.
+`just policy` reads no `.shellcheckrc` and no `SHELLCHECK_OPTS`, and reports no finding in a host
+file a script sources, such as `/etc/os-release`. Silence one finding with
+`# shellcheck disable=SC<code> # <reason>` on the line right above its command. shellcheck applies
+a directive to the whole command below it, so `just policy` runs it again with every `disable`
+taken out, and fails a directive that hides a finding anywhere but in the command right below it:
+its first line, the lines it continues onto after a `\`, `|`, `||` or `&&` or inside a string, a
+heredoc's body, and a `case` statement's pattern lines. A finding in a function, a block, a
+sourced file or the rest of the file fails. It also fails a directive after
 code on its line or spelled with an unusual space, one that disables anything but codes, such as
 `all` or a range, or a parse check other than SC1090 and SC1091, one without a reason, `shell=` in
 a file with a `#!` line, `source=` or `source-path=` that leaves `deploy/`, any key but

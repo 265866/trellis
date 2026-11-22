@@ -2754,7 +2754,7 @@ fn a_deploy_script_cant_turn_shellcheck_off() {
     project.check().assert_reports(
         1,
         "error: [deploy_scripts] deploy/backup.sh: A shellcheck directive hides SC2086 at line 4, \
-         which isn't the line right below it",
+         which isn't in the command right below it",
     );
     project.write("deploy/backup.sh", "#!/bin/sh\nset -eu\nrm -rf $1/old\n");
     let output = Command::new(env!("CARGO_BIN_EXE_trellis-policy"))
@@ -2905,4 +2905,74 @@ fn a_deploy_script_cant_source_a_file_outside_the_kit_unseen() {
         1,
         "error: [deploy_scripts] deploy/run.sh: shellcheck reports",
     );
+}
+
+/// Files in a deploy kit that are no shell scripts pass, though they have neither an extension
+/// nor a `#!` line, and a library known only by its `shell=` directive is checked on its own.
+#[test]
+fn a_deploy_kit_s_other_files_pass_and_a_library_with_a_shell_directive_is_checked() {
+    let project = Project::new();
+    project.write(
+        "deploy/Containerfile",
+        "FROM scratch\nRUN echo $unquoted && [ -d x ]\n",
+    );
+    project.write(
+        "deploy/Caddyfile",
+        "example.com {\n\treverse_proxy :8080\n}\n",
+    );
+    project.write("deploy/Makefile", "install:\n\tcp $(BIN) /usr/local/bin\n");
+    project.write("deploy/justfile", "install:\n    cp {{bin}} ~/.local/bin\n");
+    project.write(
+        "deploy/sudoers.d/app",
+        "app ALL=(root) NOPASSWD: /bin/systemctl restart app\n",
+    );
+    project.write(
+        "deploy/app.service",
+        "[Service]\n# shellcheck is run in CI on the scripts beside this file.\nExecStart=/srv/app\n",
+    );
+    project.check().assert_passes();
+    project.write(
+        "deploy/functions.inc",
+        "# shellcheck shell=sh\nclean() {\n  rm -rf $1\n}\n",
+    );
+    project.check().assert_reports(
+        1,
+        "error: [deploy_scripts] deploy/functions.inc: shellcheck reports, at line:column 3:10",
+    );
+}
+
+/// A directive right above a command covers the lines that command continues onto: after a
+/// pipe, `||` or `&&`, inside a quoted string, and a `case` statement's pattern lines, where
+/// shellcheck reads no directive. A `<<` in a comment or a shift opens no heredoc.
+#[test]
+fn a_directive_above_a_command_covers_the_lines_it_continues_onto() {
+    let project = Project::new();
+    project.write(
+        "deploy/run.sh",
+        "#!/bin/sh\nset -eu\n# shellcheck disable=SC2086 # r\ncurl $1 |\n  tar -C $2 -x\n\
+         # shellcheck disable=SC2086 # r\nfalse ||\n  rm $3\n\
+         # shellcheck disable=SC2086 # r\necho \"x\n$(rm $4)\"\n\
+         # shellcheck disable=SC2254 # r\ncase $1 in\n  $2) echo \"$3\" ;;\n  *) : ;;\nesac\n\
+         x=$((1<<4)) # <<EOF\n# shellcheck disable=SC2086 # r\necho $x\n",
+    );
+    project.check().assert_passes();
+}
+
+/// A finding in a host file a deploy script sources by its absolute path isn't the kit's, so it
+/// isn't reported, and no directive in the kit could silence it.
+#[cfg(unix)]
+#[test]
+fn a_host_file_a_deploy_script_sources_isnt_reported() {
+    let host = TempDir::new().expect("the temporary directory should be created");
+    let library = host.path().join("os-release");
+    fs::write(&library, "NAME=demo\nrm -rf $1\n").expect("the host file should be written");
+    let project = Project::new();
+    project.write(
+        "deploy/run.sh",
+        &format!(
+            "#!/bin/sh\nset -eu\n. {}\necho \"$NAME\"\n",
+            library.display()
+        ),
+    );
+    project.check().assert_passes();
 }

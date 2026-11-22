@@ -2,18 +2,17 @@
 //! code that no other check reads.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::env;
-use std::fs::{self, File};
 use std::io::{self, ErrorKind};
 use std::path::Path;
 use std::process::{Command, Stdio};
+use std::{env, fs};
 
 use serde_json::Value;
 
 use crate::policy_error::PolicyError;
-use crate::repository_files;
 use crate::violation::Violation;
 use crate::workspace::Workspace;
+use crate::{command_starts, repository_files};
 
 /// The directory that holds a project's deploy kit, relative to the root. Its files are code to
 /// `trellis-policy rule-changes`, so a kit change lands with the code change it needs.
@@ -30,30 +29,28 @@ const SHELLS: [&str; 6] = ["sh", "bash", "dash", "ksh", "ash", "bats"];
 /// `external-sources`, would turn checks off for the whole script.
 const ALLOWED_DIRECTIVES: [&str; 4] = ["enable", "shell", "source", "source-path"];
 
-/// The longest `#!` line read, in bytes. A longer line is cut there, which keeps a large binary
-/// file from being read whole.
-const SHEBANG_LIMIT: u64 = 256;
-
 /// What to do when shellcheck isn't installed.
 const INSTALL_REMEDY: &str = "Install the shellcheck version the Set up section of CONTRIBUTING.md \
                               names; CI installs it too.";
 
 /// Checks every shell script under `deploy/` with shellcheck, and reports each finding at its
-/// file. A script is a file whose name ends in `.sh`, `.bash`, `.dash`, `.ksh` or `.bats`, or
-/// whose first line is a `#!` line that names `sh`, `bash`, `dash`, `ksh`, `ash` or `bats`.
+/// file. A script is a file whose name ends in `.sh`, `.bash`, `.dash`, `.ksh` or `.bats`, whose
+/// first line is a `#!` line that names `sh`, `bash`, `dash`, `ksh`, `ash` or `bats`, or that sets
+/// its shell with a `# shellcheck shell=<shell>` directive, as a library a script sources can.
 /// shellcheck runs on a copy of `deploy/` alone, with `--norc` and without `SHELLCHECK_OPTS`, so
 /// neither a `.shellcheckrc` nor the environment can turn a check off and a file outside the kit
 /// can't be sourced unseen, and with `--check-sourced`, so it reports the files a script sources
-/// too, looked up from the script's directory.
+/// too, looked up from the script's directory. A finding in a file outside the kit, such as an
+/// `/etc/os-release` a script sources from the host, isn't the kit's, so it isn't reported.
 ///
 /// A file under `deploy/` silences one finding with a `# shellcheck disable=SC<code> # <reason>`
 /// line right above it, where review sees it. shellcheck applies a directive to the whole command
 /// below it, a function or a sourced file included, so the check measures what each directive
 /// hides: it runs shellcheck a second time with every `disable` taken out, and each finding that
-/// only that run reports must have a directive for its code right above its line, with only
-/// comments and blank lines between. [`directive_problems`] says which other directives are
-/// violations. A symbolic link under `deploy/` is one too, since the kit's files are what review
-/// read.
+/// only that run reports must have a directive for its code right above the command its line
+/// belongs to, as [`command_starts::of`] finds it, with only comments and blank lines between.
+/// [`directive_problems`] says which other directives are violations. A symbolic link under
+/// `deploy/` is one too, since the kit's files are what review read.
 ///
 /// A project without `deploy/` has no script, so the check runs nothing.
 ///
@@ -93,7 +90,7 @@ pub(crate) fn check(workspace: &Workspace) -> Result<Vec<Violation>, PolicyError
                 .into_iter()
                 .map(|problem| Violation::new(file.clone(), problem)),
         );
-        if is_script(&path).map_err(read_error)? {
+        if is_script(&path, &text) {
             scripts.push(file.clone());
         }
         texts.insert(file, text);
@@ -116,10 +113,11 @@ pub(crate) fn check(workspace: &Workspace) -> Result<Vec<Violation>, PolicyError
             violations.push(Violation::new(
                 hidden.file.clone(),
                 format!(
-                    "A shellcheck directive hides SC{} at line {}, which isn't the line right \
-                     below it, so it hides more than it says: a whole function, block or sourced \
-                     file, or the rest of the file. Put `# shellcheck disable=SC{} # <reason>` on \
-                     the line above line {}, and take the code out of the directive that hid it.",
+                    "A shellcheck directive hides SC{} at line {}, which isn't in the command \
+                     right below it, so it hides more than it says: a whole function, block or \
+                     sourced file, or the rest of the file. Put `# shellcheck disable=SC{} # \
+                     <reason>` right above the command line {} belongs to, and take the code out \
+                     of the directive that hid it.",
                     hidden.code, hidden.line, hidden.code, hidden.line
                 ),
             ));
@@ -171,8 +169,8 @@ fn directive_problems(file: &str, text: &str) -> Vec<String> {
             ));
             continue;
         }
-        let (settings, reason) = directive.split_once('#').unwrap_or((directive, ""));
-        for setting in settings.split_whitespace() {
+        let reason = directive.split_once('#').map_or("", |(_, reason)| reason);
+        for setting in Directive::settings_of(directive).split_whitespace() {
             let (key, value) = setting.split_once('=').unwrap_or((setting, ""));
             match key {
                 "disable" if !is_code_list(value) => problems.push(format!(
@@ -226,17 +224,33 @@ struct Directive<'line> {
 
 impl<'line> Directive<'line> {
     /// The directive in `line`, if it holds a comment that shellcheck reads as one: `#`, any spaces
-    /// and tabs, `shellcheck`, then at least one space or tab.
+    /// and tabs, `shellcheck`, at least one space or tab, then a `key=value` setting. A comment
+    /// such as `# shellcheck runs in CI` isn't one, which in a script shellcheck reports as a
+    /// directive it can't parse.
     fn of(line: &'line str) -> Option<Self> {
         line.match_indices('#').find_map(|(at, _)| {
             let after = line[at + 1..].trim_start_matches(char::is_whitespace);
             let rest = after.strip_prefix("shellcheck")?;
             let text = rest.trim_start_matches(char::is_whitespace);
-            (text.len() < rest.len()).then_some(Self {
+            let sets_a_key = Self::settings_of(text)
+                .split_whitespace()
+                .next()
+                .is_some_and(|setting| setting.contains('='));
+            (text.len() < rest.len() && sets_a_key).then_some(Self {
                 code: &line[..at],
                 text,
             })
         })
+    }
+
+    /// The settings in `text`, a directive's text after `shellcheck`, before any `#` comment.
+    fn settings_of(text: &str) -> &str {
+        text.split_once('#').map_or(text, |(settings, _)| settings)
+    }
+
+    /// The directive's settings, before any `#` comment.
+    fn settings(&self) -> &'line str {
+        Self::settings_of(self.text)
     }
 
     /// Whether the directive's line spells it with a space other than an ASCII space or tab, such
@@ -248,15 +262,11 @@ impl<'line> Directive<'line> {
 
     /// The codes this directive's `disable` settings name, as numbers.
     fn disabled_codes(&self) -> BTreeSet<u32> {
-        let settings = self
-            .text
-            .split_once('#')
-            .map_or(self.text, |(settings, _)| settings);
-        settings
+        self.settings()
             .split_whitespace()
             .filter_map(|setting| setting.strip_prefix("disable="))
             .flat_map(|value| value.split(','))
-            .filter_map(|code| code.strip_prefix("SC").unwrap_or(code).parse().ok())
+            .filter_map(code_number)
             .collect()
     }
 }
@@ -270,23 +280,31 @@ fn is_code_list(value: &str) -> bool {
         })
 }
 
+/// The number of `code`, a code such as `SC2086` or `2086`, as shellcheck reads it, leading zeros
+/// and all, or `None` if it isn't one.
+fn code_number(code: &str) -> Option<u32> {
+    code.strip_prefix("SC").unwrap_or(code).parse().ok()
+}
+
 /// Whether `value`, a list of codes, names one of shellcheck's parse checks, SC1000 to SC1999,
 /// other than SC1090 and SC1091, which are about the files a script sources.
 fn disables_a_parse_check(value: &str) -> bool {
-    value.split(',').any(|code| {
-        let digits = code.strip_prefix("SC").unwrap_or(code);
-        digits.len() == 4 && digits.starts_with('1') && !matches!(digits, "1090" | "1091")
-    })
+    value
+        .split(',')
+        .filter_map(code_number)
+        .any(|code| (1000..=1999).contains(&code) && !matches!(code, 1090 | 1091))
 }
 
-/// Whether `source`, a `source=` value in a file in `directory`, names a file under `deploy/`: a
-/// relative path that stays inside the kit, read from the file's directory.
+/// Whether `source`, a `source=` or `source-path=` value in a file in `directory`, names `deploy/`
+/// or a path under it: a relative path that stays inside the kit, read from the file's directory.
 fn inside_deploy(directory: &str, source: &str) -> bool {
     if source.starts_with('/') || source.contains('\\') {
         return false;
     }
-    normalized(&format!("{directory}/{source}"))
-        .is_some_and(|path| path.starts_with(DEPLOY_DIRECTORY))
+    normalized(&format!("{directory}/{source}")).is_some_and(|path| {
+        path.strip_prefix(DEPLOY_DIRECTORY.trim_end_matches('/'))
+            .is_some_and(|rest| rest.is_empty() || rest.starts_with('/'))
+    })
 }
 
 /// `path` with its `.` parts and each `..` with the part before it taken out, or `None` if a `..`
@@ -336,15 +354,14 @@ fn without_disables(text: &str) -> String {
 }
 
 /// Whether `text` has a directive that disables `code` right above its line `line`: on the lines
-/// above the command that line belongs to, before any line that is neither blank nor a comment. A
-/// line belongs to the command a `\\` at the end of the line above continues, and a heredoc's body
-/// to the line that opens the heredoc, since no comment can go between them.
+/// above the command that line belongs to, as [`command_starts::of`] finds it, before any line
+/// that is neither blank nor a comment.
 fn silenced_right_above(text: &str, line: usize, code: u32) -> bool {
     let lines: Vec<&str> = text.lines().collect();
-    let mut first = command_start(&lines, line.saturating_sub(1));
-    while first > 0 && lines[first - 1].ends_with('\\') {
-        first = command_start(&lines, first - 1);
-    }
+    let first = command_starts::of(text)
+        .get(line.saturating_sub(1))
+        .copied()
+        .unwrap_or(lines.len());
     lines[..first]
         .iter()
         .rev()
@@ -354,98 +371,28 @@ fn silenced_right_above(text: &str, line: usize, code: u32) -> bool {
         .any(|directive| directive.disabled_codes().contains(&code))
 }
 
-/// The index in `lines` of the line that opens the heredoc whose body holds the line at `index`,
-/// or `index` if that line is in no heredoc's body.
-fn command_start(lines: &[&str], index: usize) -> usize {
-    let mut open: Option<(usize, Heredoc)> = None;
-    for (at, line) in lines.iter().enumerate().take(index + 1) {
-        match &open {
-            Some((start, heredoc)) => {
-                let start = *start;
-                if heredoc.ends_at(line) {
-                    open = None;
-                } else if at == index {
-                    return start;
-                }
-            }
-            None => open = Heredoc::opened_by(line).map(|heredoc| (at, heredoc)),
-        }
-    }
-    index
-}
-
-/// A heredoc a line of a script opens.
-struct Heredoc {
-    /// The word that ends it, unquoted.
-    delimiter: String,
-    /// Whether it opened with `<<-`, which strips the tabs that start its lines.
-    strips_tabs: bool,
-}
-
-impl Heredoc {
-    /// The heredoc `line` opens, or `None` if it opens none.
-    fn opened_by(line: &str) -> Option<Self> {
-        let (_, rest) = line.split_once("<<")?;
-        if rest.starts_with('<') {
-            return None;
-        }
-        let (rest, strips_tabs) = rest
-            .strip_prefix('-')
-            .map_or((rest, false), |rest| (rest, true));
-        let delimiter: String = rest
-            .trim_start()
-            .chars()
-            .take_while(|character| !character.is_whitespace() && !";|&<>)".contains(*character))
-            .filter(|character| !matches!(character, '\'' | '"' | '\\'))
-            .collect();
-        (!delimiter.is_empty()).then_some(Self {
-            delimiter,
-            strips_tabs,
-        })
-    }
-
-    /// Whether `line` ends the heredoc.
-    fn ends_at(&self, line: &str) -> bool {
-        let line = if self.strips_tabs {
-            line.trim_start_matches('\t')
-        } else {
-            line
-        };
-        line == self.delimiter
-    }
-}
-
-/// Whether the file at `path` is a shell script: by its extension, by the shell its first line
-/// names, or by having neither an extension nor a `#!` line for another program, as a library a
-/// script sources often has, so a sourced file is checked on its own too. A hidden file, such as
-/// `.shellcheckrc`, isn't one by its lack of an extension.
-fn is_script(path: &Path) -> io::Result<bool> {
-    let extension = path.extension();
-    let has_script_extension = extension.is_some_and(|extension| {
+/// Whether the file at `path`, whose text is `text`, is a shell script: by its extension, by the
+/// shell its `#!` line names, or by a `# shellcheck shell=<shell>` directive, which a library a
+/// script sources needs to be checked on its own.
+fn is_script(path: &Path, text: &str) -> bool {
+    let has_script_extension = path.extension().is_some_and(|extension| {
         SCRIPT_EXTENSIONS
             .iter()
             .any(|script| extension.eq_ignore_ascii_case(script))
     });
-    if has_script_extension {
-        return Ok(true);
-    }
-    let start = file_start(path)?;
-    let start = start.strip_prefix(b"\xef\xbb\xbf").unwrap_or(&start);
-    let hidden = path
-        .file_name()
-        .is_some_and(|name| name.as_encoded_bytes().starts_with(b"."));
-    Ok(names_a_shell(start) || (extension.is_none() && !hidden && !start.starts_with(b"#!")))
+    has_script_extension || names_a_shell(text.as_bytes()) || sets_its_shell(text)
 }
 
-/// The first [`SHEBANG_LIMIT`] bytes of the file at `path`, or all of a shorter one.
-fn file_start(path: &Path) -> io::Result<Vec<u8>> {
-    use std::io::Read as _;
-
-    let mut start = Vec::new();
-    File::open(path)?
-        .take(SHEBANG_LIMIT)
-        .read_to_end(&mut start)?;
-    Ok(start)
+/// Whether `text` has a directive on a line of its own that sets the shell, such as
+/// `# shellcheck shell=bash`.
+fn sets_its_shell(text: &str) -> bool {
+    text.lines().filter_map(Directive::of).any(|directive| {
+        directive.code.trim().is_empty()
+            && directive
+                .settings()
+                .split_whitespace()
+                .any(|setting| setting.starts_with("shell="))
+    })
 }
 
 /// Whether `start`, the start of a file, is a `#!` line that names one of the [`SHELLS`], as
@@ -517,7 +464,9 @@ fn shellcheck_copy(
     shellcheck(copy.path(), scripts)
 }
 
-/// Runs shellcheck on `scripts`, relative to `root`, and reads its findings.
+/// Runs shellcheck on `scripts`, relative to `root`, and reads its findings in the files under
+/// `deploy/`. A finding in another file, such as one on the host that a script sources by its
+/// absolute path, isn't the kit's, and no directive in the kit could silence it.
 fn shellcheck(root: &Path, scripts: &[String]) -> Result<BTreeSet<Finding>, PolicyError> {
     let arguments = [
         "--norc",
@@ -548,9 +497,15 @@ fn shellcheck(root: &Path, scripts: &[String]) -> Result<BTreeSet<Finding>, Poli
         })?;
     let report = String::from_utf8_lossy(&output.stdout);
     let found = findings(&report);
+    let in_the_kit = |found: BTreeSet<Finding>| {
+        found
+            .into_iter()
+            .filter(|finding| finding.file.starts_with(DEPLOY_DIRECTORY))
+            .collect()
+    };
     match (output.status.code(), found) {
         (Some(0), Some(found)) if found.is_empty() => Ok(found),
-        (Some(1), Some(found)) if !found.is_empty() => Ok(found),
+        (Some(1), Some(found)) if !found.is_empty() => Ok(in_the_kit(found)),
         _ => Err(failed(format!(
             "it exited with {}: {}\n{}",
             output.status,
@@ -561,7 +516,8 @@ fn shellcheck(root: &Path, scripts: &[String]) -> Result<BTreeSet<Finding>, Poli
 }
 
 /// The findings in `report`, shellcheck's output in its `json1` format, each at its file with the
-/// path's `.` and `..` parts resolved, or `None` if the report isn't that format.
+/// path's `.` and `..` parts resolved and a leading `/` kept, or `None` if the report isn't that
+/// format.
 fn findings(report: &str) -> Option<BTreeSet<Finding>> {
     let report: Value = serde_json::from_str(report).ok()?;
     report
@@ -571,8 +527,10 @@ fn findings(report: &str) -> Option<BTreeSet<Finding>> {
         .map(|comment| {
             let number = |key: &str| comment.get(key)?.as_u64()?.try_into().ok();
             let text = |key: &str| Some(comment.get(key)?.as_str()?.to_owned());
+            let file = text("file")?;
+            let root = if file.starts_with('/') { "/" } else { "" };
             Some(Finding {
-                file: normalized(&text("file")?)?,
+                file: format!("{root}{}", normalized(&file)?),
                 line: number("line")?,
                 column: number("column")?,
                 code: comment.get("code")?.as_u64()?.try_into().ok()?,
@@ -694,6 +652,10 @@ mod tests {
                 "set -eu\n#\u{a0}shellcheck disable=SC2086 # r\nrm $a\n",
                 "a space that isn't an ASCII space or tab",
             ),
+            (
+                "set -eu\n# shellcheck disable=SC01083 # r\necho }\n",
+                "a check of how shellcheck parses",
+            ),
         ];
         for (script, expected) in cases {
             let problems = directive_problems("deploy/install.sh", script);
@@ -701,6 +663,45 @@ mod tests {
                 problems.iter().any(|problem| problem.contains(expected)),
                 "{script:?} should report {expected:?}: {problems:#?}"
             );
+        }
+    }
+
+    #[test]
+    fn a_comment_that_sets_nothing_and_a_path_to_the_kit_are_no_problem() {
+        let unit = "[Unit]\n# shellcheck is run in CI\n## shellcheck and the kit\n";
+        assert_eq!(
+            directive_problems("deploy/app.service", unit),
+            Vec::<String>::new()
+        );
+        let script = "set -eu\n# shellcheck source-path=.\n. ./lib.sh\n";
+        assert_eq!(
+            directive_problems("deploy/run.sh", script),
+            Vec::<String>::new()
+        );
+        let outside = directive_problems("deploy/run.sh", "# shellcheck source-path=..\n");
+        assert!(
+            outside
+                .iter()
+                .any(|problem| problem.contains("to look for sourced files")),
+            "{outside:#?}"
+        );
+    }
+
+    #[test]
+    fn a_script_is_known_by_its_name_its_shebang_or_its_shell_directive() {
+        for (name, text) in [
+            ("deploy/run.SH", ""),
+            ("deploy/update", "#!/bin/sh\n"),
+            ("deploy/conf.d/app.conf", "# shellcheck shell=sh\nPORT=1\n"),
+        ] {
+            assert!(is_script(Path::new(name), text), "{name}");
+        }
+        for (name, text) in [
+            ("deploy/Containerfile", "FROM scratch\nRUN echo $a\n"),
+            ("deploy/Caddyfile", "example.com {\n}\n"),
+            ("deploy/lib/common", "clean() {\n  rm -rf $1\n}\n"),
+        ] {
+            assert!(!is_script(Path::new(name), text), "{name}");
         }
     }
 
@@ -743,5 +744,12 @@ mod tests {
         assert_eq!(finding.file, "deploy/install.sh");
         assert_eq!((finding.line, finding.column, finding.code), (3, 6, 2086));
         assert!(findings("not json").is_none());
+        let host = r#"{"comments":[{"file":"/etc/../etc/os-release","line":1,"column":1,
+            "level":"warning","code":2034,"message":"Unused."}]}"#;
+        let found = findings(host).expect("the report should parse");
+        assert_eq!(
+            found.first().map(|finding| finding.file.as_str()),
+            Some("/etc/os-release")
+        );
     }
 }
