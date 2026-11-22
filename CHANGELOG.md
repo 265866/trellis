@@ -6,6 +6,16 @@ part lists what a project's owner must do around the update: a rule that can fla
 a setting to change, or a step to do by hand. [CONTRIBUTING.md](CONTRIBUTING.md#release-trellis)
 has the versioning rule.
 
+## Unreleased
+
+### Fixed
+
+- `foreign_doc_hidden` no longer flags every path into a crate that hides its own root from its
+  docs, as Microsoft's `windows` crate does with `#![cfg_attr(not(feature = "docs"), doc(hidden))]`
+  so docs.rs doesn't build its whole API. Every `use windows::...` failed `just dylint`. A crate's
+  root now counts as documented, and each item and module under it is still checked on its own,
+  so a hidden one inside such a crate is still flagged.
+
 ## v0.15.0
 
 ### Action required in projects

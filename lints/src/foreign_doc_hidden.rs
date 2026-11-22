@@ -28,8 +28,10 @@ declare_lint! {
     /// `#[derive(thiserror::Error)]` writes for a `{field}` in `#[error(..)]`. A name the caller
     /// wrote is checked wherever a macro puts it: code a proc macro copies, the path serde parses
     /// from `#[serde(with = "...")]` and adds `deserialize` to, and the fields
-    /// `#[serde(remote = "...")]` reads from the type it mirrors. Crates whose names start with a
-    /// prefix in `owned_crate_prefixes` are owned, so their hidden items are fair to use:
+    /// `#[serde(remote = "...")]` reads from the type it mirrors. A crate's root is never hidden
+    /// here, though a crate such as `windows` hides its own to keep docs.rs from building its whole
+    /// API: each item under it is checked on its own. Crates whose names start with a prefix in
+    /// `owned_crate_prefixes` are owned, so their hidden items are fair to use:
     ///
     /// ```toml
     /// [trellis_lints]
@@ -232,7 +234,9 @@ fn check(cx: &LateContext<'_>, res: Res, span: Span) {
 }
 
 /// The hidden item `res` reaches in another crate: the item itself, the type or variant a
-/// constructor builds, or the trait or impl an associated item belongs to.
+/// constructor builds, or the trait or impl an associated item belongs to. A crate root is never
+/// one: a crate such as `windows` hides its own root so docs.rs doesn't build its whole API, and
+/// its items still say on their own whether they are hidden.
 fn hidden_foreign_item(tcx: TyCtxt<'_>, res: Res) -> Option<DefId> {
     let Res::Def(kind, id) = res else {
         return None;
@@ -245,6 +249,9 @@ fn hidden_foreign_item(tcx: TyCtxt<'_>, res: Res) -> Option<DefId> {
     } else {
         id
     };
+    if item.is_crate_root() {
+        return None;
+    }
     if tcx.is_doc_hidden(item) {
         return Some(item);
     }
