@@ -730,9 +730,9 @@ update:
 # must pass `just policy` and `just rule-changes` beside a code change, the root kit printing
 # nothing more than no kit, while a script shellcheck faults in either fails `just policy`, and so
 # does the `version` that `cargo add --path` gives a binary's or service's dependency on its other
-# crate, a `release-plz.toml` that would write that crate's changelog into it, and a crate's own
-# `[package] version`. A `target` runs `test` and `build-release` for that target, as a project's
-# CI does for the target a release ships.
+# crate, a `release-plz.toml` that would write that crate's changelog into it, a crate's own
+# `[package] version`, and a missing `release-plz.toml`. A `target` runs `test` and
+# `build-release` for that target, as a project's CI does for the target a release ships.
 #
 # Generates a project of one kind and runs its checks.
 template kind recipes="ci" publish="false" web="false" target="":
@@ -817,7 +817,7 @@ template kind recipes="ci" publish="false" web="false" target="":
         # crate's changelog into its directory, which is code, so `just policy` fails.
         sed '/^changelog_update = false$/d' release-plz.toml > "$out/release-plz.toml"
         cp "$out/release-plz.toml" release-plz.toml
-        if just policy > "$out/policy.txt" 2>&1 || ! grep --quiet "\[release_changelog\] release-plz.toml: release-plz would write the changelog of \`$core\` to \`crates/$core/CHANGELOG.md\`" "$out/policy.txt"; then
+        if just policy > "$out/policy.txt" 2>&1 || ! grep --quiet "\[release_changelog\] release-plz.toml: release-plz could write the changelog of \`$core\` to \`crates/$core/CHANGELOG.md\`" "$out/policy.txt"; then
           cat "$out/policy.txt" >&2
           echo "error: just policy passed a release-plz.toml that writes a crate's changelog into the crate" >&2
           exit 1
@@ -835,6 +835,15 @@ template kind recipes="ci" publish="false" web="false" target="":
         exit 1
       fi
       git checkout --quiet -- crates
+      # Without release-plz.toml, release-plz falls back to its defaults, which write each crate's
+      # changelog into the crate, so `just policy` fails.
+      mv release-plz.toml "$out/release-plz.toml"
+      if just policy > "$out/policy.txt" 2>&1 || ! grep --quiet '\[release_changelog\] release-plz.toml: `release-plz.toml` is missing' "$out/policy.txt"; then
+        cat "$out/policy.txt" >&2
+        echo "error: just policy passed a project without release-plz.toml" >&2
+        exit 1
+      fi
+      mv "$out/release-plz.toml" release-plz.toml
     fi
     if [ "{{ kind }}" = library ] && [[ " {{ recipes }} " = *" dylint "* || "{{ recipes }}" = ci ]]; then
       # A lint library built from another trellis commit is deleted before `just dylint` runs, as

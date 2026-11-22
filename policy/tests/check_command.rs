@@ -836,8 +836,20 @@ fn a_crate_changelog_release_plz_would_write_fails() {
     );
     project.check().assert_reports(
         1,
-        "error: [release_changelog] release-plz.toml: release-plz would write the changelog of \
+        "error: [release_changelog] release-plz.toml: release-plz could write the changelog of \
          `demo_core` to `crates/demo_core/CHANGELOG.md`, which is code",
+    );
+}
+
+#[test]
+fn a_binary_without_a_release_plz_file_fails() {
+    let project = Project::new();
+    fs::remove_file(project.path().join("release-plz.toml"))
+        .expect("the release-plz config should be removed");
+    project.check().assert_reports(
+        1,
+        "error: [release_changelog] release-plz.toml: `release-plz.toml` is missing, so \
+         release-plz falls back to its defaults.",
     );
 }
 

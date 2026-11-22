@@ -170,11 +170,11 @@ Beyond the Google guide, the workspace also turns on:
   that `.cargo/config.toml` holds only the Windows `+crt-static` flags; that a crate depends
   directly only on proc-macro crates listed in `proc_macro_crates`, since a proc macro writes code
   the custom lints don't check; that the root `AGENTS.md` is the only file of instructions for
-  coding agents; that every crate's commits reach the release notes through `changelog_include` in
-  `release-plz.toml`, and that release-plz writes no crate's changelog into its directory or another
-  place that is code, since a release pull request would change it beside the root `Cargo.toml`'s
-  version, a rule; that no crate but the ones `restricted_crates` lists for a package reaches it,
-  directly or through other packages, when that setting is there, and that
+  coding agents; that `release-plz.toml` exists, that every crate's commits reach the release notes
+  through `changelog_include` in it, and that release-plz can write no crate's changelog into its
+  directory or another place that is code, since a release pull request would change it beside the
+  root `Cargo.toml`'s version, a rule; that no crate but the ones `restricted_crates` lists for a
+  package reaches it, directly or through other packages, when that setting is there, and that
   each of its keys that lists crates matches a package; that every shell script in a deploy kit,
   under `crates/<crate>/deploy/` or the root `deploy/`, passes shellcheck, with no `.shellcheckrc`
   or `SHELLCHECK_OPTS` read, the files they source included, and that each shellcheck directive

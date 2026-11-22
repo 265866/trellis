@@ -44,29 +44,49 @@ const PACKAGE_KEYS: [&str; 16] = [
     "build",
 ];
 
-/// The `[package]` keys a member must inherit from `[workspace.package]`, each with why it must.
-const INHERITED_PACKAGE_KEYS: [(&str, &str); 4] = [
-    (
-        "version",
-        "the project shares one version, which release-plz bumps in the root Cargo.toml, a rule; it \
-         would also rewrite a crate's own `version` in the crate's Cargo.toml, which is code, so \
-         the release pull request would fail \"Rule changes stand alone\". trellis doesn't support \
-         crates versioned apart from the workspace. Inheriting it is a code change",
-    ),
-    (
-        "edition",
-        "the edition decides the language and its lints, so every crate is built and linted with \
-         the workspace's",
-    ),
-    (
-        "rust-version",
-        "clippy turns off the lints for APIs newer than `rust-version`, so every crate is linted \
-         against the workspace's",
-    ),
-    (
-        "publish",
-        "a crate is published only when the workspace says so",
-    ),
+/// A `[package]` key a member must inherit from `[workspace.package]`.
+#[derive(Clone, Copy, Debug)]
+struct InheritedKey {
+    /// The key.
+    key: &'static str,
+    /// Why the member must inherit it.
+    why: &'static str,
+    /// How the workspace's value changes.
+    change: &'static str,
+}
+
+/// How a `[workspace.package]` value that the owner sets changes.
+const OWNER_CHANGES: &str = "To change it, change `[workspace.package]` in the root Cargo.toml, in a pull request of its own.";
+
+/// The `[package]` keys a member must inherit from `[workspace.package]`.
+const INHERITED_PACKAGE_KEYS: [InheritedKey; 4] = [
+    InheritedKey {
+        key: "version",
+        why: "the project shares one version, which release-plz bumps in the root Cargo.toml, a \
+              rule; it would also rewrite a crate's own `version` in the crate's Cargo.toml, which \
+              is code, so the release pull request would fail \"Rule changes stand alone\". trellis \
+              doesn't support crates versioned apart from the workspace",
+        change: "release-plz sets the workspace's version in each release pull request. Write \
+                 `version.workspace = true` in a code pull request; the crate then takes the \
+                 workspace's version from its next build.",
+    },
+    InheritedKey {
+        key: "edition",
+        why: "the edition decides the language and its lints, so every crate is built and linted \
+              with the workspace's",
+        change: OWNER_CHANGES,
+    },
+    InheritedKey {
+        key: "rust-version",
+        why: "clippy turns off the lints for APIs newer than `rust-version`, so every crate is \
+              linted against the workspace's",
+        change: OWNER_CHANGES,
+    },
+    InheritedKey {
+        key: "publish",
+        why: "a crate is published only when the workspace says so",
+        change: OWNER_CHANGES,
+    },
 ];
 
 /// The keys a target table (`[lib]`, `[[bin]]`, `[[test]]`, `[[bench]]` or `[[example]]`) may
@@ -154,14 +174,13 @@ fn problems(manifest: &Table, workspace_license: Option<&Value>) -> Vec<String> 
 /// Adds what is wrong with the `[package]` table `package` to `problems`.
 fn package_problems(package: &Value, problems: &mut Vec<String>) {
     unknown_keys("[package]", package, &PACKAGE_KEYS, problems);
-    for (key, why) in INHERITED_PACKAGE_KEYS {
+    for InheritedKey { key, why, change } in INHERITED_PACKAGE_KEYS {
         let value = package.get(key);
         if !inherits(value) {
             let found = value.map_or_else(|| "missing".to_owned(), toml_file::render);
             problems.push(format!(
                 "`[package] {key}` is {found}, but it must be `{key}.workspace = true`, because \
-                 {why}. To change it, change `[workspace.package]` in the root Cargo.toml, in a \
-                 pull request of its own."
+                 {why}. {change}"
             ));
         }
     }
@@ -353,6 +372,34 @@ mod tests {
             problems_in(PACKAGE),
             Vec::<String>::new(),
             "a workspace with no license asks for none"
+        );
+    }
+
+    #[test]
+    fn a_version_of_its_own_ends_with_the_code_fix_not_the_owner_change() {
+        let own = |key: &str, value: &str| {
+            let text = PACKAGE.replace(
+                &format!("\n{key}.workspace = true"),
+                &format!("\n{key} = {value}"),
+            );
+            let problems = problems_in(&text);
+            assert_eq!(problems.len(), 1, "one problem for {key}: {problems:?}");
+            problems[0].clone()
+        };
+        let version = own("version", "\"0.2.0\"");
+        assert!(
+            version.contains(
+                "trellis doesn't support crates versioned apart from the workspace. \
+                              release-plz sets the workspace's version in each release pull \
+                              request. Write `version.workspace = true` in a code pull request"
+            ) && !version.contains("To change it"),
+            "release-plz owns the workspace's version, so the owner isn't told to change it: \
+             {version}"
+        );
+        let edition = own("edition", "\"2021\"");
+        assert!(
+            edition.ends_with(OWNER_CHANGES),
+            "the owner changes the workspace's edition: {edition}"
         );
     }
 

@@ -690,13 +690,18 @@ fn a_version_in_the_workspace_dependencies_passes() {
 }
 
 #[test]
-fn without_a_release_plz_file_the_changelog_has_nothing_to_check() {
+fn a_published_library_without_a_release_plz_file_fails() {
     let fixture = Fixture::new("");
     let violations = release_changelog::check(&fixture.workspace())
         .unwrap_or_else(|error| panic!("the check should run, but {error}"));
-    assert!(
-        violations.is_empty(),
-        "a workspace without release-plz.toml passes: {violations:?}"
+    assert_violations(
+        &violations,
+        &[Expected {
+            file: "release-plz.toml",
+            message: "`release-plz.toml` is missing, so release-plz falls back to its defaults",
+        }],
+        "both members are published, and release-plz's defaults would write a changelog into \
+         each crate",
     );
 }
 
@@ -736,7 +741,7 @@ fn a_changelog_release_plz_would_write_into_a_crate_fails() {
         &violations,
         &[Expected {
             file: "release-plz.toml",
-            message: "release-plz would write the changelog of `derive` to \
+            message: "release-plz could write the changelog of `derive` to \
                       `crates/derive/CHANGELOG.md`, which is code",
         }],
         "`derive` has no entry and `[workspace]` leaves `changelog_update` at release-plz's \

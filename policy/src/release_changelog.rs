@@ -20,16 +20,20 @@ const RELEASE_PLZ: &str = "release-plz.toml";
 /// notes. The list is a rule, so it can name crates that aren't members yet: a new crate is added
 /// to it in the rule change that allows the crate, before the code lands.
 ///
-/// Without a `release-plz.toml` there is nothing to check. With one, an entry with
-/// `changelog_update = true` must exist, since without it no release has notes.
+/// An entry with `changelog_update = true` must exist, since without it no release has notes.
 ///
-/// It also checks that release-plz writes no member's changelog to a file that
+/// It also checks that release-plz can write no member's changelog to a file that
 /// `trellis-policy rule-changes` counts as code, such as `crates/<crate>/CHANGELOG.md`. release-plz
-/// updates a package's changelog unless `changelog_update` is `false` in its `[[package]]` entry
-/// or, without one there, in `[workspace]`, and writes it to `changelog_path`, from the entry or
-/// `[workspace]`, or else beside the package's `Cargo.toml`. Such a file would change in the
-/// release pull request beside the version in the root `Cargo.toml`, a rule, and fail "Rule
-/// changes stand alone".
+/// updates the changelog of each package a release takes in unless `changelog_update` is `false`
+/// in its `[[package]]` entry or, without one there, in `[workspace]`, and writes it to
+/// `changelog_path`, from the entry or `[workspace]`, or else beside the package's `Cargo.toml`.
+/// Such a file would change in the release pull request beside the version in the root
+/// `Cargo.toml`, a rule, and fail "Rule changes stand alone". Each member counts, since any of them
+/// can be in a release.
+///
+/// A missing `release-plz.toml` fails. Every trellis project has one, and the release workflow
+/// copies it, while release-plz without it falls back to its defaults: a changelog beside every
+/// crate's `Cargo.toml`, and none of the settings trellis's file sets.
 ///
 /// # Errors
 ///
@@ -38,7 +42,7 @@ pub fn check(workspace: &Workspace) -> Result<Vec<Violation>, PolicyError> {
     let path = workspace.root().join(RELEASE_PLZ);
     match fs::metadata(&path) {
         Ok(_) => {}
-        Err(error) if error.kind() == ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(error) if error.kind() == ErrorKind::NotFound => return Ok(vec![missing_file()]),
         Err(source) => return Err(PolicyError::Read { path, source }),
     }
     let config = toml_file::read(&path)?;
@@ -60,6 +64,45 @@ pub fn check(workspace: &Workspace) -> Result<Vec<Violation>, PolicyError> {
     Ok(violations)
 }
 
+/// The violation for a workspace without a `release-plz.toml`.
+fn missing_file() -> Violation {
+    Violation::new(
+        RELEASE_PLZ.to_owned(),
+        format!(
+            "`{RELEASE_PLZ}` is missing, so release-plz falls back to its defaults. It would write \
+             each crate's changelog beside the crate's Cargo.toml, which is code, so a release \
+             pull request would change it beside the version in the root Cargo.toml, a rule, and \
+             fail \"Rule changes stand alone\". It would also drop what trellis's file sets: one \
+             `CHANGELOG.md`, which the main package writes with every other crate in \
+             `changelog_include`, the one tag the crates share, and, when the crate isn't \
+             published, versions from `v*` tags. Restore the file from git history, where \
+             `git log -- {RELEASE_PLZ}` finds the commit that removed it, in a rules pull request."
+        ),
+    )
+}
+
+/// Where release-plz takes a member's `changelog_update` from.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum UpdateSource {
+    /// The member's own `[[package]]` entry.
+    Entry,
+    /// `[workspace]`.
+    Workspace,
+    /// Neither, so release-plz's default, which updates the changelog.
+    Default,
+}
+
+/// The changelog release-plz can write for one member.
+#[derive(Debug)]
+struct Changelog<'workspace> {
+    /// The member's package name.
+    name: &'workspace str,
+    /// The file, relative to the root with `/` separators.
+    file: String,
+    /// Where `changelog_update` comes from.
+    source: UpdateSource,
+}
+
 /// A workspace member and where it is.
 #[derive(Debug)]
 struct CrateDirectory<'workspace> {
@@ -69,61 +112,98 @@ struct CrateDirectory<'workspace> {
     directory: String,
 }
 
-/// The violations by the parsed `release-plz.toml` `config` of a changelog that release-plz would
+/// The violations by the parsed `release-plz.toml` `config` of a changelog that release-plz could
 /// write to a file that is code, in a workspace whose members are `members`.
 fn changelogs_in_code(config: &Table, members: &[CrateDirectory<'_>]) -> Vec<Violation> {
-    let workspace = config.get("workspace").and_then(Value::as_table);
-    let packages = config.get("package").and_then(Value::as_array);
+    let changelogs: Vec<Changelog<'_>> = members
+        .iter()
+        .filter_map(|member| changelog(config, member))
+        .collect();
+    let root_kept = changelogs
+        .iter()
+        .any(|changelog| changelog.file == "CHANGELOG.md");
     let mut violations = Vec::new();
-    for CrateDirectory { name, directory } in members {
-        let entry = packages
-            .into_iter()
-            .flatten()
-            .filter_map(Value::as_table)
-            .find(|package| package.get("name").and_then(Value::as_str) == Some(name));
-        let setting = |key: &str| {
-            let from_entry = entry.and_then(|entry| entry.get(key));
-            from_entry
-                .map(|value| (value, "its `[[package]]` entry"))
-                .or_else(|| {
-                    let value = workspace.and_then(|workspace| workspace.get(key))?;
-                    Some((value, "`[workspace]`"))
-                })
-        };
-        let updated = setting("changelog_update");
-        if updated.is_some_and(|(value, _)| value.as_bool() == Some(false)) {
+    for Changelog { name, file, source } in &changelogs {
+        if !changed_files::is_code(file) {
             continue;
         }
-        let file = match setting("changelog_path") {
-            Some((value, _)) => match value.as_str().and_then(repository_path) {
-                Some(file) => file,
-                None => continue,
-            },
-            None if directory.is_empty() => "CHANGELOG.md".to_owned(),
-            None => format!("{directory}/CHANGELOG.md"),
-        };
-        if !changed_files::is_code(&file) {
-            continue;
-        }
-        let why = match updated {
-            Some((_, place)) => format!("`changelog_update = true` in {place}"),
-            None => "no `changelog_update = false` in its `[[package]]` entry or in \
-                     `[workspace]`, and release-plz updates a changelog unless it is `false`"
+        let why = match source {
+            UpdateSource::Entry => {
+                "`changelog_update = true` in its `[[package]]` entry".to_owned()
+            }
+            UpdateSource::Workspace => "`changelog_update = true` in `[workspace]`".to_owned(),
+            UpdateSource::Default => "no `changelog_update = false` in its `[[package]]` entry or \
+                                      in `[workspace]`, and release-plz updates a changelog \
+                                      unless it is `false`"
                 .to_owned(),
+        };
+        let fix = match source {
+            UpdateSource::Entry if !root_kept => format!(
+                "No crate writes the root `CHANGELOG.md`, so `{name}` is the main package: set \
+                 `changelog_path = \"./CHANGELOG.md\"` in its `[[package]]` entry"
+            ),
+            UpdateSource::Entry => format!(
+                "The project keeps one `CHANGELOG.md`, which another crate writes: set \
+                 `changelog_update = false` in the `[[package]]` entry of `{name}`, where \
+                 `[workspace]` can't override it"
+            ),
+            UpdateSource::Workspace | UpdateSource::Default => format!(
+                "The project keeps one `CHANGELOG.md`, which the main package writes: set \
+                 `changelog_update = false` in `[workspace]` or in the `[[package]]` entry of \
+                 `{name}`"
+            ),
         };
         violations.push(Violation::new(
             RELEASE_PLZ.to_owned(),
             format!(
-                "release-plz would write the changelog of `{name}` to `{file}`, which is code, \
-                 since `{RELEASE_PLZ}` has {why}. That file would change in the release pull \
-                 request beside the version in the root Cargo.toml, which is a rule, and fail \
-                 \"Rule changes stand alone\". The project keeps one `CHANGELOG.md`, which the \
-                 main package's entry writes: set `changelog_update = false` for `{name}`, in \
-                 `[workspace]` or its `[[package]]` entry, in a rules pull request."
+                "release-plz could write the changelog of `{name}` to `{file}`, which is code, \
+                 since `{RELEASE_PLZ}` has {why}. In a release that takes in `{name}`, that file \
+                 would change in the release pull request beside the version in the root \
+                 Cargo.toml, which is a rule, and fail \"Rule changes stand alone\". {fix}, in a \
+                 rules pull request."
             ),
         ));
     }
     violations
+}
+
+/// The changelog release-plz can write for `member` under the parsed `release-plz.toml`
+/// `config`, or `None` if it writes none or writes it outside the repository.
+fn changelog<'workspace>(
+    config: &Table,
+    member: &CrateDirectory<'workspace>,
+) -> Option<Changelog<'workspace>> {
+    let workspace = config.get("workspace").and_then(Value::as_table);
+    let entry = config
+        .get("package")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_table)
+        .find(|package| package.get("name").and_then(Value::as_str) == Some(member.name));
+    let from_entry = |key: &str| entry.and_then(|entry| entry.get(key));
+    let from_workspace = |key: &str| workspace.and_then(|workspace| workspace.get(key));
+    let (update, source) = match (
+        from_entry("changelog_update"),
+        from_workspace("changelog_update"),
+    ) {
+        (Some(value), _) => (value.as_bool(), UpdateSource::Entry),
+        (None, Some(value)) => (value.as_bool(), UpdateSource::Workspace),
+        (None, None) => (None, UpdateSource::Default),
+    };
+    if update == Some(false) {
+        return None;
+    }
+    let file = match from_entry("changelog_path").or_else(|| from_workspace("changelog_path")) {
+        Some(value) => repository_path(value.as_str()?)?,
+        None if member.directory.is_empty() => "CHANGELOG.md".to_owned(),
+        None => format!("{}/CHANGELOG.md", member.directory),
+    };
+    Some(Changelog {
+        name: member.name,
+        file,
+        source,
+    })
 }
 
 /// `path`, a `changelog_path` that release-plz reads from the workspace root, relative to the
@@ -344,13 +424,31 @@ mod tests {
         }
     }
 
+    /// The fix the message gives when `[workspace]` or release-plz's default turns the
+    /// changelog on.
+    const WORKSPACE_FIX: &str = "The project keeps one `CHANGELOG.md`, which the main package \
+                                 writes: set `changelog_update = false` in `[workspace]` or in the \
+                                 `[[package]]` entry of `demo_core`, in a rules pull request.";
+
+    /// The fix the message gives when the crate's own entry turns the changelog on and another
+    /// crate writes the root `CHANGELOG.md`.
+    const ENTRY_FIX: &str = "The project keeps one `CHANGELOG.md`, which another crate writes: set \
+                             `changelog_update = false` in the `[[package]]` entry of `demo_core`, \
+                             where `[workspace]` can't override it, in a rules pull request.";
+
     #[test]
-    fn a_changelog_release_plz_would_write_into_a_crate_fails() {
-        for (text, why) in [
+    fn a_changelog_release_plz_could_write_into_a_crate_fails_with_the_fix_for_its_source() {
+        for (text, why, fix) in [
             (
                 format!("[workspace]\ngit_only = true\n{MAIN}"),
                 "since `release-plz.toml` has no `changelog_update = false` in its `[[package]]` \
                  entry or in `[workspace]`",
+                WORKSPACE_FIX,
+            ),
+            (
+                format!("[workspace]\nchangelog_update = true\n{MAIN}"),
+                "since `release-plz.toml` has `changelog_update = true` in `[workspace]`",
+                WORKSPACE_FIX,
             ),
             (
                 format!(
@@ -358,10 +456,7 @@ mod tests {
                      name = \"demo_core\"\nchangelog_update = true\n"
                 ),
                 "since `release-plz.toml` has `changelog_update = true` in its `[[package]]` entry",
-            ),
-            (
-                format!("[workspace]\nchangelog_update = true\n{MAIN}"),
-                "since `release-plz.toml` has `changelog_update = true` in `[workspace]`",
+                ENTRY_FIX,
             ),
         ] {
             let messages = changelog_messages(&text);
@@ -371,11 +466,11 @@ mod tests {
                 "only `demo_core` writes into its crate: {text:?} {messages:?}"
             );
             for part in [
-                "release-plz would write the changelog of `demo_core` to \
+                "release-plz could write the changelog of `demo_core` to \
                  `crates/demo_core/CHANGELOG.md`, which is code",
                 why,
-                "set `changelog_update = false` for `demo_core`, in `[workspace]` or its \
-                 `[[package]]` entry, in a rules pull request",
+                "In a release that takes in `demo_core`, that file would change",
+                fix,
             ] {
                 assert!(
                     messages[0].contains(part),
@@ -386,6 +481,26 @@ mod tests {
     }
 
     #[test]
+    fn a_main_package_without_its_changelog_path_is_told_to_set_it() {
+        let messages = changelog_messages(
+            "[workspace]\nchangelog_update = false\n\n[[package]]\nname = \"demo\"\n\
+             changelog_update = true\nchangelog_include = [\"demo_core\"]\n",
+        );
+        assert_eq!(messages.len(), 1, "only the main package: {messages:?}");
+        assert!(
+            messages[0].starts_with(
+                "release-plz could write the changelog of `demo` to `crates/demo/CHANGELOG.md`"
+            ) && messages[0].contains(
+                "No crate writes the root `CHANGELOG.md`, so `demo` is the main package: set \
+                 `changelog_path = \"./CHANGELOG.md\"` in its `[[package]]` entry, in a rules \
+                 pull request."
+            ),
+            "turning its changelog off would leave no entry with `changelog_update = true`, so the \
+             fix is its path: {messages:?}"
+        );
+    }
+
+    #[test]
     fn a_changelog_path_into_a_crate_fails_wherever_it_is_set() {
         let messages = changelog_messages(&format!(
             "[workspace]\nchangelog_update = false\n{MAIN}\n[[package]]\nname = \"demo_core\"\n\
@@ -393,9 +508,27 @@ mod tests {
         ));
         assert_eq!(messages.len(), 1, "one changelog in a crate: {messages:?}");
         assert!(
-            messages[0].contains("to `crates/demo/NOTES.md`, which is code"),
-            "the path is read from the root with its dots resolved: {messages:?}"
+            messages[0].contains("to `crates/demo/NOTES.md`, which is code")
+                && messages[0].contains(ENTRY_FIX),
+            "the path is read from the root with its dots resolved, and the fix goes in the \
+             crate's entry: {messages:?}"
         );
+    }
+
+    #[test]
+    fn a_missing_file_says_what_trellis_s_file_sets_and_how_to_restore_it() {
+        let message = missing_file().message().to_owned();
+        for part in [
+            "`release-plz.toml` is missing, so release-plz falls back to its defaults",
+            "write each crate's changelog beside the crate's Cargo.toml, which is code",
+            "one `CHANGELOG.md`, which the main package writes",
+            "`git log -- release-plz.toml` finds the commit that removed it",
+        ] {
+            assert!(
+                message.contains(part),
+                "the message should contain {part:?}: {message}"
+            );
+        }
     }
 
     #[test]
