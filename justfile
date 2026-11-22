@@ -752,8 +752,9 @@ template kind recipes="ci" publish="false" web="false" target="":
       just dylint
       [ ! -e target/dylint/libraries/built-from-the-older-commit ] \
         || { echo "error: just dylint kept a lint library built from another trellis commit" >&2; exit 1; }
-      [ "$(tr -d '\r\n' < target/dylint/trellis-rev)" = "$(just --evaluate trellis_rev)" ] \
-        || { echo "error: just dylint didn't record the trellis commit its lint library came from" >&2; exit 1; }
+      [ "$(tr -d '\r\n' < target/dylint/trellis-rev)" = "$(just --evaluate trellis_rev | tr -d '\r\n')" ] \
+        || { echo "error: just dylint didn't record the trellis commit its lint library came from:" \
+          "$(od -c target/dylint/trellis-rev | head -n 3), not $(just --evaluate trellis_rev | od -c | head -n 3)" >&2; exit 1; }
       # A library built from this commit stays, so CI's cache keeps saving the build.
       touch target/dylint/libraries/built-from-this-commit
       just dylint
