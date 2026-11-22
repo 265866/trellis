@@ -5,7 +5,7 @@ name: Advisories
 {%- if kind != 'library' %}
 # It also runs `just stale-licenses`, which flags an entry in about.toml for a crate that has left
 # the graph: `just notices` lets such an entry through, so a license can be accepted before its
-# crate.
+# crate arrives.
 {%- endif %}
 {%- if web_ui %}
 # `just stale-licenses` installs the web UI's packages and flags an entry in web-licenses.toml

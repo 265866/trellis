@@ -22,15 +22,15 @@ installed. They don't run on Alpine or another musl distribution.
 
 ## Install a release
 
-1. Download the {{ 'files' if release.files else 'archive' }} for your platform and `{{ release.checksums | default('SHA256SUMS') }}` from the release.
+1. Download {{ 'the file you want for your platform, and' if release.files else 'the archive for your platform and' }} `{{ release.checksums | default('SHA256SUMS') }}`{{ ',' if release.files }} from the release.
 {%- if visibility == 'private' %} The repository
    is private, so sign in to GitHub first, or use the [GitHub CLI](https://cli.github.com/):
    `gh release download <tag> --repo {{ github_owner }}/{{ project_name }}`.
 {%- endif %}
 2. Check the download as [Verify a release](verifying-releases.md) shows.
 {%- if release.files %}
-3. Install them: run an installer, or unpack an archive or take the program as it is and put it
-   where you keep programs, such as a directory on your `PATH`.
+3. Install it. Run an installer as it is. Unpack an archive, then keep the program where you keep
+   programs, such as a directory on your `PATH` for a command-line one.
 {%- else %}
 3. Unpack the archive and move `{{ project_name }}` to where you keep programs, such as a directory
    on your `PATH`.
@@ -39,7 +39,7 @@ installed. They don't run on Alpine or another musl distribution.
    set `{{ crate_name | upper }}_WEB_DIR` to where you keep it.
 {%- endif %}
 
-To update, install the new release the same way.
+To update, install the new release{{ ' the same way' if not release.files }}.
 
 ## Build from source
 
@@ -74,6 +74,7 @@ The image is `ghcr.io/{{ github_owner | lower }}/{{ project_name }}`, for {{ tar
 {%- if targets | length > 1 %}
 Docker and Podman pull the one for your machine.
 {%- endif %}
+
 Each release pushes three tags, such as these for 1.4.2:
 
 | Tag | Follows |
@@ -106,8 +107,8 @@ Replace `<minor>` with the latest release's minor version, such as `1.4`, so upd
 arrive when you pull.
 
 Podman takes the same arguments.
-{%- if visibility == 'public' %} Check the image first as
-[Verify a release](verifying-releases.md) shows.
+{%- if visibility == 'public' %} Check the image first as [Verify a release](verifying-releases.md)
+shows.
 {%- else %} To run one release exactly, use its digest, which
 [Verify a release](verifying-releases.md) shows how to find.
 {%- endif %}

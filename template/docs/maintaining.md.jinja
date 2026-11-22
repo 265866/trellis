@@ -37,6 +37,7 @@ Commit the generated project on a branch named `main` (`git init --initial-branc
    the title becomes the commit on `main`. It creates the `release` label that release-plz puts on
    its pull request.
 {%- if visibility == 'public' %}
+
    It adds the Actions policy that allows `pull_request_target` for `rule-changes.yml`; without
    it, a public repository doesn't run the rule-change check, and no pull request gets the "Rule
    changes stand alone" status. It turns on private vulnerability reporting, which
@@ -48,12 +49,12 @@ Commit the generated project on a branch named `main` (`git init --initial-branc
    "Rule changes stand alone" status. A ruleset can require checks that haven't run yet, so `main`
    is protected from the first push. `CI passed` passes only when every other CI job passes, so
    the required checks stay the same when CI gains or loses a job.
-{%- if kind == 'binary' %}
-   The `Release build` checks come from another workflow and run only when a pull request changes
-   what goes into a release, so they aren't required.
-{%- elif kind == 'service' %}
-   `CI passed` also needs `Container image`, which builds the image, as `just image` does, and runs
-   it with `--version`, so the service must answer `--version` and exit 0.
+{%- if kind == 'binary' %} The `Release build` checks
+   come from another workflow and run only when a pull request changes what goes into a release,
+   so they aren't required.
+{%- elif kind == 'service' %} `CI passed` also needs
+   `Container image`, which builds the image, as `just image` does, and runs it with `--version`,
+   so the service must answer `--version` and exit 0.
 {%- endif %}
 {%- if visibility == 'private' %}
 
@@ -67,9 +68,12 @@ Commit the generated project on a branch named `main` (`git init --initial-branc
 
 3. Install the [Renovate app](https://github.com/apps/renovate) on the repository. Each week it
    opens one pull request with the crate updates other than major ones, and one for each major
-   update.
-{%- if web_ui %} It does the same for the web UI's packages.{% endif %} The toolchain, tool, action
-   and image pins{% if web_ui %}, Bun's included,{% endif %} arrive with trellis updates.
+{%- if web_ui %}
+   update. It does the same for the web UI's packages. The toolchain, tool, action and image pins,
+   Bun's included, arrive with trellis updates.
+{%- else %}
+   update. The toolchain, tool, action and image pins arrive with trellis updates.
+{%- endif %}
 
 4. Create a [fine-grained token](https://github.com/settings/personal-access-tokens/new) for
    this repository only, with read and write access to contents and to pull requests. A pull
@@ -92,12 +96,13 @@ Commit the generated project on a branch named `main` (`git init --initial-branc
 5. Check the settings. `just check-github` reports each one as ok or wrong, and fails if any is
    wrong. It checks that the `RELEASE_PLZ_TOKEN` secret exists, but GitHub never shows it a
    secret's value, so the token's access is left to the check in step 4. A missing `main` ruleset,
-   one that isn't active and one that anything may bypass
-   are each wrong.
-{%- if visibility == 'private' %} When GitHub answers that the account's plan can't protect
-   `main` in a private repository, it reports `main`'s protection as unavailable rather than wrong.
-{%- endif %}
+   one that isn't active and one that anything may bypass are each wrong.
+{%- if visibility == 'private' %} When GitHub answers that
+   the account's plan can't protect `main` in a private repository, it reports `main`'s protection
+   as unavailable rather than wrong. On Windows, run it in Git Bash too:
+{%- else %}
    On Windows, run it in Git Bash too:
+{%- endif %}
 
    ```sh
    just check-github
@@ -138,24 +143,27 @@ the minor version and a `fix` the patch version. To ship:
 {%- if not published %}
    At the first release, release-plz leaves out each commit that changed only a crate that
    `changelog_include` in `release-plz.toml` lists: it adds those crates' commits only after a
-   release tag. On the release pull request's branch, add to the new section of `CHANGELOG.md` an
-   entry for each commit that this prints and the section lacks; it also prints commits that
+   release tag. It leaves out each commit that changed only a deploy kit in the root `deploy/` at
+   every release. On the release pull request's branch, add to the new section of `CHANGELOG.md`
+   an entry for each commit that this prints and the section lacks; it also prints commits that
    changed the main crate too, which the section has:
-   `git log --format=%s -- crates ':!crates/{{ crate_name }}'`. Every type is left out, not only
-   `feat` and `fix`. Put each under `### Added` for a `feat`, `### Fixed` for a `fix`, and
+   `git log --format=%s -- crates deploy ':!crates/{{ crate_name }}'`. Every type is left out, not
+   only `feat` and `fix`. Put each under `### Added` for a `feat`, `### Fixed` for a `fix`, and
    `### Other` for any other type, such as a `test` or a `refactor`, and write it as release-plz
-   writes the others: `feat(core): parse dates (#12)` becomes `- *(core)* parse dates (#12)`.
-   Later releases list those commits without the edit.
-   The first release after you add a crate comes out as a patch when only that crate changed, and
-   its notes can repeat older entries; delete those. Renaming the main crate stops the release
-   workflow with an error that says what to do by hand.
+   writes the others: `feat(core): parse dates (#12)` becomes `- *(core)* parse dates (#12)`. Later
+   releases list the crates' commits without the edit, but never the root kit's: add those to the
+   release's section of `CHANGELOG.md` on each release pull request's branch by hand, from
+   `git log --format=%s <previous release tag>..HEAD -- deploy`. The first release after you add a
+   crate comes out as a patch when only that crate changed, and its notes can repeat older entries;
+   delete those. Renaming the main crate stops the release workflow with an error that says what to
+   do by hand.
 {%- endif %}
 2. Under each breaking change, from a commit marked `!` or with a `BREAKING CHANGE:` footer, write
    what users must do before they upgrade. Edit `CHANGELOG.md` on the release pull request's
    branch, as in step 1. [Stability](stability.md) promises users this note.
 3. Merge the release pull request once its checks pass. Merge no other pull request until the
-   release workflow's **{{ 'Release' if kind == 'library' else 'Tag' }}** job finishes. A pull
-   request merged before then can get no release pull request until the next push to `main`.
+   release workflow's **{{ 'Release' if kind == 'library' else 'Tag' }}** job finishes. A pull request merged before then can get no release
+   pull request until the next push to `main`.
 {%- if kind != 'library' %}
 4. If a later job fails, re-run the failed jobs. They pick up from the same tag.
 
@@ -172,14 +180,16 @@ change nothing inside it, and fix the `path` of each dependency on it. `just rul
 the moved files as neither rules nor code, so this is a code pull request. Outside `crates/`, only
 the crate's row under Layout in `CONTRIBUTING.md` names its directory. Fix that row in a rules
 pull request after the move.
-{%- if web_ui and kind == 'service' %} Moving `crates/{{ crate_name }}`, which holds the web UI, also changes the root
-files that name `crates/{{ crate_name }}/web`: `justfile`, `Containerfile`, `.gitignore` and
-`.dockerignore`. They are rules, so that move is a rules pull request, and the Layout rows can go
-in it.
-{%- elif web_ui %} Moving `crates/{{ crate_name }}`, which holds the web UI, also changes the
-files that name `crates/{{ crate_name }}/web`: `justfile`, `.gitignore` and
-`.github/workflows/build-release.yml`. They are rules, so that move is a rules pull request, and
-the Layout rows can go in it.
+{%- if web_ui and kind == 'service' %}
+
+Moving `crates/{{ crate_name }}`, which holds the web UI, also changes the root files that name
+`crates/{{ crate_name }}/web`: `justfile`, `Containerfile`, `.gitignore` and `.dockerignore`. They
+are rules, so that move is a rules pull request, and the Layout rows can go in it.
+{%- elif web_ui %}
+
+Moving `crates/{{ crate_name }}`, which holds the web UI, also changes the files that name
+`crates/{{ crate_name }}/web`: `justfile`, `.gitignore` and `.github/workflows/build-release.yml`.
+They are rules, so that move is a rules pull request, and the Layout rows can go in it.
 {%- endif %}
 
 GitHub's merge doesn't follow a moved directory, though git's does. When the move and another
@@ -207,10 +217,19 @@ request removes the old name's key and the old name from each list. Move the dir
 the package in separate pull requests.
 
 This doesn't cover the package `{{ crate_name }}`, which carries the project's name. Rule files
-name it too: the root `Cargo.toml`, `dylint.toml`, the release configuration
-{%- if kind != 'library' %}, the justfile{% if kind == 'service' %}, the Containerfile{% endif %}
-and the workflows{% endif %}. So renaming it changes rules and code together. To rename it,
+{%- if kind == 'library' %}
+name it too: the root `Cargo.toml`, `dylint.toml` and the release configuration. So renaming it
+changes rules and code together. To rename it, follow "Name and kind" under
+[Change an answer](#change-an-answer).
+{%- elif kind == 'service' %}
+name it too: the root `Cargo.toml`, `dylint.toml`, the release configuration, the justfile, the
+Containerfile and the workflows. So renaming it changes rules and code together. To rename it,
 follow "Name and kind" under [Change an answer](#change-an-answer).
+{%- else %}
+name it too: the root `Cargo.toml`, `dylint.toml`, the release configuration, the justfile and
+the workflows. So renaming it changes rules and code together. To rename it, follow "Name and
+kind" under [Change an answer](#change-an-answer).
+{%- endif %}
 
 ## Keep a package away from some crates
 
@@ -319,15 +338,20 @@ An update leaves them alone.
 - **Release files.** The `release` answer, a YAML mapping, changes what a release attaches.
   `files` maps each target triple to the names of its files, with `{version}` for the version,
   and `release/package.sh`, which you write, writes exactly those files for its target; the
-  release build replaces trellis's archive with them, and the release attests and publishes them
+  release build replaces trellis's archive with them, and the release {{ 'attests and publishes them' if visibility == 'public' else 'publishes them, unattested,' }}
   with the rest. [Install](install.md), [Verify a release](verifying-releases.md) and
   [Stability](stability.md) then list those names, so changing one breaks your users as
-  "Keep releases verifiable" says. `checksums` names the checksums file, `name` starts the
-  release's title, and `env` sets environment variables, each a quoted string that may hold a
-  `{% raw %}${{ }}{% endraw %}` expression, for the release's `cargo build` only, such as
-  `{% raw %}APP_RELEASE: "${{ inputs.ref && '1' || '' }}"{% endraw %}`, which is set only when the release workflow,
-  not a pull request, runs the build. The script runs with bash from the repository's root on
-  each target's runner{% if 'windows' in platforms %}, Git Bash on Windows{% endif %}, after the build, with these variables:
+  "Keep releases verifiable" says. `checksums` names the checksums file, `name` starts the release's
+  title, and `env` sets environment variables for the release's `cargo build` only. Each value is a
+  string, quoted if YAML would read it as a number, a boolean, a date or null, such as `"1"`, and
+  may hold a `{% raw %}${{ }}{% endraw %}` expression, such as `{% raw %}APP_RELEASE: "${{ inputs.ref && '1' || '' }}"{% endraw %}`, which is
+  set only when the release workflow, not a pull request, runs the build.
+{%- if 'windows' in platforms %} The script runs with bash,
+  Git Bash on Windows, from the repository's root on each target's runner, after the build, with
+  these variables:
+{%- else %} The script runs with bash
+  from the repository's root on each target's runner, after the build, with these variables:
+{%- endif %}
 
   | Variable | Holds |
   | --- | --- |
@@ -347,12 +371,16 @@ An update leaves them alone.
   `{% raw %}APP_LICENSES: "${{ github.workspace }}/target/THIRD-PARTY-LICENSES.html"{% endraw %}`; a
   build script reads a relative path from its crate's directory.
 {%- if 'windows' in platforms %}
+
   Git Bash turns an argument that starts with `/` into a path, so call a Windows program such as
   Inno Setup's `iscc`, which the windows-2025 runners have, with `MSYS_NO_PATHCONV=1`, and give it
   paths through `cygpath -w`.
 {%- endif %}
+
   The script is a rule, like the workflows, and `just actionlint` shellchecks it. Write it, then
-  set the answer in the same rules pull request, with files for each of the project's targets:
+  set the answer in the same rules pull request, with files for each of the project's targets.
+  This is a starter, not the project's current answer: it names one archive per target, so put in
+  the names your script writes, and every key of a `release` answer the project already has:
 
   ```sh
   uvx copier update --defaults --vcs-ref=:current: \
@@ -368,19 +396,19 @@ An update leaves them alone.
 {%- if kind == 'service' %}
 
 - **What the image adds.** The `image` answer, a YAML mapping, adds to the image without an edit
-  to `Containerfile`: `env` sets environment defaults, each a quoted string, `workdir` the
-  directory the service starts in, `expose` the ports it listens on, and `files: true` copies
-  `crates/{{ crate_name }}/image/` onto the image's root, such as data files at
-  `crates/{{ crate_name }}/image/app/profiles/` or extra notices at
-  `crates/{{ crate_name }}/image/usr/share/doc/{{ project_name }}/`. The image stays distroless
-  and runs as its `nonroot` user. Its files and working directory belong to root, readable by all
-  and executable by none, so a directory the service writes needs a mount. They are data: none
-  may be a link or an ELF program or library, and they go under `/usr/share` or a directory of
-  their own, such as `/app`, never in one the base image keeps, such as `/usr/lib`, `/etc` or
-  `/tmp`. The binary and trellis's license files win over a file at the same path. Those files
-  are code, apart from ones that are rules by their names, such as a `.gitignore`. Land them in a
-  code pull request first, since the image's build fails without them, then set the answer in a
-  rules pull request:
+  to `Containerfile`: `env` sets environment defaults, `workdir` the directory the service starts
+  in, `expose` the ports it listens on, and `files: true` copies `crates/{{ crate_name }}/image/`
+  onto the image's root, such as data files at `crates/{{ crate_name }}/image/app/profiles/` or
+  extra notices at `crates/{{ crate_name }}/image/usr/share/doc/{{ project_name }}/`. Each `env`
+  value is a string: quote one that YAML would read as a number, a boolean, a date or null, such as
+  `"8080"`, while `0.0.0.0` reads as a string as written. The image stays distroless and runs as its
+  `nonroot` user. Its files and working directory belong to root, readable by all and executable by
+  none, so a directory the service writes needs a mount. They are data: none may be a link or an ELF
+  program or library, and they go under `/usr/share` or a directory of their own, such as `/app`,
+  never in one the base image keeps, such as `/usr/lib`, `/etc` or `/tmp`. The binary and trellis's
+  license files win over a file at the same path. Those files are code, apart from ones that are
+  rules by their names, such as a `.gitignore`. Land them in a code pull request first, since the
+  image's build fails without them, then set the answer in a rules pull request:
 
   ```sh
   uvx copier update --defaults --vcs-ref=:current: \
@@ -388,7 +416,8 @@ An update leaves them alone.
   ```
 
   The answer replaces the whole mapping, so repeat every key you keep. `just image` builds the
-  image as the release does.
+  image as the release does, for this machine's architecture only;
+  [CONTRIBUTING.md](../CONTRIBUTING.md#the-container-image) says what it needs.
 {%- endif %}
 
 - **Deploy kit.** Keep the scripts and units that install and run it on a host in
@@ -471,68 +500,110 @@ Adding Linux or Windows asks for the processors again, and the update takes the 
 {%- endif %}
 {%- endif %}
 
-The change is a rule change, so it can't also change code. Once it merges, run
-`just check-github` on `main`, and `just setup-github` if it reports a wrong setting.
 {%- if kind == 'service' %}
-Changing the architectures needs nothing on GitHub, since `CI passed` covers whatever platforms CI
-runs.
+The change is a rule change, so it can't also change code. Once it merges, run `just check-github`
+on `main`, and `just setup-github` if it reports a wrong setting. Changing the architectures needs
+nothing on GitHub, since `CI passed` covers whatever platforms CI runs. Some answers also change
+what GitHub needs:
+{%- elif 'linux' in platforms or 'windows' in platforms %}
+The change is a rule change, so it can't also change code. Once it merges, run `just check-github`
+on `main`, and `just setup-github` if it reports a wrong setting. Changing the platforms or
+architectures needs nothing on GitHub, since `CI passed` covers whatever platforms CI runs. Some
+answers also change what GitHub needs:
 {%- else %}
-Changing the platforms{{ ' or architectures' if 'linux' in platforms or 'windows' in platforms else '' }} needs nothing on GitHub, since `CI passed` covers
-whatever platforms CI runs.
+The change is a rule change, so it can't also change code. Once it merges, run `just check-github`
+on `main`, and `just setup-github` if it reports a wrong setting. Changing the platforms needs
+nothing on GitHub, since `CI passed` covers whatever platforms CI runs. Some answers also change
+what GitHub needs:
 {%- endif %}
-Some answers also change what GitHub needs:
 {% if published %}
 - **Visibility.** The repository stays public while it publishes to crates.io, so the update
   refuses `--data visibility=private` unless you also pass `--data publish_crate=false`.
 {%- else %}
-- **Visibility.** A private repository costs more to run and lacks some of what a public one
-  has. Protecting its `main` needs GitHub Pro or a paid organization plan, and its CI draws on the
-  account's included Actions usage
-{%- if kind != 'service' %}, where
-  macOS and Windows runners cost more than Linux ones{% endif %}; GitHub's
-  [Actions billing](https://docs.github.com/en/billing/concepts/product-billing/github-actions)
-  page has the rates.
 {%- if kind == 'binary' %}
-  Its releases aren't attested, because without GitHub Enterprise Cloud, GitHub attests release
-  files only in public repositories.
+- **Visibility.** A private repository costs more to run and lacks some of what a public one has.
+  Protecting its `main` needs GitHub Pro or a paid organization plan, and its CI draws on the
+  account's included Actions usage, where macOS and Windows runners cost more than Linux ones.
+  [Actions billing](https://docs.github.com/en/billing/concepts/product-billing/github-actions) has
+  GitHub's rates. Its releases aren't attested, because without GitHub Enterprise Cloud, GitHub
+  attests release files only in public repositories. GitHub takes private vulnerability reports only
+  in public repositories, so a private repository's `SECURITY.md` sends reports to issues.
 {%- elif kind == 'service' %}
-  Its image is neither attested nor signed, because without GitHub Enterprise Cloud, GitHub
-  attests images only in public repositories, and a keyless signature would name the repository
-  in Sigstore's public log.
+- **Visibility.** A private repository costs more to run and lacks some of what a public one has.
+  Protecting its `main` needs GitHub Pro or a paid organization plan, and its CI draws on the
+  account's included Actions usage.
+  [Actions billing](https://docs.github.com/en/billing/concepts/product-billing/github-actions) has
+  GitHub's rates. Its image is neither attested nor signed, because without GitHub Enterprise Cloud,
+  GitHub attests images only in public repositories, and a keyless signature would name the
+  repository in Sigstore's public log. GitHub takes private vulnerability reports only in public
+  repositories, so a private repository's `SECURITY.md` sends reports to issues.
+{%- else %}
+- **Visibility.** A private repository costs more to run and lacks some of what a public one has.
+  Protecting its `main` needs GitHub Pro or a paid organization plan, and its CI draws on the
+  account's included Actions usage, where macOS and Windows runners cost more than Linux ones.
+  [Actions billing](https://docs.github.com/en/billing/concepts/product-billing/github-actions) has
+  GitHub's rates. GitHub takes private vulnerability reports only in public repositories, so a
+  private repository's `SECURITY.md` sends reports to issues.
 {%- endif %}
-  GitHub takes private vulnerability reports only in public repositories, so a private
-  repository's `SECURITY.md` sends reports to issues.
 {%- if visibility == 'private' %}
+{%- if kind == 'binary' %}
 
   To make the repository public, run
-  `uvx copier update --defaults --vcs-ref=:current: --data visibility=public` on a branch.
-{%- if kind == 'binary' %}
-  It adds the release attestations.
+  `uvx copier update --defaults --vcs-ref=:current: --data visibility=public` on a branch. It adds
+  the release attestations. Make the repository public on GitHub, then run `just setup-github` on
+  the branch. It adds the Actions policy, without which a public repository doesn't run the
+  rule-change check, and turns on private vulnerability reporting. Only then open the pull request,
+  so the check runs, and merge it before any release pull request.
 {%- elif kind == 'service' %}
-  It adds the image attestation and signature.
+
+  To make the repository public, run
+  `uvx copier update --defaults --vcs-ref=:current: --data visibility=public` on a branch. It adds
+  the image attestation and signature. Make the repository public on GitHub, then run
+  `just setup-github` on the branch. It adds the Actions policy, without which a public repository
+  doesn't run the rule-change check, and turns on private vulnerability reporting. Only then open
+  the pull request, so the check runs, and merge it before any release pull request. The image's
+  package stays private until you make it public in its package settings, as the updated page's "At
+  the first release" says.
+{%- else %}
+
+  To make the repository public, run
+  `uvx copier update --defaults --vcs-ref=:current: --data visibility=public` on a branch. Make the
+  repository public on GitHub, then run `just setup-github` on the branch. It adds the Actions
+  policy, without which a public repository doesn't run the rule-change check, and turns on private
+  vulnerability reporting. Only then open the pull request, so the check runs, and merge it before
+  any release pull request.
 {%- endif %}
-  Make the repository public on GitHub, then run `just setup-github` on the branch. It adds the
-  Actions policy, without which a public repository doesn't run the rule-change check, and turns
-  on private vulnerability reporting. Only then open the pull request, so the check runs, and
-  merge it before any release pull request.
-{%- if kind == 'service' %}
-  The image's package stays private until you make it public in its package settings, as the
-  updated page's "At the first release" says.
-{%- endif %}
+{%- else %}
+{%- if kind == 'service' and 'aarch64' in architectures %}
+
+  To make the repository private, first merge the change that
+  `uvx copier update --defaults --vcs-ref=:current: --data visibility=private` makes, then make the
+  repository private on GitHub and run `just check-github` on `main`. The Actions policy for the
+  rule-change check then no longer matters. The update keeps building for ARM64, whose runners draw
+  on a private repository's Actions usage. To stop, add `--data 'architectures=[x86_64]'` to it. The
+  image's package stays public, because GitHub can't make a public package private again. Delete it
+  in its package settings before the next release, which then publishes a new, private package.
+{%- elif kind == 'service' %}
+
+  To make the repository private, first merge the change that
+  `uvx copier update --defaults --vcs-ref=:current: --data visibility=private` makes, then make the
+  repository private on GitHub and run `just check-github` on `main`. The Actions policy for the
+  rule-change check then no longer matters. The image's package stays public, because GitHub can't
+  make a public package private again. Delete it in its package settings before the next release,
+  which then publishes a new, private package.
+{%- elif 'aarch64' in architectures and (kind == 'service' or 'linux' in platforms or 'windows' in platforms) %}
+
+  To make the repository private, first merge the change that
+  `uvx copier update --defaults --vcs-ref=:current: --data visibility=private` makes, then make the
+  repository private on GitHub and run `just check-github` on `main`. The Actions policy for the
+  rule-change check then no longer matters. The update keeps building for ARM64, whose runners draw
+  on a private repository's Actions usage. To stop, add `--data 'architectures=[x86_64]'` to it.
 {%- else %}
 
   To make the repository private, first merge the change that
-  `uvx copier update --defaults --vcs-ref=:current: --data visibility=private` makes, then make
-  the repository private on GitHub and run `just check-github` on `main`. The Actions policy for
-  the rule-change check then no longer matters.
-{%- if 'aarch64' in architectures and (kind == 'service' or 'linux' in platforms or 'windows' in platforms) %}
-  The update keeps building for ARM64, whose runners draw on a private repository's Actions usage.
-  To stop, add `--data 'architectures=[x86_64]'` to it.
-{%- endif %}
-{%- if kind == 'service' %}
-  The image's package stays public, because GitHub can't make a public package private again.
-  Delete it in its package settings before the next release, which then publishes a new, private
-  package.
+  `uvx copier update --defaults --vcs-ref=:current: --data visibility=private` makes, then make the
+  repository private on GitHub and run `just check-github` on `main`. The Actions policy for the
+  rule-change check then no longer matters.
 {%- endif %}
 {%- endif %}
 {%- endif %}
@@ -553,12 +624,15 @@ hold need more than the update, and two can't change this way at all:
   outside `crates/` for it, but the crates keep their names and scaffold, so `just policy` fails,
   or passes on crates the new answer doesn't describe. To rename the project or change what it
   ships, generate a new project and move the code into it.
-- **Description.** The update changes `README.md` and `CONTRIBUTING.md`
-{%- if kind == 'service' %}, and the image's
-  description label in `Containerfile`
-{%- endif %}. Each crate's
+{%- if kind == 'service' %}
+- **Description.** The update changes `README.md`, `CONTRIBUTING.md` and the image's description
+  label in `Containerfile`. Each crate's `description` in its `Cargo.toml` and its `//!` crate docs
+  keep the old sentence; change them in a code pull request.
+{%- else %}
+- **Description.** The update changes `README.md` and `CONTRIBUTING.md`. Each crate's
   `description` in its `Cargo.toml` and its `//!` crate docs keep the old sentence; change them
   in a code pull request.
+{%- endif %}
 - **License.** Between `MIT` and `MIT OR Apache-2.0`, the update is all it takes.
 {%- if published %}
   A published crate needs a license, so the update refuses `license=none` unless you also pass
@@ -592,7 +666,9 @@ hold need more than the update, and two can't change this way at all:
   it's missing, and don't run a plain `bun install` or `just web-build` on that branch: until
   the update merges, `.gitignore` doesn't ignore the app's `node_modules/` and `dist/`, so
   `just rule-changes` counts what they write. Then run the update with `--data web_ui=true`, and
-  add the app's settings files to its pull request.
+  add the app's settings files to its pull request. When the app trips a check that only a rule
+  can settle, such as a class name `just typos` flags, which only an entry in `_typos.toml` lets
+  through, land that rule in a rules pull request before the app's code pull request.
 {%- endif %}
 {%- endif %}
 

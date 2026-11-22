@@ -15,7 +15,8 @@ declare_lint! {
     /// `::new()`, `::new_from_foo()` or `::from_foo()`, which callers can find and name.
     ///
     /// Error types are skipped, since their `From` impls exist for `?`. The lint can't tell an
-    /// important conversion from a minor one, so allow it on a `From` impl that isn't one.
+    /// important conversion from a minor one, so put an `expect` with a reason on a `From` impl
+    /// that isn't one.
     ///
     /// Code a macro writes isn't checked. Code a proc macro copies from its caller's tokens, such
     /// as the body of a function under an attribute macro, is: its author wrote it there.

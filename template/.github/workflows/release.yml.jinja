@@ -261,8 +261,8 @@ jobs:
           TAG: ${{ needs.release.outputs.tag }}
 {%- endraw %}
 {%- if visibility == 'public' %}
-          # A failed attempt still sets bundle-path, to a file it never wrote, so the path comes from
-          # the attempt that succeeded.
+          # A failed attempt still sets bundle-path, to a file it never wrote, so the path comes
+          # from the attempt that succeeded.
           BUNDLE: {% raw %}${{ steps.attest.outcome == 'success' && steps.attest.outputs.bundle-path || steps.attest-again.outcome == 'success' && steps.attest-again.outputs.bundle-path || steps.attest-last.outputs.bundle-path }}{% endraw %}
 {%- endif %}
         run: |
@@ -478,8 +478,8 @@ jobs:
         with:
           tool: just@1.59.0
 
-      # A token without the access release-plz needs fails it with a bare 403, so this names what the
-      # token lacks, and warns in the token's last 14 days.
+      # A token without the access release-plz needs fails it with a bare 403, so this names what
+      # the token lacks, and warns in the token's last 14 days.
       - name: Check the release token
         env:
           RELEASE_PLZ_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}

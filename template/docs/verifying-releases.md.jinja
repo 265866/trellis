@@ -51,9 +51,8 @@ Each release's notes on GitHub name the image by its digest, such as
 `ghcr.io/{{ github_owner | lower }}/{{ project_name }}@sha256:<digest>`.
 {%- if visibility == 'public' %} Verify that digest and run it.
 A tag such as `latest` or `1.4` can move to another image after you check it; a digest can't.
-{%- else %}
-Run that digest to get that release exactly. A tag such as `latest` or `1.4` can move to another
-image; a digest can't.
+{%- else %} Run that digest to get that release
+exactly. A tag such as `latest` or `1.4` can move to another image; a digest can't.
 {%- endif %}
 {%- if visibility == 'public' %}
 

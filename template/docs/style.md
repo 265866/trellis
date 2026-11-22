@@ -13,8 +13,9 @@ where trellis goes further than the guide, and how the docs are laid out.
 part of the rule to review. Lint levels live in `[workspace.lints]` in `Cargo.toml`, lint settings
 in `clippy.toml`, formatting in `rustfmt.toml`, dependency rules in `deny.toml`, the custom lints'
 settings in `dylint.toml`, and the structure rules' settings in `[workspace.metadata.policy]` of
-`Cargo.toml`. The custom lints are trellis's [`lints/`](https://github.com/265866/trellis/tree/main/lints),
-and the structure rules its [`trellis-policy`](https://github.com/265866/trellis/tree/main/policy).
+`Cargo.toml`. The custom lints are trellis's
+[`lints/`](https://github.com/265866/trellis/tree/main/lints), and the structure rules its
+[`trellis-policy`](https://github.com/265866/trellis/tree/main/policy).
 Each lint's documentation, with an example and its fix, is at the top of its file in `lints/src/`.
 Those links show trellis's `main`. A project builds both at the trellis commit that `trellis_rev`
 in its `justfile` names, so read them at that commit when `main` has moved on.
@@ -167,10 +168,10 @@ Beyond the Google guide, the workspace also turns on:
   `changelog_include` in `release-plz.toml`; that no crate but the ones `restricted_crates` lists
   for a package reaches it, directly or through other packages, when that setting is there, and that
   each of its keys that lists crates matches a package; that every shell script in a deploy kit,
-  under `crates/<crate>/deploy/` or the root `deploy/`, passes shellcheck,
-  with no `.shellcheckrc` or `SHELLCHECK_OPTS` read, the files they source included, and that each
-  shellcheck directive there silences named codes, with a reason, as close above its finding as
-  shellcheck takes one, since a deploy kit is code no other check reads; and that the docs keep the layout under
+  under `crates/<crate>/deploy/` or the root `deploy/`, passes shellcheck, with no `.shellcheckrc`
+  or `SHELLCHECK_OPTS` read, the files they source included, and that each shellcheck directive
+  there silences named codes, with a reason, as close above its finding as shellcheck takes one,
+  since a deploy kit is code no other check reads; and that the docs keep the layout under
   [Documentation](#documentation).
 - `overflow-checks` and `panic = "abort"` in release builds: an overflow stops the program rather
   than wrapping, and nothing catches a panic. `trellis-policy` fails a change that turns either
