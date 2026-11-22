@@ -322,10 +322,20 @@ with an entry for a crate the dependency graph doesn't hold yet. Then add the de
 pull request. Accepting the license for every crate, in `allow`{% if kind != 'library' %} or `accepted`{% endif %}, lets any later
 dependency use it too, so do that only when the owner decides it.
 
+{% if kind == 'library' -%}
+A deploy kit, the scripts, container files and systemd units in the root `deploy/` that install
+and run the project on a host, is code too, like `crates/`. Keep it there, not in
+`crates/{{ crate_name }}/deploy/`, since a member `Cargo.toml` can't leave a file out of its
+crate's package, so a kit in the crate's directory would ship in the package
+{%- if publish_crate %} on crates.io{% else %} if the crate is
+ever published{% endif %}.
+`just policy` checks a kit in a crate's directory the same way.
+{%- else -%}
 A deploy kit, the scripts, container files and systemd units in `crates/{{ crate_name }}/deploy/`
 that install and run the project on a host, is code too, like the rest of `crates/`, and so is a
 kit in the root `deploy/`, though release-plz releases nothing for a change to that one
-alone{% if kind != 'library' %}, as [Maintaining](docs/maintaining.md#extend-what-trellis-generates) says{% endif %}.
+alone, as [Maintaining](docs/maintaining.md#extend-what-trellis-generates) says.
+{%- endif %}
 A kit change lands with the code change it needs, and review reads it as code. `just policy` runs
 shellcheck on each of its scripts, the files that end in `.sh`, `.bash`, `.dash`, `.ksh` or
 `.bats`, start with a `#!` line that names `sh`, `bash`, `dash`, `ksh`, `ash` or `bats`, or set
