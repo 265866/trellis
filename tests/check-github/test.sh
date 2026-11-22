@@ -4,7 +4,7 @@
 # one whose ruleset main is disabled or in evaluate mode, lets an actor bypass it, leaves rules
 # to another ruleset or applies no rule to main, and one without it must each fail and say why. A
 # private repository whose plan GitHub says lacks rulesets must pass with main's protection
-# unavailable.
+# unavailable, though gh writes the refusal's body to stdout.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 cd "$1"

@@ -456,6 +456,8 @@ check-github:
       {%- if visibility == 'private' %}
       grep --quiet 'Upgrade to GitHub' "$err" || { cat "$err" >&2; exit 1; }
       plan_lacks_rules=yes
+      # gh writes the error's body to stdout, which would read as a ruleset's ID and enforcement.
+      ruleset=
       {%- else %}
       cat "$err" >&2
       exit 1

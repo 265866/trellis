@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Stands in for `gh api` in tests/check-github/test.sh: it serves the JSON file in $GH_FIXTURES
 # named after the endpoint, filtered with jq, and answers as gh does for a missing one. A file with
-# the endpoint's name and `.error` holds an error for gh to print instead.
+# the endpoint's name and `.error` holds an error for gh to print instead. As gh does, a failed
+# request writes the error to stderr and GitHub's JSON body to stdout, even with `--jq`.
 set -euo pipefail
 if [ "${1:-}" != api ]; then
   echo "error: the fake gh only serves gh api, not: $*" >&2
@@ -21,12 +22,19 @@ while [ $# -gt 0 ]; do
 done
 name=$(sed -E 's#\?.*##; s#^repos/[^/]+/[^/]+/?##; s#/#-#g' <<< "$endpoint")
 file="$GH_FIXTURES/${name:-repository}.json"
-if [ -f "${file%.json}.error" ]; then
-  cat "${file%.json}.error" >&2
+# Fails as gh does with the error line $1, such as `gh: Not Found (HTTP 404)`.
+fail() {
+  local message=${1#gh: } status=${1##*(HTTP }
+  message=${message% (HTTP *}
+  jq --null-input --compact-output --arg message "$message" --arg status "${status%)}" \
+    '{message: $message, documentation_url: "https://docs.github.com/rest", status: $status}'
+  echo "$1" >&2
   exit 1
+}
+if [ -f "${file%.json}.error" ]; then
+  fail "$(head -n 1 "${file%.json}.error")"
 fi
 if [ ! -f "$file" ]; then
-  echo "gh: Not Found (HTTP 404)" >&2
-  exit 1
+  fail "gh: Not Found (HTTP 404)"
 fi
 jq --raw-output "$filter" "$file"

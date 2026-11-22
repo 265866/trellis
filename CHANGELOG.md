@@ -21,6 +21,15 @@ has the versioning rule.
   spell any path, so it took the call for code the caller wrote. `#[error("text: {0}")]` and
   `#[error("{name}")]` already passed.
 
+## Unreleased
+
+### Fixed
+
+- `just check-github` in a private repository whose plan can't protect `main` reports `main`'s
+  protection as unavailable again, as `docs/maintaining.md` says, instead of "wrong". On an HTTP
+  error, `gh api` writes GitHub's JSON body to stdout even with `--jq`, and the recipe read that
+  body as the ruleset's ID and enforcement, so `just check-github` could never pass there.
+
 ## v0.15.0
 
 ### Action required in projects
