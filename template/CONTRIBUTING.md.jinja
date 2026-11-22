@@ -79,7 +79,8 @@ own `node_modules/.bin` holds one{% endif %}. `bun run` looks there before the B
 UI's scripts would run on that Bun instead. In a directory above, delete that `node_modules`. In
 the web UI's own, run `bun why bun`, which prints the packages that lead to `bun`. When a package
 asks for `bun` only as a peer, an older Bun wrote that into `bun.lock`, so delete `bun.lock` and
-`node_modules` and run `bun install` with the Bun you installed, which leaves that peer out. That
+`node_modules` and run `bun install --save-text-lockfile` with the Bun you installed, which leaves
+that peer out and writes `bun.lock` even when your Bun settings ask for the binary lockfile. That
 also moves every other package to the newest version its range allows, so read the lockfile's diff.
 When a package depends on `bun` outright, run `bun remove` with the name of the web UI's own
 dependency that leads to it, as `package.json` spells it. That name is `bun`, or its alias, when

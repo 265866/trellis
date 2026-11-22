@@ -170,7 +170,9 @@ links:
 # step and what only a project with license notices runs, that both `[workspace.lints]` tables
 # agree apart from the library-only lints, that the template's two lists of accepted licenses
 # agree, that the versions template/dylint.toml.jinja says trellis read each trusted macro crate
-# at are the ones tests/dependencies/setup.sh pins, and that every tool and runner image has one version wherever it's pinned in a form the recipe reads,
+# at are the ones tests/dependencies/setup.sh pins, that the Web UI guide in
+# template/docs/maintaining.md.jinja writes bun.lock with the command web-install names in
+# template/justfile.jinja, and that every tool and runner image has one version wherever it's pinned in a form the recipe reads,
 # such as `name@version`. A value it can't find or read fails, as does a file it reads that's gone.
 #
 # Checks that pinned versions and the shared config files agree.
