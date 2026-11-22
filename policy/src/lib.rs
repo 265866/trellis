@@ -34,6 +34,8 @@ mod policy_error;
 pub mod proc_macros;
 pub mod release_changelog;
 mod repository_files;
+mod restricted_crate;
+pub mod restricted_crates;
 mod rule;
 mod source_path;
 mod token_context;

@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 use toml::{Table, Value};
 
 use crate::policy_error::PolicyError;
+use crate::restricted_crate::RestrictedCrate;
 use crate::toml_file;
 
 /// The settings of the checks, from the `[workspace.metadata.policy]` table of the root
@@ -29,16 +30,20 @@ pub(crate) struct PolicyConfig {
     /// The level-2 headings of the root `README.md`, in order, or `None` if the key is missing
     /// (`docs_layout`).
     readme_sections: Option<Vec<String>>,
+    /// Each restricted package, by its key, mapped to its pattern and the members that may reach
+    /// it (`restricted_crates`).
+    restricted_crates: BTreeMap<String, RestrictedCrate>,
 }
 
 /// The keys of `[workspace.metadata.policy]`.
-const KEYS: [&str; 6] = [
+const KEYS: [&str; 7] = [
     "build_script_crates",
     "proc_macro_crates",
     "internal_dependencies",
     "dev_only_crates",
     "docs_files",
     "readme_sections",
+    "restricted_crates",
 ];
 
 impl PolicyConfig {
@@ -63,6 +68,7 @@ impl PolicyConfig {
                 "readme_sections" => {
                     config.readme_sections = Some(strings(key, value, "headings")?);
                 }
+                "restricted_crates" => config.restricted_crates = restricted_crates(key, value)?,
                 _ => {
                     return Err(PolicyError::Config(format!(
                         "it has a key `{key}` the checks don't know; the keys are {}",
@@ -72,6 +78,7 @@ impl PolicyConfig {
             }
         }
         config.check_internal_names()?;
+        config.check_restricted_names()?;
         Ok(config)
     }
 
@@ -101,6 +108,30 @@ impl PolicyConfig {
     /// isn't set.
     pub(crate) fn readme_sections(&self) -> Option<&[String]> {
         self.readme_sections.as_deref()
+    }
+
+    /// Each restricted package's key, mapped to its pattern and the members that may reach it.
+    pub(crate) fn restricted_crates(&self) -> &BTreeMap<String, RestrictedCrate> {
+        &self.restricted_crates
+    }
+
+    /// Fails if a list in `restricted_crates` names a crate that isn't a key of
+    /// `internal_dependencies`, which catches a misspelled name.
+    fn check_restricted_names(&self) -> Result<(), PolicyError> {
+        for (key, entry) in &self.restricted_crates {
+            if let Some(name) = entry
+                .allowed()
+                .iter()
+                .find(|name| !self.internal_dependencies.contains_key(*name))
+            {
+                return Err(PolicyError::Config(format!(
+                    "the list `restricted_crates.\"{key}\"` names `{name}`, which isn't a key of \
+                     `internal_dependencies`; fix the spelling, or add `{name}` to \
+                     `internal_dependencies`"
+                )));
+            }
+        }
+        Ok(())
     }
 
     /// Whether `name` is a test-support crate that members may depend on only as a
@@ -180,6 +211,35 @@ fn relative_paths(key: &str, value: &Value) -> Result<Vec<String>, PolicyError> 
         }
     }
     Ok(paths)
+}
+
+/// The map in `value`, the setting `key`: a table from a package name, a name prefix ending in
+/// `*`, or a source starting with `git+`, `registry+` or `sparse+`, to the arrays of members that
+/// may reach it.
+fn restricted_crates(
+    key: &str,
+    value: &Value,
+) -> Result<BTreeMap<String, RestrictedCrate>, PolicyError> {
+    let Value::Table(table) = value else {
+        return Err(PolicyError::Config(format!(
+            "`{key}` must be a table from package names, name prefixes ending in `*` or sources \
+             to arrays of member names"
+        )));
+    };
+    let mut map = BTreeMap::new();
+    for (pattern, allowed) in table {
+        let allowed = strings(&format!("{key}.\"{pattern}\""), allowed, "member names")?;
+        let Some(entry) = RestrictedCrate::new(pattern, allowed) else {
+            return Err(PolicyError::Config(format!(
+                "`{key}` has a key `{pattern}` that names no package; write a package name, such \
+                 as `gpui`, a name prefix ending in `*`, such as `gpui-*`, or a source starting \
+                 with `git+`, `registry+` or `sparse+`, such as \
+                 `git+https://github.com/zed-industries/zed`"
+            )));
+        };
+        map.insert(pattern.clone(), entry);
+    }
+    Ok(map)
 }
 
 /// The map in `value`, the setting `key`, which must be a table from crate names to arrays of
