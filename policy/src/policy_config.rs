@@ -214,22 +214,30 @@ fn relative_paths(key: &str, value: &Value) -> Result<Vec<String>, PolicyError> 
 }
 
 /// The map in `value`, the setting `key`: a table from a package name, a name prefix ending in
-/// `*`, or a source starting with `git+` or `registry+`, to the arrays of members that may reach
-/// it.
+/// `*`, or a source starting with `git+`, `registry+` or `sparse+`, to the arrays of members that
+/// may reach it.
 fn restricted_crates(
     key: &str,
     value: &Value,
 ) -> Result<BTreeMap<String, RestrictedCrate>, PolicyError> {
+    let Value::Table(table) = value else {
+        return Err(PolicyError::Config(format!(
+            "`{key}` must be a table from package names, name prefixes ending in `*` or sources \
+             to arrays of member names"
+        )));
+    };
     let mut map = BTreeMap::new();
-    for (pattern, allowed) in dependency_map(key, value)? {
-        let Some(entry) = RestrictedCrate::new(&pattern, allowed) else {
+    for (pattern, allowed) in table {
+        let allowed = strings(&format!("{key}.\"{pattern}\""), allowed, "member names")?;
+        let Some(entry) = RestrictedCrate::new(pattern, allowed) else {
             return Err(PolicyError::Config(format!(
                 "`{key}` has a key `{pattern}` that names no package; write a package name, such \
-                 as `gpui`, a name prefix ending in `*`, such as `zed-*`, or a source, such as \
+                 as `gpui`, a name prefix ending in `*`, such as `gpui-*`, or a source starting \
+                 with `git+`, `registry+` or `sparse+`, such as \
                  `git+https://github.com/zed-industries/zed`"
             )));
         };
-        map.insert(pattern, entry);
+        map.insert(pattern.clone(), entry);
     }
     Ok(map)
 }

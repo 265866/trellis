@@ -133,46 +133,44 @@ Beyond the Google guide, the workspace also turns on:
   `build_script_crates` lists it, since a build script can set a `cfg` that hides code from the lint
   runs, and that a listed crate's `build` key names a file in the crate's own directory, in ASCII,
   with no `\`, no part that ends in a dot or a space and no part of the form of a Windows short
-  name, such as `CUSTOM~1.RS`. An entry may name a package no crate has,
-  so renaming the package of a crate with a build script can land as a rule change, a code change
-  and a rule change. Nothing removes a stale entry, and it lets whichever crate later takes the name
-  have a build script, though that script still lands in a rule change. It checks that tool
-  configuration files exist only at the root, with no variant name that would override them, and
-  that each TypeScript settings file, a `.json` file whose name starts with `tsconfig`, reads only
-  one way and extends and references only other such files in the repository, by a path that
-  starts with `./` or `../`, so every file a `tsconfig.json` reaches is a rule, though a web UI's
-  `check` script, which is code, still picks the settings file and flags `tsc` runs with; that the
-  root `.gitattributes` sets only `text`, `-text`, `text=auto` and `eol=lf` and defines no
-  attribute macro, in the working tree and in git's index, so a checkout holds the bytes the diff
-  showed, apart from line endings, where another attribute such as `working-tree-encoding`,
-  `ident` or `filter` could have git write other bytes; that the workspace's members are exactly
-  the packages one directory below
-  `crates/`, each in a directory with an ASCII name that Windows reads as written, with no symbolic
-  link for `crates` or a crate's directory, since which changes are rules depends on that place;
-  that no two paths in the repository are one path on macOS or Windows, whose file systems ignore
-  letter case in any script and, on macOS, whether an accented letter is one character or two,
-  since a checkout there holds only one of them; that no path has a part of the form of a Windows
-  short name, such as `cargo~1.tom`, which is at most eight characters that end in `~` and digits,
-  then at most three after a dot, since Windows opens `Cargo.toml` under that name and a checkout
-  of both there can hold one file, with the other's contents; that the workspace excludes
-  nothing, pulls in no non-member crate by path, and loads only the trellis lints as its dylint
-  library; that each crate's `Cargo.toml` holds only allowed keys (no `test = false`,
-  `harness = false` outside a `[[bench]]`, `auto*` or `required-features`), inherits `edition`,
-  `rust-version` and `publish`, and `license` when the workspace has one, and keeps its sources,
-  `#[path]` files included, inside the crate, with no symbolic link in or above its directory;
-  that the repository holds no git submodule, or other git repository, anywhere, since a checkout
-  that initializes one holds files no check or review read; that
-  `.cargo/config.toml` holds only the Windows `+crt-static` flags; that a crate depends directly
-  only on proc-macro crates listed in `proc_macro_crates`, since a proc macro writes code the custom
-  lints don't check; that the root `AGENTS.md` is the only file of instructions for coding agents;
-  that every crate's commits reach the release notes through `changelog_include` in
-  `release-plz.toml`; that no crate but the ones `restricted_crates` lists for a package reaches
-  it, directly or through other packages, when that setting is there; that every shell script
-  under `deploy/` passes shellcheck, with no
-  `.shellcheckrc` or `SHELLCHECK_OPTS` read, the files they source included, and that each
+  name, such as `CUSTOM~1.RS`. An entry may name a package no crate has, so renaming the package of
+  a crate with a build script can land as a rule change, a code change and a rule change. Nothing
+  removes a stale entry, and it lets whichever crate later takes the name have a build script,
+  though that script still lands in a rule change. It checks that tool configuration files exist
+  only at the root, with no variant name that would override them, and that each TypeScript settings
+  file, a `.json` file whose name starts with `tsconfig`, reads only one way and extends and
+  references only other such files in the repository, by a path that starts with `./` or `../`, so
+  every file a `tsconfig.json` reaches is a rule, though a web UI's `check` script, which is code,
+  still picks the settings file and flags `tsc` runs with; that the root `.gitattributes` sets only
+  `text`, `-text`, `text=auto` and `eol=lf` and defines no attribute macro, in the working tree and
+  in git's index, so a checkout holds the bytes the diff showed, apart from line endings, where
+  another attribute such as `working-tree-encoding`, `ident` or `filter` could have git write other
+  bytes; that the workspace's members are exactly the packages one directory below `crates/`, each
+  in a directory with an ASCII name that Windows reads as written, with no symbolic link for
+  `crates` or a crate's directory, since which changes are rules depends on that place; that no two
+  paths in the repository are one path on macOS or Windows, whose file systems ignore letter case in
+  any script and, on macOS, whether an accented letter is one character or two, since a checkout
+  there holds only one of them; that no path has a part of the form of a Windows short name, such as
+  `cargo~1.tom`, which is at most eight characters that end in `~` and digits, then at most three
+  after a dot, since Windows opens `Cargo.toml` under that name and a checkout of both there can
+  hold one file, with the other's contents; that the workspace excludes nothing, pulls in no
+  non-member crate by path, and loads only the trellis lints as its dylint library; that each
+  crate's `Cargo.toml` holds only allowed keys (no `test = false`, `harness = false` outside a
+  `[[bench]]`, `auto*` or `required-features`), inherits `edition`, `rust-version` and `publish`,
+  and `license` when the workspace has one, and keeps its sources, `#[path]` files included, inside
+  the crate, with no symbolic link in or above its directory; that the repository holds no git
+  submodule, or other git repository, anywhere, since a checkout that initializes one holds files no
+  check or review read; that `.cargo/config.toml` holds only the Windows `+crt-static` flags; that a
+  crate depends directly only on proc-macro crates listed in `proc_macro_crates`, since a proc macro
+  writes code the custom lints don't check; that the root `AGENTS.md` is the only file of
+  instructions for coding agents; that every crate's commits reach the release notes through
+  `changelog_include` in `release-plz.toml`; that no crate but the ones `restricted_crates` lists
+  for a package reaches it, directly or through other packages, when that setting is there, and that
+  each of its keys matches a package; that every shell script under `deploy/` passes shellcheck,
+  with no `.shellcheckrc` or `SHELLCHECK_OPTS` read, the files they source included, and that each
   shellcheck directive there silences named codes, with a reason, as close above its finding as
-  shellcheck takes one, since a deploy kit is code no other check reads; and that the docs keep the
-  layout under [Documentation](#documentation).
+  shellcheck takes one, since a deploy kit is code no other check reads; and that the docs keep the layout under
+  [Documentation](#documentation).
 - `overflow-checks` and `panic = "abort"` in release builds: an overflow stops the program rather
   than wrapping, and nothing catches a panic. `trellis-policy` fails a change that turns either
   off, including a per-package or `.cargo/config.toml` override.

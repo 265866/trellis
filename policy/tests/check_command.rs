@@ -202,6 +202,22 @@ impl Project {
         );
     }
 
+    /// Writes the lockfile, fetching git dependencies into the Cargo home `cargo_home`, so the
+    /// fetch doesn't touch the user's.
+    fn lock_fetching(&self, cargo_home: &Path) {
+        let output = Command::new(env!("CARGO"))
+            .arg("generate-lockfile")
+            .current_dir(self.path())
+            .env("CARGO_HOME", cargo_home)
+            .output()
+            .expect("cargo should run");
+        assert!(
+            output.status.success(),
+            "cargo generate-lockfile failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
     /// The project's directory.
     fn path(&self) -> PathBuf {
         self.directory.path().join("project")
@@ -277,11 +293,24 @@ impl Project {
 
     /// Runs `trellis-policy check --manifest-path <root>/Cargo.toml`.
     fn check(&self) -> Run {
+        output(self.check_command())
+    }
+
+    /// Runs `trellis-policy check` as `check` does, with the Cargo home `cargo_home`, which holds
+    /// the project's git dependencies.
+    fn check_with_cargo_home(&self, cargo_home: &Path) -> Run {
+        let mut command = self.check_command();
+        command.env("CARGO_HOME", cargo_home);
+        output(command)
+    }
+
+    /// The command `check` runs.
+    fn check_command(&self) -> Command {
         let manifest = self.path().join("Cargo.toml");
         let manifest = manifest
             .to_str()
             .expect("the temporary path should be UTF-8");
-        run(
+        command(
             &self.path(),
             &["check", "--manifest-path", manifest],
             Ci::Local,
@@ -336,6 +365,11 @@ enum Ci {
 
 /// Runs the command with `arguments` in `directory`, under `ci`.
 fn run(directory: &Path, arguments: &[&str], ci: Ci) -> Run {
+    output(command(directory, arguments, ci))
+}
+
+/// The command with `arguments` in `directory`, under `ci`.
+fn command(directory: &Path, arguments: &[&str], ci: Ci) -> Command {
     let mut command = Command::new(env!("CARGO_BIN_EXE_trellis-policy"));
     command
         .args(arguments)
@@ -345,6 +379,11 @@ fn run(directory: &Path, arguments: &[&str], ci: Ci) -> Run {
     if ci == Ci::GitHubActions {
         command.env("GITHUB_ACTIONS", "true");
     }
+    command
+}
+
+/// Runs `command`, and returns what it did.
+fn output(mut command: Command) -> Run {
     let Output {
         status,
         stdout,
@@ -3163,14 +3202,29 @@ fn a_checkout_path_sourced_where_a_command_starts_fails() {
 
 /// Writes the members `demo_ui`, a UI toolkit stand-in, and `demo_widgets`, which depends on it,
 /// and lets every member depend on the others as `internal_dependencies` asks, with the line
-/// `restricted` added to the policy table.
+/// `restricted` added to the policy table. `demo_core` gets the `[dependencies]` entries
+/// `core_dependencies`.
 fn restricted_project(core_dependencies: &str, restricted: &str) -> Project {
+    restricted_workspace(
+        "demo_ui = { path = \"../demo_ui\" }\n",
+        core_dependencies,
+        restricted,
+    )
+}
+
+/// The project of `restricted_project`, with `demo_widgets` given the `[dependencies]` entries
+/// `widgets_dependencies` instead of its normal dependency on `demo_ui`.
+fn restricted_workspace(
+    widgets_dependencies: &str,
+    core_dependencies: &str,
+    restricted: &str,
+) -> Project {
     let project = Project::new();
     project.write("crates/demo_ui/Cargo.toml", &member_manifest("demo_ui", ""));
     project.write("crates/demo_ui/src/lib.rs", "//! The UI toolkit.\n");
     project.write(
         "crates/demo_widgets/Cargo.toml",
-        &member_manifest("demo_widgets", "demo_ui = { path = \"../demo_ui\" }\n"),
+        &member_manifest("demo_widgets", widgets_dependencies),
     );
     project.write("crates/demo_widgets/src/lib.rs", "//! Widgets.\n");
     project.write(
@@ -3199,35 +3253,215 @@ fn restricted_project(core_dependencies: &str, restricted: &str) -> Project {
     project
 }
 
+/// `demo_core`'s dependency on `demo_widgets`, which brings `demo_ui`.
+const CORE_USES_WIDGETS: &str = "demo_widgets = { path = \"../demo_widgets\" }\n";
+
+/// The `restricted_crates` violations of `run`, one line each.
+fn restricted_violations(run: &Run) -> Vec<&str> {
+    run.stdout
+        .lines()
+        .filter(|line| line.starts_with("error: [restricted_crates] "))
+        .collect()
+}
+
 /// A member that reaches a restricted package through another member fails, at its manifest,
 /// with the path; the members its entry lists, and the package itself, pass.
 #[test]
 fn a_member_that_reaches_a_restricted_crate_fails() {
     let restricted = "restricted_crates = { \"demo_ui\" = [\"demo\", \"demo_widgets\"] }";
     restricted_project("", restricted).check().assert_passes();
-    restricted_project(
-        "demo_widgets = { path = \"../demo_widgets\" }\n",
-        restricted,
-    )
-    .check()
-    .assert_reports(
-        1,
-        "error: [restricted_crates] crates/demo_core/Cargo.toml: `demo_core` reaches \
+    restricted_project(CORE_USES_WIDGETS, restricted)
+        .check()
+        .assert_reports(
+            1,
+            "error: [restricted_crates] crates/demo_core/Cargo.toml: `demo_core` reaches \
              `demo_ui` (demo_core -> demo_widgets -> demo_ui), which `restricted_crates` lets \
-             only `demo`, `demo_widgets` reach, through its key `demo_ui`.",
-    );
-    restricted_project(
-        "[dev-dependencies]\ndemo_widgets = { path = \"../demo_widgets\" }\n",
-        "restricted_crates = { \"demo_u*\" = [\"demo\", \"demo_widgets\"] }",
-    )
-    .check()
-    .assert_reports(
-        1,
-        "`demo_core` reaches `demo_ui` (demo_core -> demo_widgets -> demo_ui)",
+             only `demo`, `demo_widgets` reach, through its key `demo_ui`. Move the code that \
+             needs it into one of those crates, or drop the dependency that brings it.",
+        );
+}
+
+/// Without the setting, a member may reach any package, and the check says nothing.
+#[test]
+fn without_restricted_crates_nothing_is_restricted() {
+    let run = restricted_project(CORE_USES_WIDGETS, "").check();
+    run.assert_passes();
+    assert!(
+        !run.stdout.contains("restricted_crates") && !run.stderr.contains("restricted_crates"),
+        "a project without the setting should get no `restricted_crates` output: {run:#?}"
     );
 }
 
-/// A key that names no package, and a list that names no member, fail as malformed settings.
+/// A name or prefix key matches whatever the case of the name or key, with `-` and `_` read as
+/// one, as crates.io and Cargo read them.
+#[test]
+fn a_name_key_matches_in_any_case_with_dash_and_underscore_as_one() {
+    for key in ["demo-ui", "DEMO_UI", "Demo-Ui", "demo-u*", "DEMO_U*"] {
+        let run = restricted_project(
+            CORE_USES_WIDGETS,
+            &format!("restricted_crates = {{ \"{key}\" = [\"demo\", \"demo_widgets\"] }}"),
+        )
+        .check();
+        let violations = restricted_violations(&run);
+        assert!(
+            run.code == Some(1)
+                && violations.iter().any(|line| line.contains(
+                    "`demo_core` reaches `demo_ui` (demo_core -> demo_widgets -> demo_ui)"
+                )),
+            "the key `{key}` should match `demo_ui`: {run:#?}"
+        );
+    }
+}
+
+/// A member's own dev-dependencies count, but its dependencies' dev-dependencies aren't built for
+/// it, so they don't.
+#[test]
+fn only_a_member_s_own_dev_dependencies_count() {
+    let run = restricted_workspace(
+        "\n[dev-dependencies]\ndemo_ui = { path = \"../demo_ui\" }\n",
+        CORE_USES_WIDGETS,
+        "restricted_crates = { \"demo_ui\" = [\"demo\"] }",
+    )
+    .check();
+    assert_eq!(
+        restricted_violations(&run),
+        [
+            "error: [restricted_crates] crates/demo_widgets/Cargo.toml: `demo_widgets` reaches \
+             `demo_ui` (demo_widgets -> demo_ui), which `restricted_crates` lets only `demo` \
+             reach, through its key `demo_ui`. Move the code that needs it into one of those \
+             crates, or drop the dependency that brings it."
+        ],
+        "only `demo_widgets`, whose own dev-dependency brings `demo_ui`, should fail: {run:#?}"
+    );
+}
+
+/// A build dependency, and a dependency for another platform than the one the check runs on,
+/// count.
+#[test]
+fn build_and_other_platform_dependencies_count() {
+    for (dependencies, kind) in [
+        (
+            "\n[build-dependencies]\ndemo_widgets = { path = \"../demo_widgets\" }\n",
+            "a build dependency",
+        ),
+        (
+            "\n[target.'cfg(windows)'.dependencies]\ndemo_widgets = { path = \"../demo_widgets\" }\n",
+            "a Windows dependency",
+        ),
+        (
+            "\n[target.'cfg(not(windows))'.dependencies]\ndemo_widgets = { path = \"../demo_widgets\" }\n",
+            "a dependency for every system but Windows",
+        ),
+    ] {
+        let run = restricted_project(
+            dependencies,
+            "restricted_crates = { \"demo_ui\" = [\"demo\", \"demo_widgets\"] }",
+        )
+        .check();
+        let violations = restricted_violations(&run);
+        assert!(
+            run.code == Some(1)
+                && violations.len() == 1
+                && violations[0].contains("`demo_core` reaches `demo_ui`"),
+            "{kind} should count: {run:#?}"
+        );
+    }
+}
+
+/// An empty list lets no member reach the package, so moving the code elsewhere in the workspace
+/// can't help.
+#[test]
+fn an_empty_list_lets_no_member_reach_the_package() {
+    let run = restricted_project("", "restricted_crates = { \"demo_ui\" = [] }").check();
+    assert_eq!(
+        restricted_violations(&run),
+        [
+            "error: [restricted_crates] crates/demo/Cargo.toml: `demo` reaches `demo_ui` \
+             (demo -> demo_widgets -> demo_ui), which `restricted_crates` lets no member reach, \
+             through its key `demo_ui`. Drop the dependency that brings it.",
+            "error: [restricted_crates] crates/demo_widgets/Cargo.toml: `demo_widgets` reaches \
+             `demo_ui` (demo_widgets -> demo_ui), which `restricted_crates` lets no member reach, \
+             through its key `demo_ui`. Drop the dependency that brings it.",
+        ],
+        "every member that reaches `demo_ui` should fail: {run:#?}"
+    );
+}
+
+/// A member that a key restricts is checked like any other, so it fails when it reaches another
+/// restricted package its list leaves it out of.
+#[test]
+fn a_restricted_member_that_reaches_another_restricted_package_fails() {
+    let run = restricted_project(
+        "",
+        "restricted_crates = { \"demo_widgets\" = [\"demo\"], \"demo_ui\" = [\"demo\"] }",
+    )
+    .check();
+    assert_eq!(
+        restricted_violations(&run),
+        [
+            "error: [restricted_crates] crates/demo_widgets/Cargo.toml: `demo_widgets` reaches \
+             `demo_ui` (demo_widgets -> demo_ui), which `restricted_crates` lets only `demo` \
+             reach, through its key `demo_ui`. Move the code that needs it into one of those \
+             crates, or drop the dependency that brings it."
+        ],
+        "`demo_widgets` should fail for `demo_ui`: {run:#?}"
+    );
+}
+
+/// Keys that match the same package give one violation per member, which names each key that
+/// leaves the member out and only the members every matching key lists.
+#[test]
+fn overlapping_keys_report_one_violation_per_package() {
+    let run = restricted_project(
+        CORE_USES_WIDGETS,
+        "restricted_crates = { \"demo_ui\" = [\"demo\", \"demo_widgets\"], \
+         \"demo-u*\" = [\"demo_widgets\"], \"DEMO-UI\" = [\"demo\", \"demo_widgets\"] }",
+    )
+    .check();
+    assert_eq!(
+        restricted_violations(&run),
+        [
+            "error: [restricted_crates] crates/demo/Cargo.toml: `demo` reaches `demo_ui` \
+             (demo -> demo_widgets -> demo_ui), which `restricted_crates` lets only \
+             `demo_widgets` reach, through its key `demo-u*`. Move the code that needs it into \
+             one of those crates, or drop the dependency that brings it.",
+            "error: [restricted_crates] crates/demo_core/Cargo.toml: `demo_core` reaches \
+             `demo_ui` (demo_core -> demo_widgets -> demo_ui), which `restricted_crates` lets \
+             only `demo_widgets` reach, through its keys `DEMO-UI`, `demo-u*`, `demo_ui`. Move \
+             the code that needs it into one of those crates, or drop the dependency that brings \
+             it.",
+        ],
+        "each member should fail once: {run:#?}"
+    );
+}
+
+/// A key that matches no package in the graph, on any platform and with every feature, is
+/// misspelled or stale, so it fails at the root manifest rather than restricting nothing.
+#[test]
+fn a_key_that_matches_no_package_fails() {
+    for key in ["demo_uii", "zed-*", "git+https://github.com/example/demo"] {
+        let run = restricted_project(
+            "",
+            &format!(
+                "restricted_crates = {{ \"{key}\" = [\"demo\"], \"demo_ui\" = [\"demo\", \
+                 \"demo_widgets\"] }}"
+            ),
+        )
+        .check();
+        assert_eq!(
+            restricted_violations(&run),
+            [format!(
+                "error: [restricted_crates] Cargo.toml: `restricted_crates` has a key `{key}` \
+                 that matches no package in the dependency graph, on any platform or with any \
+                 feature. Fix the spelling, or remove the key."
+            )],
+            "the key `{key}` should fail: {run:#?}"
+        );
+    }
+}
+
+/// A key that names no package, a list that names no member, and a value of the wrong shape fail
+/// as malformed settings.
 #[test]
 fn a_restricted_crates_setting_that_names_nothing_fails() {
     restricted_project("", "restricted_crates = { \"demo*ui\" = [\"demo\"] }")
@@ -3242,4 +3476,98 @@ fn a_restricted_crates_setting_that_names_nothing_fails() {
         2,
         "names `demo_widget`, which isn't a key of `internal_dependencies`",
     );
+    restricted_project("", "restricted_crates = [\"demo_ui\"]")
+        .check()
+        .assert_reports(
+            2,
+            "`restricted_crates` must be a table from package names, name prefixes ending in \
+             `*` or sources to arrays of member names",
+        );
+    restricted_project("", "restricted_crates = { \"demo_ui\" = \"demo\" }")
+        .check()
+        .assert_reports(
+            2,
+            "`restricted_crates.\"demo_ui\"` must be an array of member names",
+        );
+}
+
+/// The `file:` URL of `path`, an absolute path, with `/` separators on every system.
+fn file_url(path: &Path) -> String {
+    let path = path.to_str().expect("the temporary path should be UTF-8");
+    format!(
+        "file:///{}",
+        path.replace('\\', "/").trim_start_matches('/')
+    )
+}
+
+/// A source key matches a package from the same repository however the key writes its URL: in
+/// other letters, with `.git`, a trailing `/`, a query or a fragment. A key for another
+/// repository whose URL starts with this one's, or for another kind of source, matches nothing.
+#[test]
+fn a_source_key_matches_the_repository_however_it_is_written() {
+    let project = restricted_workspace("", CORE_USES_WIDGETS, "");
+    project.write(
+        "../upstream/Cargo.toml",
+        "[package]\nname = \"demo_remote\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n\
+         [workspace]\n",
+    );
+    project.write("../upstream/src/lib.rs", "//! A crate from git.\n");
+    project.git(&["-C", "../upstream", "init", "--quiet"]);
+    project.git(&["-C", "../upstream", "add", "--all"]);
+    project.git(&[
+        "-C",
+        "../upstream",
+        "commit",
+        "--quiet",
+        "--no-verify",
+        "--message",
+        "upstream",
+    ]);
+    let upstream = file_url(&project.directory.path().join("upstream"));
+    project.write(
+        "crates/demo_widgets/Cargo.toml",
+        &member_manifest(
+            "demo_widgets",
+            &format!("demo_remote = {{ git = \"{upstream}\" }}\n"),
+        ),
+    );
+    let cargo_home = project.directory.path().join("cargo-home");
+    project.lock_fetching(&cargo_home);
+    let shouted = upstream.to_uppercase();
+    for key in [
+        format!("git+{upstream}"),
+        format!("git+{shouted}"),
+        format!("git+{upstream}.git/"),
+        format!("git+{upstream}/?branch=main"),
+        format!("git+{upstream}#0123abc"),
+    ] {
+        project.remove_policy_setting("restricted_crates");
+        project.policy_setting(&format!(
+            "restricted_crates = {{ \"{key}\" = [\"demo\", \"demo_widgets\"] }}"
+        ));
+        let run = project.check_with_cargo_home(&cargo_home);
+        assert_eq!(
+            restricted_violations(&run).len(),
+            1,
+            "the key `{key}` should match `demo_remote` once: {run:#?}"
+        );
+        run.assert_reports(
+            1,
+            "`demo_core` reaches `demo_remote` (demo_core -> demo_widgets -> demo_remote)",
+        );
+    }
+    for key in [
+        format!("git+{upstream}-fork"),
+        format!("git+{upstream}2"),
+        format!("registry+{upstream}"),
+        format!("sparse+{upstream}"),
+    ] {
+        project.remove_policy_setting("restricted_crates");
+        project.policy_setting(&format!(
+            "restricted_crates = {{ \"{key}\" = [\"demo\", \"demo_widgets\"] }}"
+        ));
+        project
+            .check_with_cargo_home(&cargo_home)
+            .assert_reports(1, &format!("has a key `{key}` that matches no package"));
+    }
 }

@@ -198,10 +198,11 @@ Its diff then holds only its own change, at the crate's new path, and its checks
 
 To rename a crate's package, use three pull requests. A rules pull request adds the new name to
 `internal_dependencies` as a key with the old name's list, and beside the old name in each list
-that holds it. It also adds the new name to `changelog_include` in `release-plz.toml`, and to
-`build_script_crates` if the crate has a build script. A code pull request then changes the
-package's `name`, each dependency on it and each path that names it in code. A last rules pull
-request removes the old name's key and the old name from each list. Move the directory and rename
+of `internal_dependencies` and `restricted_crates` that holds it. It also adds the new name to
+`changelog_include` in `release-plz.toml`, and to `build_script_crates` if the crate has a build
+script. A code pull request then changes the package's `name`, each dependency on it and each
+path that names it in code. A last rules pull request removes the old name's key and the old name
+from each list. Move the directory and rename
 the package in separate pull requests.
 
 This doesn't cover the package `{{ crate_name }}`, which carries the project's name. Rule files
@@ -209,6 +210,48 @@ name it too: the root `Cargo.toml`, `dylint.toml`, the release configuration
 {%- if kind != 'library' %}, the justfile{% if kind == 'service' %}, the Containerfile{% endif %}
 and the workflows{% endif %}. So renaming it changes rules and code together. To rename it,
 follow "Name and kind" under [Change an answer](#change-an-answer).
+
+## Keep a package away from some crates
+
+`restricted_crates` in `[workspace.metadata.policy]` of the root `Cargo.toml` maps a package to
+the workspace crates that may depend on it, directly or through any other package. A crate that
+must build without a UI toolkit then can't reach one through a new dependency. `just policy` fails
+every other crate that reaches the package, with the path. It also fails a key that matches no
+package, so a misspelled key can't pass while it restricts nothing. An empty list lets no crate
+reach the package. The setting is a rule, so add or change it in a rules pull request:
+
+```toml
+[workspace.metadata.policy.restricted_crates]
+"git+https://github.com/zed-industries/zed" = ["{{ crate_name }}"]
+"gpui" = ["{{ crate_name }}"]
+"gpui-*" = ["{{ crate_name }}"]
+```
+
+A key takes one of three forms:
+
+- **A package name**, such as `gpui`. It matches in any letter case, as crates.io does, and reads
+  `-` and `_` as one, as Cargo does.
+- **A name prefix** ending in `*`, such as `gpui-*`. It matches the same way, so `gpui-*` also
+  covers `gpui_macros`.
+- **A source**, starting with `git+`, `registry+` or `sparse+`. It matches every package from the
+  same repository however the URL is written. The scheme, a `user@`, a query such as
+  `?branch=main`, a fragment, a trailing `/` or `.git` and letter case don't matter. The kind
+  does, so a `git+` key never matches a registry's packages. The repository must match whole, so
+  `git+https://github.com/zed-industries/zed` doesn't match `zed-fork` or `zed2`.
+
+A crate reaches a package through:
+
+- its own normal, build and dev-dependencies, and the normal and build dependencies of each
+  package they bring, workspace crates included. A dependency's own dev-dependencies don't count,
+  since they aren't built for the crate.
+- every platform's dependencies, such as `[target.'cfg(windows)'.dependencies]`, whichever system
+  runs the check.
+- features as the whole workspace turns them on. `cargo metadata` resolves one graph, with every
+  feature of every workspace crate on and each package's features unified across the workspace.
+  So a crate that uses a package without the feature that brings a restricted one still fails
+  when another crate turns that feature on, and the check errs toward failing. Move the code
+  behind that feature into a crate of its own, so the crate that must stay clear doesn't depend
+  on it.
 {%- if published %}
 
 ## Add a crate to a published library

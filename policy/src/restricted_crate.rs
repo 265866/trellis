@@ -1,6 +1,6 @@
 //! A package that `restricted_crates` lets only some members reach.
 
-use cargo_metadata::{Metadata, PackageId};
+use cargo_metadata::Package;
 
 /// A package that `restricted_crates` names, and the members that may reach it.
 #[derive(Debug, PartialEq, Eq)]
@@ -23,29 +23,35 @@ impl RestrictedCrate {
         &self.allowed
     }
 
-    /// Whether the package `id` of `metadata` is one the entry names.
-    pub(crate) fn names(&self, metadata: &Metadata, id: &PackageId) -> bool {
-        self.pattern.matches(metadata, id)
+    /// Whether the entry lets the member `name` reach the package.
+    pub(crate) fn allows(&self, name: &str) -> bool {
+        self.allowed.iter().any(|allowed| allowed == name)
+    }
+
+    /// Whether `package` is one the entry names.
+    pub(crate) fn names(&self, package: &Package) -> bool {
+        self.pattern.matches(package)
     }
 }
 
 /// A package `restricted_crates` names, by one of the three forms its keys take.
 #[derive(Debug, PartialEq, Eq)]
 enum Pattern {
-    /// A package whose name is this, such as `gpui`.
+    /// A package whose name is this, such as `gpui`, as `package_name` writes it.
     Name(String),
-    /// A package whose name starts with this, from a key that ends in `*`, such as `gpui*`.
+    /// A package whose name starts with this, from a key that ends in `*`, such as `gpui-*`, as
+    /// `package_name` writes it.
     Prefix(String),
-    /// A package whose source starts with this, from a key that starts with `git+` or
-    /// `registry+`, such as `git+https://github.com/zed-industries/zed`.
-    Source(String),
+    /// A package from this repository, from a key that starts with `git+`, `registry+` or
+    /// `sparse+`, such as `git+https://github.com/zed-industries/zed`.
+    Source(Repository),
 }
 
 impl Pattern {
     /// The pattern a `restricted_crates` key writes, or `None` if the key is none of the forms.
     fn parse(key: &str) -> Option<Self> {
-        if key.starts_with("git+") || key.starts_with("registry+") {
-            return Some(Self::Source(key.to_owned()));
+        if let Some(repository) = Repository::parse(key) {
+            return Some(Self::Source(repository));
         }
         let is_name = |name: &str| {
             !name.is_empty()
@@ -54,25 +60,70 @@ impl Pattern {
                     .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
         };
         match key.strip_suffix('*') {
-            Some(prefix) if is_name(prefix) => Some(Self::Prefix(prefix.to_owned())),
-            None if is_name(key) => Some(Self::Name(key.to_owned())),
+            Some(prefix) if is_name(prefix) => Some(Self::Prefix(package_name(prefix))),
+            None if is_name(key) => Some(Self::Name(package_name(key))),
             _ => None,
         }
     }
 
-    /// Whether the package `id` of `metadata` matches the pattern. Names match with `-` and `_`
-    /// read as one, as Cargo reads them.
-    fn matches(&self, metadata: &Metadata, id: &PackageId) -> bool {
-        let package = &metadata[id];
-        let name = package.name.replace('-', "_");
+    /// Whether `package` matches the pattern.
+    fn matches(&self, package: &Package) -> bool {
         match self {
-            Self::Name(pattern) => name == pattern.replace('-', "_"),
-            Self::Prefix(prefix) => name.starts_with(&prefix.replace('-', "_")),
-            Self::Source(source) => package
+            Self::Name(name) => package_name(&package.name) == *name,
+            Self::Prefix(prefix) => package_name(&package.name).starts_with(prefix.as_str()),
+            Self::Source(repository) => package
                 .source
                 .as_ref()
-                .is_some_and(|actual| actual.repr.starts_with(source.as_str())),
+                .and_then(|source| Repository::parse(&source.repr))
+                .is_some_and(|source| source == *repository),
         }
+    }
+}
+
+/// `name` in lowercase with each `-` read as `_`, so two spellings of one package name compare
+/// equal, as crates.io, which ignores case, and Cargo, which reads `-` and `_` as one, compare
+/// them.
+fn package_name(name: &str) -> String {
+    name.to_ascii_lowercase().replace('-', "_")
+}
+
+/// The repository a package source names, with what can differ between two spellings of one
+/// repository taken out.
+#[derive(Debug, PartialEq, Eq)]
+struct Repository {
+    /// The kind of source: `git`, `registry` or `sparse`.
+    kind: String,
+    /// The host and path in lowercase, without the scheme, a `user@`, a query, a fragment, a
+    /// trailing `/` or a trailing `.git`, such as `github.com/zed-industries/zed`.
+    location: String,
+}
+
+impl Repository {
+    /// The repository of `source`, a source as Cargo writes one, such as
+    /// `git+https://github.com/zed-industries/zed?branch=main#0123abc`, or `None` if it isn't a
+    /// git, registry or sparse source or names no location.
+    fn parse(source: &str) -> Option<Self> {
+        let (kind, url) = source.split_once('+')?;
+        if !matches!(kind, "git" | "registry" | "sparse") {
+            return None;
+        }
+        let url = url.to_lowercase();
+        let url = url.split_once("://").map_or(url.as_str(), |(_, rest)| rest);
+        let url = url.split(['?', '#']).next().unwrap_or_default();
+        let authority = url.split('/').next().unwrap_or_default();
+        let url = authority.rfind('@').map_or(url, |at| &url[at + 1..]);
+        let url = url.trim_end_matches('/');
+        let location = url
+            .strip_suffix(".git")
+            .unwrap_or(url)
+            .trim_end_matches('/');
+        if location.is_empty() {
+            return None;
+        }
+        Some(Self {
+            kind: kind.to_owned(),
+            location: location.to_owned(),
+        })
     }
 }
 
@@ -87,17 +138,77 @@ mod tests {
             Some(Pattern::Name("gpui".to_owned()))
         );
         assert_eq!(
-            Pattern::parse("zed-*"),
-            Some(Pattern::Prefix("zed-".to_owned()))
+            Pattern::parse("Zed-*"),
+            Some(Pattern::Prefix("zed_".to_owned()))
         );
-        assert_eq!(
-            Pattern::parse("git+https://github.com/zed-industries/zed"),
-            Some(Pattern::Source(
-                "git+https://github.com/zed-industries/zed".to_owned()
-            ))
-        );
-        for key in ["", "*", "gp*ui", "gpui**", "a b", "https://github.com/x"] {
+        for (key, kind) in [
+            ("git+https://github.com/zed-industries/zed", "git"),
+            ("registry+https://github.com/zed-industries/zed", "registry"),
+            ("sparse+https://github.com/zed-industries/zed", "sparse"),
+        ] {
+            assert_eq!(
+                Pattern::parse(key),
+                Some(Pattern::Source(Repository {
+                    kind: kind.to_owned(),
+                    location: "github.com/zed-industries/zed".to_owned(),
+                })),
+                "{key:?}"
+            );
+        }
+        for key in [
+            "",
+            "*",
+            "gp*ui",
+            "gpui**",
+            "a b",
+            "https://github.com/x",
+            "git+",
+            "git+https://",
+            "sparse+/",
+            "gitx+https://github.com/x",
+        ] {
             assert_eq!(Pattern::parse(key), None, "{key:?}");
         }
+    }
+
+    #[test]
+    fn sources_name_the_same_repository_however_they_are_written() {
+        let key = Repository::parse("git+https://github.com/zed-industries/zed");
+        assert!(key.is_some(), "the key should parse");
+        for source in [
+            "git+https://github.com/zed-industries/zed",
+            "git+https://github.com/zed-industries/zed#0123abc",
+            "git+https://github.com/Zed-Industries/zed?branch=x",
+            "git+https://github.com/zed-industries/zed?branch=x#0123abc",
+            "git+ssh://git@github.com/zed-industries/zed",
+            "git+https://github.com/zed-industries/zed.git",
+            "git+https://github.com/zed-industries/ZED.GIT",
+            "git+https://github.com/zed-industries/zed/",
+            "git+https://github.com/zed-industries/zed.git/",
+            "git+https://user@GitHub.com/zed-industries/zed",
+        ] {
+            assert_eq!(Repository::parse(source), key, "{source:?}");
+        }
+        for source in [
+            "git+https://github.com/zed-industries/zed-fork#abc",
+            "git+https://github.com/zed-industries/zed2",
+            "git+https://github.com/zed-industries",
+            "git+https://gitlab.com/zed-industries/zed",
+            "registry+https://github.com/zed-industries/zed",
+            "sparse+https://github.com/zed-industries/zed",
+        ] {
+            assert_ne!(Repository::parse(source), key, "{source:?}");
+        }
+        assert_eq!(
+            Repository::parse("sparse+https://index.crates.io/"),
+            Repository::parse("sparse+https://INDEX.crates.io"),
+            "a sparse source should compare without its trailing `/` or case"
+        );
+    }
+
+    #[test]
+    fn names_compare_in_any_case_with_dash_and_underscore_as_one() {
+        assert_eq!(package_name("Gpui-Macros"), "gpui_macros");
+        assert_eq!(package_name("gpui_macros"), package_name("GPUI-MACROS"));
     }
 }
