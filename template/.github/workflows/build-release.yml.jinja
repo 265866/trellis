@@ -57,7 +57,7 @@ jobs:
 {%- for target in targets %}
           - os: {{ target.runner }}
             target: {{ target.triple }}
-{%- if release.files %}
+{%- if target.triple in release.files %}
             files: {{ release.files[target.triple] | join(' ') }}
 {%- endif %}
 {%- endfor %}
@@ -176,9 +176,17 @@ jobs:
           if [ "$RUNNER_OS" = Windows ]; then binary="$binary.exe"; fi
           export VERSION="$version" BINARY="$binary" NOTICES=target/THIRD-PARTY-LICENSES.html
           export DIST="$PWD/target/release-files"
-          rm -rf "$DIST"
+          if [ -z "$FILES" ]; then
+            echo "::error::The release answer in .copier-answers.yml names no files for $TARGET; add them as docs/maintaining.md says."
+            exit 1
+          fi
+          rm -rf "$DIST" dist
           mkdir -p "$DIST"
-          bash release/package.sh
+          bash -eo pipefail release/package.sh
+          if [ -e dist ]; then
+            echo "::error::release/package.sh wrote dist/, which the release publishes whole; write only to \$DIST."
+            exit 1
+          fi
           expected=$(for file in $FILES; do echo "${file//\{version\}/$version}"; done | sort)
           written=$(cd "$DIST" && find . -mindepth 1 -maxdepth 1 | sed 's|^\./||' | sort)
           if [ "$written" != "$expected" ]; then

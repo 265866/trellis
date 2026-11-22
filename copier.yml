@@ -337,13 +337,15 @@ release:
   default: {}
   when: "{{ kind == 'binary' }}"
   # Each value lands in a workflow or a docs page, so each is held to a form both read one way:
-  # `\Z`, unlike `$`, doesn't match before a last line feed. Every file name holds `{version}`, so
-  # an attestation for one release's file can't pass for another's, and the names are unique
-  # across targets, since the publish job puts every target's files in one directory. Copier runs
-  # this even when it doesn't ask, so a `--data` answer can't reach another kind.
+  # `\Z`, unlike `$`, doesn't match before a last line feed. A `files` entry for a target the
+  # release doesn't build is allowed, and a target without one fails its release build, so a
+  # change of platforms doesn't make Copier drop the whole answer, as it drops any stored answer
+  # its checks refuse. Every file name holds `{version}`, so an attestation for one release's file
+  # can't pass for another's, and the names are unique across targets, since the publish job puts
+  # every target's files in one directory. Copier runs this even when it doesn't ask, so a
+  # `--data` answer can't reach another kind.
   validator: >-
     {%- set ns = namespace(error='', names=[]) -%}
-    {%- set triples = targets | map(attribute='triple') | list -%}
     {%- if release is not mapping -%}
     {%- set ns.error = 'Write a mapping, such as `{checksums: SHA256SUMS.txt}`, or `{}` for trellis\'s archives.' -%}
     {%- elif release and kind != 'binary' -%}
@@ -363,8 +365,8 @@ release:
     {%- set ns.error = '`env` maps variable names to values, such as `{APP_RELEASE: "1"}`.' -%}
     {%- else -%}
     {%- for name, value in release.env.items() -%}
-    {%- if not (name is string and name | regex_search('^[A-Za-z_][A-Za-z0-9_]*\\Z')) or name in ['TARGET'] or name.startswith('GITHUB_') or name.startswith('RUNNER_') -%}
-    {%- set ns.error = '`' ~ name ~ '` in `env` is not a variable name the build may set: use letters, digits and `_`, and no `GITHUB_` or `RUNNER_` prefix.' -%}
+    {%- if not (name is string and name | regex_search('^[A-Z_][A-Z0-9_]*\\Z')) or name in ['TARGET', 'PATH', 'BASH_ENV', 'RUSTFLAGS', 'RUSTUP_TOOLCHAIN', 'RUSTC_WRAPPER', 'RUSTC_WORKSPACE_WRAPPER'] or name.startswith('GITHUB_') or name.startswith('RUNNER_') or name.startswith('CARGO_') -%}
+    {%- set ns.error = '`' ~ name ~ '` in `env` is not a variable the release build may set: use capitals, digits and `_`, no `GITHUB_`, `RUNNER_` or `CARGO_` prefix, and none of the variables that change the toolchain, its flags or the shell.' -%}
     {%- elif value is not string or value | length > 4096 or value | regex_search('[\\x00-\\x1f\\x7f-\\x9f\\u2028\\u2029]') -%}
     {%- set ns.error = '`env`\'s `' ~ name ~ '` needs a quoted one-line string of at most 4096 characters, such as `"1"`.' -%}
     {%- endif -%}
@@ -374,16 +376,16 @@ release:
     {%- if 'files' in release -%}
     {%- if release.files is not mapping -%}
     {%- set ns.error = '`files` maps each target triple to its file names, such as `{x86_64-pc-windows-msvc: ["app-{version}-x64.zip"]}`.' -%}
-    {%- elif release.files.keys() | sort | list != triples | sort | list -%}
-    {%- set ns.error = '`files` must list exactly the targets the release builds: ' ~ triples | join(', ') ~ '.' -%}
     {%- else -%}
     {%- for triple, names in release.files.items() -%}
-    {%- if names is string or names is not iterable or names is mapping or names | length == 0 -%}
+    {%- if not (triple is string and triple | regex_search('^[a-z0-9_]+(-[a-z0-9_]+){2,3}\\Z')) -%}
+    {%- set ns.error = '`' ~ triple ~ '` in `files` is not a target triple, such as `x86_64-pc-windows-msvc`.' -%}
+    {%- elif names is string or names is not iterable or names is mapping or names | length == 0 -%}
     {%- set ns.error = '`files`\' `' ~ triple ~ '` lists at least one file name.' -%}
     {%- else -%}
     {%- for file in names -%}
-    {%- if not (file is string and file | regex_search('^[A-Za-z0-9]([A-Za-z0-9._+-]|\\{version\\})*\\Z') and '{version}' in file and file | length <= 200) -%}
-    {%- set ns.error = '`' ~ file ~ '` in `files` is a file name of letters, digits and `._+-` that holds `{version}`.' -%}
+    {%- if not (file is string and file | regex_search('^[A-Za-z0-9]([A-Za-z0-9._-]|\\{version\\})*\\Z') and '{version}' in file and file | length <= 200) -%}
+    {%- set ns.error = '`' ~ file ~ '` in `files` is a file name of letters, digits and `._-` that holds `{version}`.' -%}
     {%- elif file in ns.names or file in ['attestation.json', release.checksums | default('SHA256SUMS')] -%}
     {%- set ns.error = '`' ~ file ~ '` in `files` is named twice, or names the checksums or the attestation.' -%}
     {%- endif -%}
