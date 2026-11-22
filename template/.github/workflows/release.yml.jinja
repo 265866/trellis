@@ -171,7 +171,8 @@ jobs:
     runs-on: ubuntu-24.04
 {%- endraw %}
 {%- if visibility == 'public' %}
-    # The attest retries' waits add four minutes to a private repository's 15.
+    # The attest retries can wait four minutes, so the limit is 20, where a private repository,
+    # which runs no attestation, has 15.
 {%- endif %}
     timeout-minutes: {{ 20 if visibility == 'public' else 15 }}
 {%- raw %}
