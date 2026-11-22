@@ -99,9 +99,10 @@ declare_lint! {
     ///   `#[serde(into = "..")]`: the caller wrote it where no lint reads it as an attribute, so
     ///   it is flagged however trusted the macro is. A lint level that a macro from outside the
     ///   workspace writes on an item holding a static in a constructor section, which the same
-    ///   expansion writes, is `code_before_main`'s to judge: it passes as a trusted crate's if
-    ///   `constructor_macros` lets the static pass, and otherwise `code_before_main` reports the
-    ///   macro call, whose removal takes the attribute with it.
+    ///   expansion writes, is `code_before_main`'s to judge, if it names only lints, none of them a
+    ///   group or `code_before_main`, and `code_before_main` is on at the crate root: it passes as
+    ///   a trusted crate's if `constructor_macros` lets the static pass, and otherwise
+    ///   `code_before_main` reports the macro call, whose removal takes the attribute with it.
     /// - A lint level that a trusted macro writes over code written in the source, which hides
     ///   that code from the lints it names, unless `trusted_macro_lints` in `dylint.toml` lists
     ///   each of them for the macro's crate; a lint group or one of clippy's own attributes is
@@ -263,12 +264,7 @@ impl LintLevel {
 
 impl EarlyLintPass for SuppressionPolicy {
     fn check_crate(&mut self, cx: &EarlyContext<'_>, krate: &Crate) {
-        let groups: Vec<String> = rustc_lint::unerased_lint_store(cx.sess())
-            .get_lint_groups()
-            .map(|(name, _, _)| name.to_string())
-            .chain(["warnings".to_owned()])
-            .chain(TOOL_GROUPS.iter().map(|&group| group.to_owned()))
-            .collect();
+        let groups = lint_groups(cx);
         let source = LocalSource::get(cx, krate);
         crate::trusted_lint_levels::check(cx, source, krate, &groups);
         let checker = Checker { cx, groups };
@@ -294,6 +290,17 @@ impl EarlyLintPass for SuppressionPolicy {
             krate,
         );
     }
+}
+
+/// Every lint group a lint level may name: the compiler's registered groups, `warnings`, and
+/// [`TOOL_GROUPS`].
+pub(crate) fn lint_groups(cx: &EarlyContext<'_>) -> Vec<String> {
+    rustc_lint::unerased_lint_store(cx.sess())
+        .get_lint_groups()
+        .map(|(name, _, _)| name.to_string())
+        .chain(["warnings".to_owned()])
+        .chain(TOOL_GROUPS.iter().map(|&group| group.to_owned()))
+        .collect()
 }
 
 /// Checks the lint levels of the expanded crate that macros wrote, which the source doesn't hold,

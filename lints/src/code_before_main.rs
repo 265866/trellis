@@ -64,10 +64,11 @@ declare_lint! {
     /// ```
     ///
     /// The lint levels that the macro writing the static writes on the items around it, such as
-    /// the `allow` on the `const _` that `inventory::submit!` writes, are this lint's to judge too.
-    /// `suppression_policy` takes them as a trusted crate's once the static passes, so a listed
-    /// macro needs no entry in `trusted_macro_crates`, and otherwise leaves them to this lint's
-    /// report.
+    /// the `allow` on the `const _` that `inventory::submit!` writes, are this lint's to judge too,
+    /// as long as none can turn it off: each names only lints, none of them a group or this lint,
+    /// and the lint is on at the crate root. `suppression_policy` takes them as a trusted crate's
+    /// once the static passes, so a listed macro needs no entry in `trusted_macro_crates`, and
+    /// otherwise leaves them to this lint's report. It checks any other as the macro's.
     pub CODE_BEFORE_MAIN,
     Warn,
     "a `static` in a section that runs code before `main`"
@@ -368,6 +369,43 @@ fn ui_external_macro_listed() {
             .run();
         std::fs::remove_dir_all(&fixture).expect("the fixture copy should be removable");
     }
+}
+
+/// A dependency's lint level that could turn this lint off, by a group such as `warnings` or by
+/// its name, isn't left to it: `suppression_policy` flags each, so the macro call is always
+/// reported, as it is when the level hides the caller's own code too.
+#[test]
+fn ui_constructor_probes() {
+    ui_test_with_suppression_policy("ui/code_before_main_probes").run();
+}
+
+/// With this lint turned off on the command line, nothing would report the statics, so
+/// `suppression_policy` flags the `allow` the registry writes around them, as for any untrusted
+/// crate's macro. Each fixture's expected output here is its `.off.stderr`.
+#[test]
+fn ui_external_macro_turned_off() {
+    let fixture = crate::ui_harness::temp_dir().join("code_before_main_off");
+    copy_fixture(Path::new(EXTERNAL_MACRO), &fixture, "off");
+    ui_test_with_suppression_policy(&fixture)
+        .rustc_flags(["-A", "code_before_main"])
+        .run();
+    std::fs::remove_dir_all(&fixture).expect("the fixture copy should be removable");
+}
+
+/// A lint level that a macro from a crate `macro_crates` lists writes around its constructor is
+/// the workspace's own, which `suppression_policy` flags as it flags any: only a dependency's is
+/// left to this lint. Each fixture's expected output here is its `.workspace.stderr`.
+#[test]
+fn ui_external_macro_workspace_crate() {
+    let fixture = crate::ui_harness::temp_dir().join("code_before_main_workspace");
+    copy_fixture(Path::new(EXTERNAL_MACRO), &fixture, "workspace");
+    ui_test_with_suppression_policy(&fixture)
+        .dylint_toml(crate::ui_harness::dylint_toml_with(
+            "macro_crates",
+            Some(r#"["registry"]"#),
+        ))
+        .run();
+    std::fs::remove_dir_all(&fixture).expect("the fixture copy should be removable");
 }
 
 /// Copies the fixture directory `from`, its `auxiliary` directory included, to `to`, with each

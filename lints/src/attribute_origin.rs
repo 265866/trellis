@@ -34,7 +34,11 @@
 //! constructor. If `constructor_macros` lets the static pass, the macro's crate counts as trusted
 //! for it, and the attribute is [`Origin::Trusted`], so `trusted_macro_lints` still decides what it
 //! may set over code written in the source. Otherwise it is [`Origin::Constructor`]:
-//! `code_before_main` reports the macro call, and fixing that removes the attribute.
+//! `code_before_main` reports the macro call, and fixing that removes the attribute. Only a level
+//! that can't turn `code_before_main` off is judged so: one that names only lints, none of them a
+//! group or `code_before_main` itself, while `code_before_main` is on at the crate root, so
+//! neither the crate's inner attributes nor `-A warnings`, `-A code_before_main` or `--cap-lints`
+//! on the command line turned it off. Any other is checked as the macro's, as before.
 
 use std::collections::HashMap;
 
@@ -44,7 +48,7 @@ use rustc_ast::{
     AssocItem, AttrArgs, AttrId, AttrKind, Attribute, Crate, ForeignItem, Item, LitKind, MetaItem,
     MetaItemInner, MetaItemKind, NodeId,
 };
-use rustc_lint::{EarlyContext, LintContext};
+use rustc_lint::{EarlyContext, Level, LintContext};
 use rustc_middle::middle::resolve::PerOwnerResolverData;
 use rustc_middle::ty::TyCtxt;
 use rustc_span::def_id::{CrateNum, LOCAL_CRATE};
@@ -194,7 +198,7 @@ fn constructor_origin(
         .macro_crates
         .iter()
         .any(|listed| listed.replace('-', "_") == krate.as_str());
-    if in_workspace {
+    if in_workspace || !leaves_code_before_main_on(cx, attribute) {
         return None;
     }
     Some(if allowed {
@@ -203,6 +207,34 @@ fn constructor_origin(
         }
     } else {
         Origin::Constructor
+    })
+}
+
+/// Whether `code_before_main` still reports the static under `attribute`, a lint level: the lint
+/// is on at the crate root, and the level names only lints, none of them a group or
+/// `code_before_main`. A lint's last segment counts, so a tool prefix can't hide the name.
+fn leaves_code_before_main_on(cx: &EarlyContext<'_>, attribute: &Attribute) -> bool {
+    let level = cx
+        .get_lint_level_spec(crate::code_before_main::CODE_BEFORE_MAIN)
+        .level();
+    if matches!(level, Level::Allow | Level::Expect) {
+        return false;
+    }
+    let meta = meta(attribute);
+    if !matches!(
+        meta.path.as_str(),
+        "allow" | "warn" | "expect" | "deny" | "forbid"
+    ) {
+        return false;
+    }
+    let groups = crate::suppression_policy::lint_groups(cx);
+    meta.items().iter().all(|item| match &item.kind {
+        MetaKind::Word => {
+            !groups.contains(&item.path)
+                && item.path.rsplit("::").next() != Some("code_before_main")
+        }
+        MetaKind::Value(_) => item.path == "reason",
+        _ => false,
     })
 }
 

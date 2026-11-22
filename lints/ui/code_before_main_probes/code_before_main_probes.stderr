@@ -1,0 +1,44 @@
+warning: `allow` attribute, which the macro `probes::submit_warnings` from `probes` writes
+  --> $DIR/code_before_main_probes.rs:9:1
+   |
+LL | probes::submit_warnings!();
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: use `#[expect(lint, reason = "...")]` on the narrowest item, which fails once the lint stops firing
+   = help: write the code without `probes::submit_warnings`, as the idioms in `docs/style.md` show; list `probes` in `trusted_macro_crates` only after reading every lint level its macros write, which is a rule change
+   = note: `#[warn(suppression_policy)]` on by default
+
+warning: `allow` attribute, which the macro `probes::submit_named` from `probes` writes
+  --> $DIR/code_before_main_probes.rs:12:1
+   |
+LL | probes::submit_named!();
+   | ^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: use `#[expect(lint, reason = "...")]` on the narrowest item, which fails once the lint stops firing
+   = help: write the code without `probes::submit_named`, as the idioms in `docs/style.md` show; list `probes` in `trusted_macro_crates` only after reading every lint level its macros write, which is a rule change
+
+warning: `allow` of `code_before_main`, which has no exceptions, which the macro `probes::submit_named` from `probes` writes
+  --> $DIR/code_before_main_probes.rs:12:1
+   |
+LL | probes::submit_named!();
+   | ^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: call the code from `main`; only a macro that `constructor_macros` in `dylint.toml` lists may place a constructor, which is a rule change
+   = help: write the code without `probes::submit_named`, as the idioms in `docs/style.md` show; list `probes` in `trusted_macro_crates` only after reading every lint level its macros write, which is a rule change
+
+warning: `allow` attribute, which the macro `probes::wrap_user` from `probes` writes
+  --> $DIR/code_before_main_probes.rs:15:1
+   |
+LL | / probes::wrap_user! {
+LL | |     pub fn user_code() -> i32 {
+LL | |         1 + 1
+...  |
+LL | |     static USER: extern "C" fn() = user_init;
+LL | | }
+   | |_^
+   |
+   = help: use `#[expect(lint, reason = "...")]` on the narrowest item, which fails once the lint stops firing
+   = help: write the code without `probes::wrap_user`, as the idioms in `docs/style.md` show; list `probes` in `trusted_macro_crates` only after reading every lint level its macros write, which is a rule change
+
+warning: 4 warnings emitted
+

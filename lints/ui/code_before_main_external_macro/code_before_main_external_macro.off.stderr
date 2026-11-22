@@ -1,0 +1,21 @@
+warning: `allow` attribute, which the macro `::gui::private::registry::submit` from `registry` writes
+  --> $DIR/code_before_main_external_macro.rs:11:1
+   |
+LL | gui::actions!(Open);
+   | ^^^^^^^^^^^^^^^^^^^
+   |
+   = help: use `#[expect(lint, reason = "...")]` on the narrowest item, which fails once the lint stops firing
+   = help: write the code without `::gui::private::registry::submit`, as the idioms in `docs/style.md` show; list `registry` in `trusted_macro_crates` only after reading every lint level its macros write, which is a rule change
+   = note: `#[warn(suppression_policy)]` on by default
+
+warning: `allow` attribute, which the macro `::gui::private::registry::submit` from `registry` writes
+  --> $DIR/code_before_main_external_macro.rs:14:10
+   |
+LL | #[derive(gui::Action)]
+   |          ^^^^^^^^^^^
+   |
+   = help: use `#[expect(lint, reason = "...")]` on the narrowest item, which fails once the lint stops firing
+   = help: write the code without `::gui::private::registry::submit`, as the idioms in `docs/style.md` show; list `registry` in `trusted_macro_crates` only after reading every lint level its macros write, which is a rule change
+
+warning: 2 warnings emitted
+
