@@ -1034,10 +1034,10 @@ image-extras:
     grep --quiet 'Only a service takes an `image` answer' <<< "$refusal" || fail "a binary's image answer was refused for another reason: $refusal"
     # Copier stores a mapping answer with its keys sorted, so a render from `--data` and a later one
     # from the stored answers must write the image's environment in one order.
-    generate "$out/typed" --data 'image={env: {ZED: "1", ALPHA: "2"}}'
+    generate "$out/typed" --data 'image={env: {ZED: "1", http_proxy: "2", HTTP_PROXY: "3", ALPHA: "4"}}'
     generate "$out/stored" --data-file "$out/typed/.copier-answers.yml"
     diff -r "$out/typed" "$out/stored" || fail "a render from the stored image answer differs from the first"
-    grep --quiet '^ENV ALPHA="2"' "$out/typed/Containerfile" || fail "the image's environment isn't in sorted order"
+    grep --quiet '^ENV ALPHA="4"' "$out/typed/Containerfile" || fail "the image's environment isn't in sorted order"
     rm -rf "$out/typed" "$out/stored"
     generate "$out/default"
     final_stage=$(awk '/^FROM / { stage = "" } { stage = stage $0 "\n" } END { printf "%s", stage }' "$out/default/Containerfile")
@@ -1150,6 +1150,7 @@ release-extras:
     {env: {RUSTFLAGS: "-C x"}}|none of the variables that change the toolchain
     {env: {target: "x"}}|use capitals
     {env: {DEMO_RELEASE: 1}}|needs a quoted one-line string
+    {env: {1: "x", A: "y"}}|is not a variable the release build may set
     {installer: true}|`installer` is not a key it takes
     EOF
     if refusal=$(uv tool run copier@9.19.1 copy --quiet --defaults --vcs-ref HEAD --data project_name=demo-service \

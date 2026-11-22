@@ -209,7 +209,7 @@ image:
     {%- if image.env is not mapping -%}
     {%- set ns.error = '`env` maps variable names to values, such as `{PORT: "8080"}`.' -%}
     {%- else -%}
-    {%- for name, value in image.env | dictsort -%}
+    {%- for name, value in image.env.items() -%}
     {%- if not (name is string and name | regex_search('^[A-Za-z_][A-Za-z0-9_]*\\Z')) -%}
     {%- set ns.error = '`' ~ name ~ '` in `env` is not a variable name: use letters, digits and `_`.' -%}
     {%- elif name == web_dir -%}
@@ -366,7 +366,7 @@ release:
     {%- if release.env is not mapping -%}
     {%- set ns.error = '`env` maps variable names to values, such as `{APP_RELEASE: "1"}`.' -%}
     {%- else -%}
-    {%- for name, value in release.env | dictsort -%}
+    {%- for name, value in release.env.items() -%}
     {%- if not (name is string and name | regex_search('^[A-Z_][A-Z0-9_]*\\Z')) or name in ['TARGET', 'PATH', 'BASH_ENV', 'RUSTFLAGS', 'RUSTUP_TOOLCHAIN', 'RUSTC_WRAPPER', 'RUSTC_WORKSPACE_WRAPPER'] or name.startswith('GITHUB_') or name.startswith('RUNNER_') or name.startswith('CARGO_') -%}
     {%- set ns.error = '`' ~ name ~ '` in `env` is not a variable the release build may set: use capitals, digits and `_`, no `GITHUB_`, `RUNNER_` or `CARGO_` prefix, and none of the variables that change the toolchain, its flags or the shell.' -%}
     {%- elif value is not string or value | length > 4096 or value | regex_search('[\\x00-\\x1f\\x7f-\\x9f\\u2028\\u2029]') -%}
@@ -379,7 +379,7 @@ release:
     {%- if release.files is not mapping -%}
     {%- set ns.error = '`files` maps each target triple to its file names, such as `{x86_64-pc-windows-msvc: ["app-{version}-x64.zip"]}`.' -%}
     {%- else -%}
-    {%- for triple, names in release.files | dictsort -%}
+    {%- for triple, names in release.files.items() -%}
     {%- if not (triple is string and triple | regex_search('^[a-z0-9_]+(-[a-z0-9_]+){2,3}\\Z')) -%}
     {%- set ns.error = '`' ~ triple ~ '` in `files` is not a target triple, such as `x86_64-pc-windows-msvc`.' -%}
     {%- elif names is string or names is not iterable or names is mapping or names | length == 0 -%}
