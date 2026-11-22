@@ -6,6 +6,34 @@ part lists what a project's owner must do around the update: a rule that can fla
 a setting to change, or a step to do by hand. [CONTRIBUTING.md](CONTRIBUTING.md#release-trellis)
 has the versioning rule.
 
+## v0.17.1
+
+### Added
+
+- `restricted_crates` in `[workspace.metadata.policy]`, which keeps a package away from the
+  workspace crates that don't need it, such as a UI toolkit from a protocol crate that must build
+  without one. Each key is a package name, such as `gpui`, a name prefix ending in `*`, such as
+  `gpui-*`, or a source, such as `git+https://github.com/zed-industries/zed`. It maps to the
+  crates that may depend on that package, directly or through any other package. `just policy`
+  fails every other crate that reaches it, with the path, and fails a key that lists crates but
+  matches no package. A key with an empty list bans the package, even before any crate depends on
+  it. The generated `docs/maintaining.md` gains a section, "Keep a package away from some
+  crates", that says what counts. A project without the setting restricts nothing.
+
+### Fixed
+
+- A service's release tags its image only once the image is attested, signed and verified. It
+  pushed the image with its version tag first, so when Sigstore's transparency log failed, as it
+  did for a while on 22 November, the version tag stayed on an unsigned image, and re-running the
+  failed job rebuilt the image and moved the tag to a new digest. The image is now pushed by its
+  digest alone and tagged with its version, minor and `latest` in one step at the end, so no tag
+  names an image that isn't signed.
+- Attesting a release, of a service's image or a binary's archives, tries three times, a minute
+  and then three minutes apart, and so do signing and verifying the image, since Sigstore's
+  transparency log fails at times. A release that failed only there now passes on its own.
+- The generated `docs/maintaining.md` says that in CI `.github/setup-build.sh` runs before `just`
+  and the pinned toolchains are installed, so the script can't use either.
+
 ## v0.17.0
 
 ### Action required in projects
