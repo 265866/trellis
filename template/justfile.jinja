@@ -198,13 +198,16 @@ run *args:{{ ' web-build' if web_ui else '' }}
 # where it puts the build.
 export {{ crate_name | upper }}_WEB_DIR := justfile_directory() / "crates" / "{{ crate_name }}" / "web" / "dist"
 
-# `bun run` finds a script's commands first in node_modules/.bin, in the web UI's directory and
-# in every directory above it. So if one of those holds a `bun` or `bunx` command, the web UI's
-# scripts run on that Bun, not the pinned one, and this fails.
+# `bun install --frozen-lockfile` passes with no lockfile and then picks the versions itself, so
+# this fails when bun.lock is missing. `bun run` finds a script's commands first in
+# node_modules/.bin, in the web UI's directory and in every directory above it. So if one of those
+# holds a `bun` or `bunx` command, the web UI's scripts run on that Bun, not the pinned one, and
+# this fails too.
 #
 # Installs the web UI's packages, exactly as bun.lock lists them.
 [working-directory("crates/{{ crate_name }}/web")]
 web-install:
+    @bun --eval "if (!require('node:fs').existsSync('bun.lock')) { console.error('error: crates/{{ crate_name }}/web has no bun.lock to install from. Write it there with bun install --save-text-lockfile --lockfile-only and commit it.'); process.exit(1); }"
     bun install --frozen-lockfile
     @bun --eval "const path = require('node:path'); for (let dir = process.cwd(), up; ; dir = up) { const bin = path.join(dir, 'node_modules', '.bin'); if (['bun', 'bunx'].some((name) => Bun.which(name, { PATH: bin }))) { console.error('error: ' + bin + ' holds a bun or bunx command, so the web scripts would run on that Bun and not the pinned one. CONTRIBUTING.md says what to do.'); process.exit(1); } up = path.dirname(dir); if (up === dir) break; }"
 

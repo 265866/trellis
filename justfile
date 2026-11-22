@@ -694,9 +694,9 @@ update:
 # `publish` makes a library a published one, and `true` as `web` gives a service a web UI. After
 # `ci`, a service also builds and runs its image when Docker is installed, under umask 077 with its
 # license files 0600, and the image's user must be able to read them. A web UI's build and license
-# notices must be in it too, and its install must refuse a package that provides a `bun` command
-# and read the app's bunfig.toml. A `target` runs `test` and `build-release` for that target, as a
-# project's CI does for the target a release ships.
+# notices must be in it too, and its install must refuse a missing bun.lock and a package that
+# provides a `bun` command, and read the app's bunfig.toml. A `target` runs `test` and
+# `build-release` for that target, as a project's CI does for the target a release ships.
 #
 # Generates a project of one kind and runs its checks.
 template kind recipes="ci" publish="false" web="false" target="":
@@ -760,17 +760,29 @@ template kind recipes="ci" publish="false" web="false" target="":
         docker image inspect --format '{{{{ json .Config.Env }}' demo-service:dev \
           | grep --quiet '"DEMO_SERVICE_WEB_DIR=/usr/share/demo-service/web"' \
           || { echo "error: the image doesn't name its web UI's directory in DEMO_SERVICE_WEB_DIR" >&2; exit 1; }
+        web=crates/demo_service/web
+        # Bun's frozen install passes with no lockfile and picks the versions itself, so a missing
+        # bun.lock fails the install, in the recipe and in the image.
+        mv "$web/bun.lock" "$out/bun.lock"
+        missing="has no bun.lock"
+        if just web-install > "$out/web-install.txt" 2>&1 || ! grep --quiet "^error: .*$missing" "$out/web-install.txt"; then
+          echo "error: web-install ran without a bun.lock" >&2; exit 1
+        fi
+        # The plain log also prints the command, which holds the message, so match only its output.
+        if docker build --progress plain --target web --file Containerfile . > "$out/web-image.txt" 2>&1 \
+          || ! grep --quiet --extended-regexp "^#[0-9]+ [0-9.]+ error: .*$missing" "$out/web-image.txt"; then
+          echo "error: the image's install ran without a bun.lock" >&2; exit 1
+        fi
+        mv "$out/bun.lock" "$web/bun.lock"
         # A package that provides a `bun` command would run the web UI's scripts on that Bun, so
         # the install fails, in the recipe and in the image. The image's install reads the app's
         # bunfig.toml, which here leaves that package out, so the same lockfile then builds.
-        web=crates/demo_service/web
         (cd "$web" && bun add --dev "bun@$(bun --version)") > "$out/bun-add.txt" 2>&1 \
           || { cat "$out/bun-add.txt" >&2; exit 1; }
         refused="holds a bun or bunx command"
         if just web-install > "$out/web-install.txt" 2>&1 || ! grep --quiet "^error: .*$refused" "$out/web-install.txt"; then
           echo "error: web-install took a package that provides a bun command" >&2; exit 1
         fi
-        # The plain log also prints the command, which holds the message, so match only its output.
         if docker build --progress plain --target web --file Containerfile . > "$out/web-image.txt" 2>&1 \
           || ! grep --quiet --extended-regexp "^#[0-9]+ [0-9.]+ error: .*$refused" "$out/web-image.txt"; then
           echo "error: the image's install took a package that provides a bun command" >&2; exit 1
