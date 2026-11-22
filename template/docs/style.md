@@ -64,7 +64,7 @@ in its `justfile` names, so read them at that commit when `main` has moved on.
 | Avoid overloading operators for non-mathematical purposes | `operator_overload`: every operator impl needs an `expect` saying what the operator means (partly) |
 | Don't access `#[doc(hidden)]` items you don't own | `foreign_doc_hidden` |
 | Apply `#[must_use]` where ignoring a result is a mistake | `clippy::must_use_candidate`, `clippy::return_self_not_must_use`, `clippy::double_must_use` |
-| Don't run code before `main()` | cargo-deny bans `ctor`, `inventory` and `linkme` (`just deny`) |
+| Don't run code before `main()` | cargo-deny bans `ctor`, `inventory` and `linkme` (`just deny`); `code_before_main` (no static in a section that runs before `main()`, in this project's code, a macro's expansion included, unless a macro that `constructor_macros` in `dylint.toml` lists placed it with no macro of this project's inside it) |
 | Don't overuse type inference | `inferred_conversion_binding` (the results of `.parse()`, `.into()`, `.try_into()`, `.collect()`, `.sum()`, `.product()`, `.unzip()`, `.partition(..)` and `Default::default()` get a `let` type rather than a turbofish, except where `?`, `unwrap` or `expect` leaves the compiler nothing to infer from) |
 | Prefer pattern matching over check-then-unwrap | `clippy::unnecessary_unwrap`, `clippy::panicking_unwrap` |
 | A `#[should_panic]` test names the panic it expects | `clippy::should_panic_without_expect` |
@@ -246,8 +246,9 @@ a `cfg_attr` that only one of the clippy and dylint runs sees can't hide any of 
 
 Some lints have no exceptions, and an `expect` naming one fails: `code_comment`,
 `suppression_policy`, `missing_workspace_lints`, `disabled_code`, `doc_after_attribute` and
-`needless_raw_identifier` (fix the code), and `macro_definition` (a macro goes only in a crate that
-`macro_crates` in `dylint.toml` lists).
+`needless_raw_identifier` (fix the code), `macro_definition` (a macro goes only in a crate that
+`macro_crates` in `dylint.toml` lists), and `code_before_main` (only a macro that
+`constructor_macros` in `dylint.toml` lists may place a constructor).
 
 ## Checked in review
 

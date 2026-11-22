@@ -1,0 +1,29 @@
+warning: `code_before_main_wrapped::own_actions` places a `static` in `.init_array`, which runs code before `main`
+  --> $DIR/code_before_main_wrapped.rs:21:1
+   |
+LL | own_actions!(Save);
+   | ^^^^^^^^^^^^^^^^^^
+   |
+   = help: call the code from `main` instead, or, if the framework needs it, list "gui::actions" in `constructor_macros` under `[trellis_lints]` in `dylint.toml`
+   = note: `#[warn(code_before_main)]` on by default
+
+warning: `code_before_main_wrapped::own_constructor` places a `static` in `.init_array`, which runs code before `main`
+  --> $DIR/code_before_main_wrapped.rs:36:5
+   |
+LL |     own_constructor!();
+   |     ^^^^^^^^^^^^^^^^^^
+   |
+   = help: call the code from `main` instead: the workspace's own macro `code_before_main_wrapped::own_constructor` writes it
+
+warning: `fw_macros::app` places a `static` in `.init_array`, which runs code before `main`
+  --> $DIR/code_before_main_wrapped.rs:42:1
+   |
+LL | / fw_macros::app! {
+LL | |     own_constructor!();
+LL | | }
+   | |_^
+   |
+   = help: call the code from `main` instead: the workspace's own macro `code_before_main_wrapped::own_constructor` writes it
+
+warning: 3 warnings emitted
+

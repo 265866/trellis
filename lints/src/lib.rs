@@ -18,6 +18,7 @@ extern crate rustc_structures;
 
 mod attribute_origin;
 mod bool_literal_argument;
+mod code_before_main;
 mod code_comment;
 mod command_line_lint;
 mod config;
@@ -90,6 +91,7 @@ enum Pass {
 /// each pass declares.
 const PASSES: &[Pass] = &[
     Pass::Late(|| Box::new(bool_literal_argument::BoolLiteralArgument)),
+    Pass::Late(|| Box::new(code_before_main::CodeBeforeMain)),
     Pass::Early(|| Box::new(code_comment::CodeComment)),
     Pass::Early(|| Box::new(disabled_code::DisabledCode)),
     Pass::Late(|| Box::new(disabled_code::CfgImports)),

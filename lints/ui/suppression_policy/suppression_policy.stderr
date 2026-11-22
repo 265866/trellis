@@ -519,6 +519,14 @@ LL |     expect(doc_after_attribute, reason = "the derive reads better above the
    |
    = help: fix what the lint reports; if the rule itself is wrong for the workspace, change it in trellis's `lints/` and `template/docs/style.md`
 
+warning: `expect` of `code_before_main`, which has no exceptions
+  --> $DIR/suppression_policy.rs:515:16
+   |
+LL |         expect(code_before_main, reason = "the plugin host registers itself at load time")
+   |                ^^^^^^^^^^^^^^^^
+   |
+   = help: call the code from `main`; only a macro that `constructor_macros` in `dylint.toml` lists may place a constructor, which is a rule change
+
 warning: `allow` attribute
   --> $DIR/modules/hidden.rs:5:1
    |
@@ -740,5 +748,5 @@ LL |     expect(non_leaf_module_items, reason = "the wiring module predates the 
    |
    = help: it covers the lint's reports in that module too, in a function body or below a `#[cfg(test)]` module as well: put the `expect` on what the lint reports inside, or move the module out. Only a `#[cfg(test)]` module that holds no module may be beneath it
 
-warning: 81 warnings emitted
+warning: 82 warnings emitted
 
