@@ -8,9 +8,10 @@ use rustc_span::{ExpnKind, Span};
 use std::path::Path;
 
 declare_lint! {
-    /// Checks for a `static` placed in a section the loader runs before `main`: `.init_array` and
-    /// `.ctors` on ELF targets, `__DATA,__mod_init_func` on Apple targets and `.CRT$XC*` on
-    /// Windows, each with any suffix. Each target's build sees only its own `cfg_attr` branch, so
+    /// Checks for a `static` placed in a section the loader runs before `main`: `.preinit_array`,
+    /// `.init_array` and `.ctors` on ELF targets, `__DATA,__mod_init_func` on Apple targets, and on
+    /// Windows the CRT's `.CRT$XI*` and `.CRT$XC*` initializers and its `.CRT$XL*` TLS callbacks,
+    /// which run as the process starts, each with any suffix. Each target's build sees only its own `cfg_attr` branch, so
     /// every platform's names are matched, and a Linux build catches all of them.
     ///
     /// The Google Rust Style Guide: don't run code before `main()`. Such code runs in no order
@@ -98,19 +99,23 @@ impl<'tcx> LateLintPass<'tcx> for CodeBeforeMain {
     }
 }
 
-/// Whether a static in `section` runs before `main` on some target: ELF's `.init_array` and
-/// `.ctors`, Apple's `__DATA,__mod_init_func` and the Windows CRT's `.CRT$XC*` initializers, with
-/// any priority or other suffix the linker accepts.
+/// Whether a static in `section` runs before `main` on some target: ELF's `.preinit_array`,
+/// `.init_array` and `.ctors`, Apple's `__DATA,__mod_init_func`, and the Windows CRT's `.CRT$XI*`
+/// and `.CRT$XC*` initializers and `.CRT$XL*` TLS callbacks, with any priority or other suffix the
+/// linker accepts.
 fn is_constructor_section(section: &str) -> bool {
     let has_prefix = |prefix: &str, separator: char| {
         section
             .strip_prefix(prefix)
             .is_some_and(|rest| rest.is_empty() || rest.starts_with(separator))
     };
-    has_prefix(".init_array", '.')
+    has_prefix(".preinit_array", '.')
+        || has_prefix(".init_array", '.')
         || has_prefix(".ctors", '.')
         || has_prefix("__DATA,__mod_init_func", ',')
-        || section.starts_with(".CRT$XC")
+        || [".CRT$XI", ".CRT$XC", ".CRT$XL"]
+            .iter()
+            .any(|prefix| section.starts_with(prefix))
 }
 
 /// The macros `span` was expanded from, innermost first, each with its call site and its path as

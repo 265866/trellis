@@ -44,6 +44,21 @@ static CRT_XCU: extern "C" fn() = init;
 #[unsafe(link_section = ".CRT$XCT")]
 static CRT_XCT: extern "C" fn() = init;
 
+// Flagged: ELF's array that runs before even the constructors.
+#[used]
+#[unsafe(link_section = ".preinit_array")]
+static PREINIT_ARRAY: extern "C" fn() = init;
+
+// Flagged: the Windows CRT's C initializers, which run before its C++ ones.
+#[used]
+#[unsafe(link_section = ".CRT$XIU")]
+static CRT_XIU: extern "C" fn() = init;
+
+// Flagged: the Windows CRT's TLS callbacks, which run as the process starts.
+#[used]
+#[unsafe(link_section = ".CRT$XLB")]
+static CRT_XLB: extern "C" fn() = init;
+
 // Flagged: inside a function, the way a macro might write it.
 fn nested() {
     const _: () = {
@@ -70,6 +85,10 @@ static CTORSX: u32 = 1;
 #[used]
 #[unsafe(link_section = "__DATA,__mod_init_funcs")]
 static MOD_INIT_FUNCS: u32 = 1;
+
+#[used]
+#[unsafe(link_section = ".preinit_arrays")]
+static PREINIT_ARRAYS: u32 = 1;
 
 // Not flagged: a static in no section of its own.
 static PLAIN: extern "C" fn() = init;
