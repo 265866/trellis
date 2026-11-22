@@ -100,6 +100,9 @@ actionlint:
 {%- if build.setup %}
     shellcheck --norc .github/setup-build.sh
 {%- endif %}
+{%- if release.files %}
+    shellcheck --norc release/package.sh
+{%- endif %}
 {%- raw %}
 
 # Audits the GitHub workflows for security problems.

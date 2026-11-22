@@ -34,7 +34,7 @@ for name in "Build the web UI" Archive Package; do
   fi
   [ "$status" -eq 0 ] || exit "$status"
   if [ "$name" != "Build the web UI" ]; then packaged=yes; fi
-  TARGET=$target RUNNER_OS=Linux GITHUB_OUTPUT=/dev/null bash -euo pipefail -c "$script" > /dev/null
+  TARGET=$target RUNNER_OS=Linux GITHUB_OUTPUT=/dev/null bash -euo pipefail -c "$script" >&2
 done
 [ "$packaged" = yes ] || fail "the release build has no Archive or Package step"
 find dist -type f | sort
