@@ -1032,6 +1032,13 @@ image-extras:
       fail "a binary took an image answer"
     fi
     grep --quiet 'Only a service takes an `image` answer' <<< "$refusal" || fail "a binary's image answer was refused for another reason: $refusal"
+    # Copier stores a mapping answer with its keys sorted, so a render from `--data` and a later one
+    # from the stored answers must write the image's environment in one order.
+    generate "$out/typed" --data 'image={env: {ZED: "1", http_proxy: "2", HTTP_PROXY: "3", ALPHA: "4"}}'
+    generate "$out/stored" --data-file "$out/typed/.copier-answers.yml"
+    diff -r "$out/typed" "$out/stored" || fail "a render from the stored image answer differs from the first"
+    grep --quiet '^ENV ALPHA="4"' "$out/typed/Containerfile" || fail "the image's environment isn't in sorted order"
+    rm -rf "$out/typed" "$out/stored"
     generate "$out/default"
     final_stage=$(awk '/^FROM / { stage = "" } { stage = stage $0 "\n" } END { printf "%s", stage }' "$out/default/Containerfile")
     if grep --quiet --extended-regexp '^(WORKDIR|EXPOSE|ENV) |/files/' <<< "$final_stage"; then
@@ -1143,6 +1150,7 @@ release-extras:
     {env: {RUSTFLAGS: "-C x"}}|none of the variables that change the toolchain
     {env: {target: "x"}}|use capitals
     {env: {DEMO_RELEASE: 1}}|needs a quoted one-line string
+    {env: {1: "x", A: "y"}}|is not a variable the release build may set
     {installer: true}|`installer` is not a key it takes
     EOF
     if refusal=$(uv tool run copier@9.19.1 copy --quiet --defaults --vcs-ref HEAD --data project_name=demo-service \
@@ -1150,6 +1158,12 @@ release-extras:
       fail "a service took a release answer"
     fi
     grep --quiet 'Only a binary takes a `release` answer' <<< "$refusal" || fail "a service's release answer was refused for another reason: $refusal"
+    # Copier stores a mapping answer with its keys sorted, so a render from `--data` and a later one
+    # from the stored answers must write the release build's environment in one order.
+    generate "$out/typed" --data 'release={env: {ZED: "1", ALPHA: "2"}}'
+    generate "$out/stored" --data-file "$out/typed/.copier-answers.yml"
+    diff -r "$out/typed" "$out/stored" || fail "a render from the stored release answer differs from the first"
+    rm -rf "$out/typed" "$out/stored"
     # With the build answer's glibc, the release answer names the glibc target's files.
     generate "$out/glibc" --data 'build={libc: gnu}' \
       --data 'release={files: {x86_64-unknown-linux-gnu: ["demo-binary-{version}-linux"]}}'

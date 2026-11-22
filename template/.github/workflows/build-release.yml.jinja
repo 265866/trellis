@@ -125,7 +125,7 @@ jobs:
 {%- endraw %}
 {%- if release.env %}
           # The release's own build settings, from the release answer.
-{%- for name, value in release.env.items() %}
+{%- for name, value in release.env | dictsort(true) %}
           {{ name }}: "{{ value | replace('\\', '\\\\') | replace('"', '\\"') }}"
 {%- endfor %}
 {%- endif %}
