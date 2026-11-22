@@ -13,8 +13,9 @@ where trellis goes further than the guide, and how the docs are laid out.
 part of the rule to review. Lint levels live in `[workspace.lints]` in `Cargo.toml`, lint settings
 in `clippy.toml`, formatting in `rustfmt.toml`, dependency rules in `deny.toml`, the custom lints'
 settings in `dylint.toml`, and the structure rules' settings in `[workspace.metadata.policy]` of
-`Cargo.toml`. The custom lints are trellis's [`lints/`](https://github.com/265866/trellis/tree/main/lints),
-and the structure rules its [`trellis-policy`](https://github.com/265866/trellis/tree/main/policy).
+`Cargo.toml`. The custom lints are trellis's
+[`lints/`](https://github.com/265866/trellis/tree/main/lints), and the structure rules its
+[`trellis-policy`](https://github.com/265866/trellis/tree/main/policy).
 Each lint's documentation, with an example and its fix, is at the top of its file in `lints/src/`.
 Those links show trellis's `main`. A project builds both at the trellis commit that `trellis_rev`
 in its `justfile` names, so read them at that commit when `main` has moved on.

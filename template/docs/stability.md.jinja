@@ -40,8 +40,7 @@ Your scripts, links and the commands in [Install](install.md) and
 - The release workflow, `.github/workflows/release.yml`, and the `main` branch it runs on.
 - The repository, `{{ github_owner }}/{{ project_name }}`.
 {%- if kind == 'binary' %}
-- The {{ 'file' if release.files else 'archive' }} names [Install](install.md) lists, and the
-  {{ '`' ~ release.checksums | default('SHA256SUMS') ~ '`' }}{{ ' and `attestation.json` files' if visibility == 'public' else ' file' }}.
+- The {{ 'file' if release.files else 'archive' }} names [Install](install.md) lists, and the {{ '`' ~ release.checksums | default('SHA256SUMS') ~ '`' }}{{ ' and `attestation.json` files' if visibility == 'public' else ' file' }}.
 {%- else %}
 - The image, `ghcr.io/{{ github_owner | lower }}/{{ project_name }}`.
 {%- endif %}

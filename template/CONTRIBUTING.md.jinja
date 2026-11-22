@@ -44,11 +44,11 @@ else, a nested one included, and a package there that isn't a member. It also fa
 directory or `crates` that is a symbolic link, and a crate directory whose name isn't ASCII or
 that Windows reads as another name: one that ends in a dot or a space, or holds a `:` or a `\`.
 It fails a git submodule, or any other git repository, anywhere in the repository, since no check
-sees its files, and two paths anywhere in the repository that macOS or Windows reads as one, such
-as two crate directories whose names differ only in letter case. It fails any path with a part of the
-form of a Windows short name too, such as `cargo~1.tom` or `demo_c~1`: at most eight characters
-that end in `~` and digits, then at most three after a dot. Windows opens `Cargo.toml` under the
-first, so a checkout of both there can hold one file, with the other's contents.
+sees its files, and two paths anywhere in the repository that macOS or Windows reads as one, such as
+two crate directories whose names differ only in letter case. It fails any path with a part of the
+form of a Windows short name too, such as `cargo~1.tom` or `demo_c~1`: at most eight characters that
+end in `~` and digits, then at most three after a dot. Windows opens `Cargo.toml` under the first,
+so a checkout of both there can hold one file, with the other's contents.
 
 ## Set up
 
@@ -84,21 +84,21 @@ rustfmt, and the nightly the custom lints build on.
 {%- if web_ui %}
 
 `just web-install` fails when a `node_modules/.bin`, in `crates/{{ crate_name }}/web` or in a
-directory above it, holds a `bun` or `bunx` command{% if kind == 'service' %}, and the image's build fails when the web UI's
-own `node_modules/.bin` holds one{% endif %}. `bun run` looks there before the Bun you installed, so the web
-UI's scripts would run on that Bun instead. In a directory above, delete that `node_modules`. In
-the web UI's own, run `bun why bun`, which prints the packages that lead to `bun`. When a package
-asks for `bun` only as a peer, an older Bun wrote that into `bun.lock`, so delete `bun.lock` and
-`node_modules` and run `bun install --save-text-lockfile` with the Bun you installed, which leaves
-that peer out and writes `bun.lock` even when your Bun settings ask for the binary lockfile. That
-also moves every other package to the newest version its range allows, so read the lockfile's diff.
-When a package depends on `bun` outright, run `bun remove` with the name of the web UI's own
-dependency that leads to it, as `package.json` spells it. That name is `bun`, or its alias, when
-the web UI depends on `bun` directly. When `bun why bun` finds no package, the command is usually
-left from an earlier install, which Bun keeps, so delete `node_modules`. If the next install brings
-the command back, a package other than `bun` provides it. Its entry in `bun.lock` lists the command
-under `bin`, and `bun why` with that package's name shows the web UI's own dependency to
-`bun remove`.
+directory above it, holds a `bun` or `bunx` command. `bun run` looks there before the Bun you
+installed, so the web UI's scripts would run on that Bun instead. In a directory above, delete that
+`node_modules`. In the web UI's own, run `bun why bun`, which prints the packages that lead to
+`bun`. When a package asks for `bun` only as a peer, an older Bun wrote that into `bun.lock`, so
+delete `bun.lock` and `node_modules` and run `bun install --save-text-lockfile` with the Bun you
+installed, which leaves that peer out and writes `bun.lock` even when your Bun settings ask for the
+binary lockfile. That also moves every other package to the newest version its range allows, so read
+the lockfile's diff. When a package depends on `bun` outright, run `bun remove` with the name of the
+web UI's own dependency that leads to it, as `package.json` spells it. That name is `bun`, or its
+alias, when the web UI depends on `bun` directly. When `bun why bun` finds no package, the command
+is usually left from an earlier install, which Bun keeps, so delete `node_modules`. If the next
+install brings the command back, a package other than `bun` provides it. Its entry in `bun.lock`
+lists the command under `bin`, and `bun why` with that package's name shows the web UI's own
+dependency to `bun remove`.{% if kind == 'service' %} The image's build also fails when the web UI's own
+`node_modules/.bin` holds such a command.{% endif %}
 {%- endif %}
 
 ### Editors
@@ -250,8 +250,8 @@ The docs keep one shape. Write them to the
   {{ readme_sections }}.
 - **Where things go.** Design decisions go in [docs/design.md](docs/design.md), and compatibility
   promises in [docs/stability.md](docs/stability.md). release-plz writes `CHANGELOG.md`; don't edit
-  it by hand except as the release steps in
-  [docs/maintaining.md](docs/maintaining.md#each-release) say.
+  it by hand except as the release steps in [docs/maintaining.md](docs/maintaining.md#each-release)
+  say.
 
 ## Product boundaries
 
@@ -317,21 +317,20 @@ and anything else is a rule. Every `build.rs` is a rule too, except one below a 
 letter case, before or after the change. The file a crate's `build` key names is a rule as well, as
 is every `.gitignore`, `.ignore`, `bunfig.toml`, `.npmrc`, TypeScript settings file (a `.json` file
 whose name starts with `tsconfig`) and git submodule, wherever it sits, and every path Windows reads
-as another path: one with a part that ends in a dot or a space, that holds a `:` or a `\`, or
-that has the form of a short name.
-`just policy` fails a TypeScript settings file whose `extends` or `references` names anything but
-another one in the repository, by a path that starts with `./` or `../`, so every file a
-`tsconfig.json` reaches is a rule. It also fails one that TypeScript could read another way than
-`just policy` does, such as one with a lone carriage return. The root `.gitattributes` may set
-only `text`, `-text`, `text=auto` and `eol=lf`, with no attribute macro, so a checkout holds the
-bytes the diff showed, apart from line endings; `just policy` fails any other attribute, such as
-`working-tree-encoding`, `ident`, `filter` or `binary`. A crate whose directory moves whole,
-renamed with no file in it changed, is neither rule nor code, so a crate's directory can move in one
-pull request beside the `path` of each dependency on it. A file in the crate that reads its own
-location, such as a build script that reads `CARGO_MANIFEST_DIR`, can then do something else, as a
-code change can change what a listed build script emits. An untracked file that fits none of
-these, such as an `.envrc`, counts as a rule in `just rule-changes`: commit it in a rules pull
-request, or list it in `.git/info/exclude`.
+as another path: one with a part that ends in a dot or a space, that holds a `:` or a `\`, or that
+has the form of a short name. `just policy` fails a TypeScript settings file whose `extends` or
+`references` names anything but another one in the repository, by a path that starts with `./` or
+`../`, so every file a `tsconfig.json` reaches is a rule. It also fails one that TypeScript could
+read another way than `just policy` does, such as one with a lone carriage return. The root
+`.gitattributes` may set only `text`, `-text`, `text=auto` and `eol=lf`, with no attribute macro, so
+a checkout holds the bytes the diff showed, apart from line endings; `just policy` fails any other
+attribute, such as `working-tree-encoding`, `ident`, `filter` or `binary`. A crate whose directory
+moves whole, renamed with no file in it changed, is neither rule nor code, so a crate's directory
+can move in one pull request beside the `path` of each dependency on it. A file in the crate that
+reads its own location, such as a build script that reads `CARGO_MANIFEST_DIR`, can then do
+something else, as a code change can change what a listed build script emits. An untracked file that
+fits none of these, such as an `.envrc`, counts as a rule in `just rule-changes`: commit it in a
+rules pull request, or list it in `.git/info/exclude`.
 {%- if kind != 'library' %}
 
 A root deploy kit that moves into `crates/{{ crate_name }}/deploy/` with every code file unchanged
@@ -383,46 +382,51 @@ the web UI doesn't install yet. Then add the package in a code pull request. Onc
 gone, the weekly `just stale-licenses` fails until a rules pull request removes the entry.
 {%- endif %}
 
-{% if kind == 'library' -%}
-A deploy kit, the scripts, container files and systemd units in the root `deploy/` that install
-and run the project on a host, is code too, like `crates/`. Keep it there, not in
-`crates/{{ crate_name }}/deploy/`, since a member `Cargo.toml` can't leave a file out of its
-crate's package, so a kit in the crate's directory would ship in the package
-{%- if publish_crate %} on crates.io{% else %} if the crate is
-ever published{% endif %}.
+{% if kind == 'library' and publish_crate -%}
+A deploy kit, the scripts, container files and systemd units in the root `deploy/` that install and
+run the project on a host, is code too, like `crates/`. Keep it there, not in
+`crates/{{ crate_name }}/deploy/`, since a member `Cargo.toml` can't leave a file out of its crate's
+package, so a kit in the crate's directory would ship in the package on crates.io. `just policy`
+checks a kit in a crate's directory the same way.
+{%- elif kind == 'library' -%}
+A deploy kit, the scripts, container files and systemd units in the root `deploy/` that install and
+run the project on a host, is code too, like `crates/`. Keep it there, not in
+`crates/{{ crate_name }}/deploy/`, since a member `Cargo.toml` can't leave a file out of its crate's
+package, so a kit in the crate's directory would ship in the package if the crate is ever published.
 `just policy` checks a kit in a crate's directory the same way.
 {%- else -%}
 A deploy kit, the scripts, container files and systemd units in `crates/{{ crate_name }}/deploy/`
-that install and run the project on a host, is code too, like the rest of `crates/`, and so is a
-kit in the root `deploy/`, though release-plz releases nothing for a change to that one
-alone, as [Maintaining](docs/maintaining.md#extend-what-trellis-generates) says.
+that install and run the project on a host, is code too, like the rest of `crates/`, and so is a kit
+in the root `deploy/`, though release-plz releases nothing for a change to that one alone, as
+[Maintaining](docs/maintaining.md#extend-what-trellis-generates) says.
 {%- endif %}
+
 A kit change lands with the code change it needs, and review reads it as code. `just policy` runs
-shellcheck on each of its scripts, the files that end in `.sh`, `.bash`, `.dash`, `.ksh` or
-`.bats`, start with a `#!` line that names `sh`, `bash`, `dash`, `ksh`, `ash` or `bats`, or set
-their shell with a `# shellcheck shell=<shell>` line, and on the files they source, in a copy of
-the kit alone, so a file outside the kit counts as missing, the crate's other files and the other
-kit's included. A library a script sources through a path shellcheck can't follow, with SC1090 or
-SC1091 silenced, is checked only if it is a script by itself, so give it a `.sh` name or a
-`shell=` line, and give every other script a `#!` line. `just policy` reads no `.shellcheckrc`
-and no `SHELLCHECK_OPTS`, and reports no finding in a host file a script sources, such as
-`/etc/os-release`. Silence a finding with `# shellcheck disable=SC<code> # <reason>` as close
-above it as shellcheck takes a directive. shellcheck applies a directive to the whole command
-below it, so `just policy` runs it again with every `disable` taken out and asks shellcheck
-whether a directive closer to each finding a directive hid would silence it alone. If one would,
-such as above a line in the function or block the directive sits over, or in the file a sourced
-line reads, the directive fails, though another directive for the code sits between. Where
-shellcheck takes no closer one, such as after a `|`, `&&` or `||`, inside `[[ ]]`, an array or a
-heredoc, above a `case` pattern or above the `done` that ends a loop, it passes, so a directive
-above a `case` covers its pattern lines, one-line bodies included. A file that sources a kit file
-by its absolute path in the checkout fails, since shellcheck would read the checkout, not the copy. It also fails a directive after
-code on its line or spelled with an unusual space, one that disables anything but codes, such as
-`all` or a range, or a parse check other than SC1090 and SC1091, one without a reason, `shell=` in
-a file with a `#!` line, `source=` or `source-path=` that leaves the kit, any key but
-`disable`, `enable`, `shell`, `source` and `source-path`, and a symbolic link in the kit. A file
-in the kit that is a rule by its name stays a rule: a `justfile` or `*.just` module, an
-`action.yml`, `.gitignore`, `.ignore`, `bunfig.toml`, `.npmrc`, `build.rs`, TypeScript settings
-file, agent instruction file or tool configuration file, and a path Windows reads as another.
+shellcheck on each of its scripts, the files that end in `.sh`, `.bash`, `.dash`, `.ksh` or `.bats`,
+start with a `#!` line that names `sh`, `bash`, `dash`, `ksh`, `ash` or `bats`, or set their shell
+with a `# shellcheck shell=<shell>` line, and on the files they source, in a copy of the kit alone,
+so a file outside the kit counts as missing, the crate's other files and the other kit's included. A
+library a script sources through a path shellcheck can't follow, with SC1090 or SC1091 silenced, is
+checked only if it is a script by itself, so give it a `.sh` name or a `shell=` line, and give every
+other script a `#!` line. `just policy` reads no `.shellcheckrc` and no `SHELLCHECK_OPTS`, and
+reports no finding in a host file a script sources, such as `/etc/os-release`. Silence a finding
+with `# shellcheck disable=SC<code> # <reason>` as close above it as shellcheck takes a directive.
+shellcheck applies a directive to the whole command below it, so `just policy` runs it again with
+every `disable` taken out and asks shellcheck whether a directive closer to each finding a directive
+hid would silence it alone. If one would, such as above a line in the function or block the
+directive sits over, or in the file a sourced line reads, the directive fails, though another
+directive for the code sits between. Where shellcheck takes no closer one, such as after a `|`, `&&`
+or `||`, inside `[[ ]]`, an array or a heredoc, above a `case` pattern or above the `done` that ends
+a loop, it passes, so a directive above a `case` covers its pattern lines, one-line bodies included.
+A file that sources a kit file by its absolute path in the checkout fails, since shellcheck would
+read the checkout, not the copy. It also fails a directive after code on its line or spelled with an
+unusual space, one that disables anything but codes, such as `all` or a range, or a parse check
+other than SC1090 and SC1091, one without a reason, `shell=` in a file with a `#!` line, `source=`
+or `source-path=` that leaves the kit, any key but `disable`, `enable`, `shell`, `source` and
+`source-path`, and a symbolic link in the kit. A file in the kit that is a rule by its name stays a
+rule: a `justfile` or `*.just` module, an `action.yml`, `.gitignore`, `.ignore`, `bunfig.toml`,
+`.npmrc`, `build.rs`, TypeScript settings file, agent instruction file or tool configuration file,
+and a path Windows reads as another.
 {%- if license == 'MIT' %}
 
 ## License
