@@ -1,6 +1,7 @@
 // aux-build:hidden_fields.rs
 // aux-build:defaulted.rs
 // aux-build:mirror.rs
+// aux-build:hidden_root.rs
 // edition:2024
 // `Eq::assert_receiver_is_total_eq`, the hidden item these cases reach, is also deprecated.
 #![allow(deprecated)]
@@ -9,6 +10,8 @@
 
 extern crate defaulted;
 extern crate hidden_fields;
+extern crate hidden_root;
+extern crate hidden_root as root_alias;
 extern crate mirror;
 
 use hidden_fields::{Context, Event, Wrapper};
@@ -126,3 +129,24 @@ impl Eq for Manual {}
 
 #[doc(hidden)]
 fn local_hidden() {}
+
+// Not flagged: a crate whose root is hidden from its docs, as `windows` hides its own, still
+// documents the items under it.
+use hidden_root::api::Handle;
+use hidden_root::documented;
+use hidden_root as whole_root;
+use root_alias::documented as aliased_documented;
+
+// Flagged: a hidden function in that crate, and a hidden module, are hidden all the same.
+use hidden_root::api::internal;
+use hidden_root::internals::helper as root_helper;
+use root_alias::internals::helper as aliased_helper;
+
+fn hidden_root_paths() -> u32 {
+    let _handle = Handle;
+    // Not flagged: the crate root as a path's first segment.
+    let total = hidden_root::documented() + documented() + whole_root::documented();
+    let total = total + aliased_documented() + aliased_helper();
+    // Flagged: a hidden function named through the crate root.
+    total + hidden_root::api::internal() + internal() + root_helper()
+}
