@@ -3038,9 +3038,43 @@ fn a_kit_file_sourced_by_its_absolute_path_fails() {
     );
     project.check().assert_reports(
         1,
-        "error: [deploy_scripts] deploy/run.sh: This file names a kit file by its absolute path in \
-         the checkout",
+        "error: [deploy_scripts] deploy/run.sh: This file sources a kit file by its absolute path \
+         in the checkout",
     );
+    project.write(
+        "deploy/run.sh",
+        &format!(
+            "#!/bin/sh\nset -eu\n. {}\nclean old\n",
+            library.display().to_string().replacen('/', "//", 2)
+        ),
+    );
+    project.check().assert_reports(
+        1,
+        "error: [deploy_scripts] deploy/run.sh: This file sources a kit file by its absolute path",
+    );
+}
+
+/// A unit file, a README or a script that only runs a kit file by its path in the checkout passes,
+/// since shellcheck reads none of those paths.
+#[cfg(unix)]
+#[test]
+fn naming_a_kit_file_in_the_checkout_without_sourcing_it_passes() {
+    let project = Project::new();
+    let helper = project.path().join("deploy/helper.sh");
+    project.write("deploy/helper.sh", "#!/bin/sh\necho helped\n");
+    project.write(
+        "deploy/app.service",
+        &format!("[Service]\nExecStart={}\n", helper.display()),
+    );
+    project.write(
+        "deploy/README.md",
+        &format!("Run `{}` once.\n", helper.display()),
+    );
+    project.write(
+        "deploy/run.sh",
+        &format!("#!/bin/sh\nset -eu\n{} --once\n", helper.display()),
+    );
+    project.check().assert_passes();
 }
 
 /// A directive that hides a finding where a closer one would silence it fails though another

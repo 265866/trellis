@@ -51,7 +51,7 @@ const INSTALL_REMEDY: &str = "Install the shellcheck version the Set up section 
 /// reports fails when a directive closer to it would silence it, as [`Kit::closer_directive`]
 /// finds by asking shellcheck. [`directive_problems`] says which other directives are violations.
 /// A symbolic link under `deploy/` is one too, since the kit's files are what review read, and so
-/// is a file that names a kit file by its absolute path in the checkout, which shellcheck would
+/// is a file that sources a kit file by its absolute path in the checkout, which shellcheck would
 /// read there instead of in the copy.
 ///
 /// A project without `deploy/` has no script, so the check runs nothing.
@@ -100,10 +100,10 @@ pub(crate) fn check(workspace: &Workspace) -> Result<Vec<Violation>, PolicyError
     if scripts.is_empty() {
         return Ok(violations);
     }
-    violations.extend(names_the_checkout(root, &texts).into_iter().map(|file| {
+    violations.extend(sourced_from_checkout(root, &texts).into_iter().map(|file| {
         Violation::new(
             file,
-            "This file names a kit file by its absolute path in the checkout. shellcheck reads \
+            "This file sources a kit file by its absolute path in the checkout. shellcheck reads \
              that path in the checkout instead of the kit's copy, with its directives as they \
              are, so source it relative to the script, such as \
              `. \"$(dirname \"$0\")/lib/common\"`."
@@ -112,35 +112,28 @@ pub(crate) fn check(workspace: &Workspace) -> Result<Vec<Violation>, PolicyError
     }));
     let kit = Kit { texts, scripts };
     let reported = kit.shellcheck(|_, text| text.to_owned())?;
-    violations.extend(
-        sourced_by_checkout_path(root, &reported)
-            .into_iter()
-            .map(|file| {
-                Violation::new(
-            file,
-            "A script sources this file by its absolute path in the checkout, where shellcheck \
-             reads the checkout instead of the kit's copy, with its directives as they are. \
-             Source it relative to the script, such as `. \"$(dirname \"$0\")/lib/common\"`."
-                .to_owned(),
-        )
-            }),
-    );
     let disables = kit.texts.values().any(|text| text.contains("disable="));
     let unsilenced = if disables {
         kit.shellcheck(|_, text| without_disables(text))?
     } else {
         BTreeSet::new()
     };
-    let hidden: Vec<&Finding> = in_the_kit(&unsilenced)
-        .filter(|finding| !reported.contains(finding))
-        .collect();
+    let mut groups: BTreeMap<(&str, u32), Vec<&Finding>> = BTreeMap::new();
+    let newly_reported = in_the_kit(&unsilenced).filter(|finding| !reported.contains(finding));
+    for finding in newly_reported {
+        groups
+            .entry((finding.file.as_str(), finding.code))
+            .or_default()
+            .push(finding);
+    }
+    let groups: Vec<Vec<&Finding>> = groups.into_values().collect();
     let width = thread::available_parallelism().map_or(1, NonZeroUsize::get);
-    let each_width = (width / hidden.len().max(1)).max(1);
-    for chunk in hidden.chunks(width) {
-        let closer = in_parallel(chunk, |finding| {
-            kit.closer_directive(finding, &unsilenced, each_width)
+    for chunk in groups.chunks(width) {
+        let each_width = (width / chunk.len()).max(1);
+        let closer = in_parallel(chunk, |group| {
+            kit.closer_directives(group, &unsilenced, each_width)
         })?;
-        for (finding, closer) in chunk.iter().zip(closer) {
+        for (finding, closer) in chunk.iter().flatten().zip(closer.into_iter().flatten()) {
             let Some(closer) = closer else {
                 continue;
             };
@@ -151,7 +144,9 @@ pub(crate) fn check(workspace: &Workspace) -> Result<Vec<Violation>, PolicyError
                      line {closer} would silence it there alone, so the directive that hid it \
                      hides more than it says: a whole function, block or sourced file, or the \
                      rest of the file. Put `# shellcheck disable=SC{code} # <reason>` on the line \
-                     above line {closer}, and take the code out of the directive that hid it.",
+                     above line {closer}, and take the code out of the directive that hid it: \
+                     the nearest one for SC{code} above line {line}, or the one above the line \
+                     that sources this file.",
                     code = finding.code,
                     line = finding.line,
                 ),
@@ -171,39 +166,41 @@ fn in_the_kit(found: &BTreeSet<Finding>) -> impl Iterator<Item = &Finding> {
         .filter(|finding| finding.file.starts_with(DEPLOY_DIRECTORY))
 }
 
-/// The kit files, among `texts`, that name a path under `deploy/` in the checkout at `root` by its
-/// absolute path, as written or with its symbolic links resolved.
-fn names_the_checkout(root: &Path, texts: &BTreeMap<String, String>) -> Vec<String> {
-    let mut roots = vec![root.to_string_lossy().replace('\\', "/")];
-    if let Ok(canonical) = fs::canonicalize(root) {
-        roots.push(canonical.to_string_lossy().replace('\\', "/"));
-    }
-    let prefixes: Vec<String> = roots
-        .iter()
-        .map(|root| format!("{}/{DEPLOY_DIRECTORY}", root.trim_end_matches('/')))
-        .collect();
+/// The kit files, among `texts`, with a line that sources a path under `deploy/` in the checkout
+/// at `root` by its absolute path: `. /path` or `source /path`, at the start of the line or after
+/// `;`, `&&`, `||`, `then` or `do`, with the path's `.` and `..` parts and its symbolic links
+/// resolved. shellcheck follows only such a literal path.
+fn sourced_from_checkout(root: &Path, texts: &BTreeMap<String, String>) -> Vec<String> {
+    let Ok(root) = fs::canonicalize(root) else {
+        return Vec::new();
+    };
+    let in_checkout = |path: &str| {
+        let path = path.trim_matches(['"', '\'']);
+        path.starts_with('/')
+            && normalized(path)
+                .and_then(|path| fs::canonicalize(format!("/{path}")).ok())
+                .and_then(|path| path.strip_prefix(&root).ok().map(Path::to_path_buf))
+                .is_some_and(|path| {
+                    path.to_string_lossy()
+                        .replace('\\', "/")
+                        .starts_with(DEPLOY_DIRECTORY)
+                })
+    };
     texts
         .iter()
-        .filter(|(_, text)| prefixes.iter().any(|prefix| text.contains(prefix.as_str())))
-        .map(|(file, _)| file.clone())
-        .collect()
-}
-
-/// The kit files, relative to the root, that a script in `found`'s run sources by their absolute
-/// path in the checkout at `root`, a symbolic link to it included.
-fn sourced_by_checkout_path(root: &Path, found: &BTreeSet<Finding>) -> BTreeSet<String> {
-    let Ok(root) = fs::canonicalize(root) else {
-        return BTreeSet::new();
-    };
-    found
-        .iter()
-        .filter(|finding| finding.file.starts_with('/'))
-        .filter_map(|finding| fs::canonicalize(&finding.file).ok())
-        .filter_map(|path| {
-            let relative = path.strip_prefix(&root).ok()?;
-            let relative = relative.to_string_lossy().replace('\\', "/");
-            relative.starts_with(DEPLOY_DIRECTORY).then_some(relative)
+        .filter(|(_, text)| {
+            text.lines().any(|line| {
+                let words: Vec<&str> = line.split_whitespace().collect();
+                words.windows(2).enumerate().any(|(at, pair)| {
+                    let at_command = at == 0
+                        || words.get(at - 1).is_some_and(|before| {
+                            before.ends_with(';') || matches!(*before, "&&" | "||" | "then" | "do")
+                        });
+                    at_command && matches!(pair[0], "." | "source") && in_checkout(pair[1])
+                })
+            })
         })
+        .map(|(file, _)| file.clone())
         .collect()
 }
 
@@ -263,91 +260,87 @@ impl Kit {
         shellcheck(copy.path(), &self.scripts)
     }
 
-    /// The line, counted from 1, right above which a directive for `hidden`'s code would silence
-    /// it alone, when the directive that hid it isn't there, or `None` if it is. `hidden` is a
-    /// finding in `unsilenced`, the run with every `disable` taken out, that the run as written
-    /// doesn't report. The probes for one finding run up to `width` at once.
+    /// For each finding of `group`, findings of one code in one file that shellcheck reports only
+    /// in `unsilenced`, the run with every `disable` taken out, the line, counted from 1, right
+    /// above which a directive for the code would silence it alone, when the directive that hid it
+    /// isn't there, or `None` if it is. The probes run up to `width` at once.
     ///
     /// shellcheck refuses a directive inside a command, such as after a `|`, `&&` or `||`, inside
     /// `[[ ]]`, above a `case` pattern or above the `done` that ends a loop, and ignores one in a
     /// string, a heredoc or an array, but takes one above a command in a function or a block. So
-    /// the check asks it. From the finding's line up to the topmost directive for its code in its
+    /// the check asks it. From each finding's line up to the topmost directive for its code in its
     /// file, or to its first line, it adds a probe directive above each line in the run with every
     /// `disable` taken out. The closest probe that silences the finding, with every other finding
     /// still reported and no new parse error, is where its directive belongs, and a directive for
-    /// its code must sit among the comments right above it. A line after one that ends in a `\`
-    /// is skipped, since a comment there would end the command the `\` continues.
-    fn closer_directive(
+    /// its code must sit among the comments right above it. One probe answers for every finding
+    /// of the group below it, so the findings in one heredoc share their probes. A line after one
+    /// that ends in a `\`, before any comment, is skipped, since a comment there would end the
+    /// command the `\` continues.
+    fn closer_directives(
         &self,
-        hidden: &Finding,
+        group: &[&Finding],
         unsilenced: &BTreeSet<Finding>,
         width: usize,
-    ) -> Result<Option<usize>, PolicyError> {
-        let Some(text) = self.texts.get(&hidden.file) else {
-            return Ok(None);
+    ) -> Result<Vec<Option<usize>>, PolicyError> {
+        let Some(first) = group.first() else {
+            return Ok(Vec::new());
+        };
+        let Some(text) = self.texts.get(&first.file) else {
+            return Ok(vec![None; group.len()]);
         };
         let lines: Vec<&str> = text.lines().collect();
-        let own = hidden.line.saturating_sub(1).min(lines.len());
-        let disables_its_code = |line: &&str| {
-            Directive::of(line).is_some_and(|directive| {
-                directive.code.trim().is_empty()
-                    && directive.disabled_codes().contains(&hidden.code)
-            })
-        };
-        let lowest = lines[..own]
+        let candidates: Vec<Vec<usize>> = group
             .iter()
-            .position(disables_its_code)
-            .map_or(0, |topmost| topmost + 1);
-        let candidates: Vec<usize> = (lowest..=own)
-            .rev()
-            .filter(|&index| {
-                let continued = index
-                    .checked_sub(1)
-                    .and_then(|previous| lines.get(previous))
-                    .is_some_and(|previous| {
-                        !is_comment(previous)
-                            && previous.ends_with('\\')
-                            && !previous.ends_with("\\\\")
-                    });
-                lines.get(index).is_some_and(|line| !is_comment(line)) && !continued
-            })
+            .map(|finding| probe_lines(&lines, finding))
             .collect();
-        let mut rest = candidates.as_slice();
-        let mut size = 1;
-        while !rest.is_empty() {
-            let (batch, later) = rest.split_at(size.min(rest.len()));
-            let silences = in_parallel(batch, |&index| {
-                self.probe_silences(hidden, index, unsilenced)
-            })?;
-            if let Some(&index) = batch
+        let mut probed: BTreeMap<usize, BTreeSet<Finding>> = BTreeMap::new();
+        let mut size = group.len();
+        loop {
+            let closest: Vec<Probing> = group
                 .iter()
-                .zip(silences)
-                .find_map(|(index, silences)| silences.then_some(index))
-            {
-                let placed = lines[..index]
-                    .iter()
-                    .rev()
-                    .take_while(|line| is_comment(line))
-                    .any(disables_its_code);
-                return Ok((!placed).then_some(index + 1));
+                .zip(&candidates)
+                .map(|(finding, own)| resolve(own, &probed, finding, unsilenced))
+                .collect();
+            let mut next: Vec<usize> = candidates
+                .iter()
+                .zip(&closest)
+                .filter(|(_, closest)| **closest == Probing::Unknown)
+                .filter_map(|(own, _)| own.iter().find(|index| !probed.contains_key(index)))
+                .copied()
+                .collect();
+            if next.is_empty() {
+                let placed = |index: usize| directive_right_above(&lines, index, first.code);
+                return Ok(closest
+                    .into_iter()
+                    .map(|closest| match closest {
+                        Probing::SilencedAt(index) if !placed(index) => Some(index + 1),
+                        Probing::SilencedAt(_) | Probing::Unknown | Probing::Unsilenced => None,
+                    })
+                    .collect());
             }
-            rest = later;
-            size = (size * 2).min(width.max(1));
+            let mut below: Vec<usize> = candidates
+                .iter()
+                .zip(&closest)
+                .filter(|(_, closest)| **closest == Probing::Unknown)
+                .flat_map(|(own, _)| own.iter().copied())
+                .filter(|index| !probed.contains_key(index) && !next.contains(index))
+                .collect();
+            below.sort_unstable_by(|a, b| b.cmp(a));
+            below.dedup();
+            next.sort_unstable();
+            next.dedup();
+            next.extend(below.into_iter().take(size.saturating_sub(next.len())));
+            let found = in_parallel(&next, |&index| self.probe(first, index))?;
+            probed.extend(next.into_iter().zip(found));
+            size = (size * 2).min(width.max(1)).max(group.len());
         }
-        Ok(None)
     }
 
-    /// Whether a directive for `hidden`'s code alone, above the line at `index`, counted from 0,
-    /// in the run with every `disable` taken out, `unsilenced`, silences `hidden` while every
-    /// finding of another code in that run is still reported and no new parse error is.
-    fn probe_silences(
-        &self,
-        hidden: &Finding,
-        index: usize,
-        unsilenced: &BTreeSet<Finding>,
-    ) -> Result<bool, PolicyError> {
+    /// The findings of the run with every `disable` taken out and a directive for `hidden`'s code
+    /// added above the line at `index`, counted from 0, of its file.
+    fn probe(&self, hidden: &Finding, index: usize) -> Result<BTreeSet<Finding>, PolicyError> {
         let probe = format!("# shellcheck disable=SC{} # probe\n", hidden.code);
-        let found = self.shellcheck(|file, text| {
+        self.shellcheck(|file, text| {
             let unsilenced = without_disables(text);
             if file != hidden.file {
                 return unsilenced;
@@ -360,21 +353,107 @@ impl Kit {
                 probed.push_str(piece);
             }
             probed
-        })?;
-        let moved = |finding: &Finding| finding.moved_below(&hidden.file, index);
-        let reported = |expected: &Finding| found.iter().any(|finding| finding.is_at(expected));
-        let others_kept = unsilenced
-            .iter()
-            .filter(|finding| finding.code != hidden.code)
-            .all(|finding| reported(&moved(finding)));
-        let new_parse_error = found.iter().any(|finding| {
-            finding.is_parse_error()
-                && !unsilenced
-                    .iter()
-                    .any(|before| finding.is_at(&moved(before)))
-        });
-        Ok(!reported(&moved(hidden)) && others_kept && !new_parse_error)
+        })
     }
+}
+
+/// The lines, counted from 0, above which a probe for `hidden` may go, closest first: from its own
+/// line up to the line below the topmost directive for its code in its file, or to the first
+/// line. A blank or comment line is left out, and so is a line after one that ends in a `\\`
+/// before any comment, since a comment there would end the command the `\\` continues.
+fn probe_lines(lines: &[&str], hidden: &Finding) -> Vec<usize> {
+    let own = hidden.line.saturating_sub(1).min(lines.len());
+    let lowest = lines[..own]
+        .iter()
+        .position(|line| disables_code(line, hidden.code))
+        .map_or(0, |topmost| topmost + 1);
+    let continued = |index: usize| {
+        index
+            .checked_sub(1)
+            .and_then(|previous| lines.get(previous))
+            .is_some_and(|previous| {
+                let code = previous
+                    .split_once(" #")
+                    .map_or(*previous, |(code, _)| code);
+                !is_comment(previous) && code.ends_with('\\') && !code.ends_with("\\\\")
+            })
+    };
+    (lowest..=own)
+        .rev()
+        .filter(|&index| {
+            lines.get(index).is_some_and(|line| !is_comment(line)) && !continued(index)
+        })
+        .collect()
+}
+
+/// What the probes so far say of a hidden finding.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Probing {
+    /// A line closer than any a probe silenced it at has no probe yet.
+    Unknown,
+    /// The closest probe that silences it is above the line at this index, counted from 0.
+    SilencedAt(usize),
+    /// No probe silences it.
+    Unsilenced,
+}
+
+/// What the probes in `probed` say of `hidden`, whose probes may go above `own`, closest first.
+fn resolve(
+    own: &[usize],
+    probed: &BTreeMap<usize, BTreeSet<Finding>>,
+    hidden: &Finding,
+    unsilenced: &BTreeSet<Finding>,
+) -> Probing {
+    for &index in own {
+        let Some(found) = probed.get(&index) else {
+            return Probing::Unknown;
+        };
+        if silences(found, hidden, index, unsilenced) {
+            return Probing::SilencedAt(index);
+        }
+    }
+    Probing::Unsilenced
+}
+
+/// Whether a directive that disables `code` sits among the blank and comment lines right above the
+/// line at `index`, counted from 0, of `lines`.
+fn directive_right_above(lines: &[&str], index: usize, code: u32) -> bool {
+    lines[..index.min(lines.len())]
+        .iter()
+        .rev()
+        .take_while(|line| is_comment(line))
+        .any(|line| disables_code(line, code))
+}
+
+/// Whether `line` is a directive on a line of its own that disables `code`.
+fn disables_code(line: &str, code: u32) -> bool {
+    Directive::of(line).is_some_and(|directive| {
+        directive.code.trim().is_empty() && directive.disabled_codes().contains(&code)
+    })
+}
+
+/// Whether `found`, the findings of a probe above the line at `index`, counted from 0, of
+/// `hidden`'s file, silences `hidden` while every finding of another code in `unsilenced`, the
+/// run without the probe, is still reported and no new parse error is.
+fn silences(
+    found: &BTreeSet<Finding>,
+    hidden: &Finding,
+    index: usize,
+    unsilenced: &BTreeSet<Finding>,
+) -> bool {
+    let moved = |finding: &Finding| finding.moved_below(&hidden.file, index);
+    let reported = |expected: &Finding| found.iter().any(|finding| finding.is_at(expected));
+    let others_kept = unsilenced
+        .iter()
+        .filter(|finding| finding.code != hidden.code)
+        .all(|finding| reported(&moved(finding)));
+    let new_parse_error = found.iter().any(|finding| {
+        finding.is_parse_error()
+            && !unsilenced
+                .iter()
+                .any(|before| finding.is_at(&moved(before)))
+    });
+    !reported(&moved(hidden)) && others_kept && !new_parse_error
 }
 
 /// Whether `line` is blank or a comment.
