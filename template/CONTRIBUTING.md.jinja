@@ -305,8 +305,8 @@ code change can change what a listed build script emits.
 A root deploy kit that moves into `crates/{{ crate_name }}/deploy/` with every code file unchanged
 leaves its code out the same way, while its files that are rules by their names count at both
 paths, so the move lands in a rules pull request beside the paths that name the kit, as
-[Maintaining](docs/maintaining.md#extend-what-trellis-generates) says. A kit file that names
-`deploy/` or climbs out of the kit with `..` reaches somewhere else after the move.
+[Maintaining](docs/maintaining.md#extend-what-trellis-generates) says. A code file in the kit that
+names `deploy/` or climbs out of it with `..` reaches somewhere else after the move.
 {%- endif %}
 {%- if web_ui %} The web UI's `package.json`, its scripts and its sources are code, outside
 the rule split, so a code pull request can change what its `check` script runs, including which

@@ -804,9 +804,9 @@ impl Side<'_> {
 ///
 /// A working-tree head is judged at `HEAD`, and no crate moved whole while `crates/<old>` or
 /// `crates/<new>`, a path below either, or a file named `.gitattributes`, in any letters, is
-/// staged, changed in the working tree or untracked, so the working tree is never looser than the commit
-/// it makes: `HEAD` doesn't hold an uncommitted entry of `crates/` that spells either name in
-/// other letters.
+/// staged, changed in the working tree or untracked, so the working tree is never looser than the
+/// commit it makes: `HEAD` doesn't hold an uncommitted entry of `crates/` that spells either name
+/// in other letters.
 ///
 /// The directory's name is all that changes, but a file in the crate that reads its own location,
 /// such as a build script that reads `CARGO_MANIFEST_DIR`, or that names `crates/<new>` by a
@@ -933,7 +933,6 @@ fn moved_paths(
 /// - every code file of `deploy` at `merge_base` is a code file of `crates/<crate>/deploy` at the
 ///   head, at the same path in the kit, with the same bytes and mode, and the new place has no
 ///   other code file, so no code file is added, removed or changed;
-/// - the kit holds a code file, so there is code to leave out;
 /// - at `merge_base`, `deploy` is the one entry of the root that a case-insensitive file system
 ///   reads as `deploy`, and at the head the root holds none, so the old place is gone;
 /// - at the head, `crates/<crate>` is the one entry of `crates/` that a case-insensitive file
@@ -982,9 +981,6 @@ fn moved_kit(
     }
     let old_files = tree_files(top, &old.id)?;
     let old_code = code_files(&old_files, KIT_NAME);
-    if old_code.is_empty() {
-        return Ok(Vec::new());
-    }
     let crates_after = crate_entries(top, head_revision)?;
     let crate_directories = crates_after.iter().filter(|entry| entry.is_tree);
     let mut places = Vec::new();
