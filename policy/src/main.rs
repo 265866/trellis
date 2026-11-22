@@ -9,24 +9,30 @@
 //!   working tree, uncommitted and untracked files included. It passes with nothing to compare
 //!   when `<base>` isn't a commit and the repository has no remote-tracking branches, as before
 //!   its first push, so a new project's checks run before its repository exists.
-//! - `trellis-policy web-notices <about.toml> <node_modules> <output>` writes to `<output>` the
-//!   license notices of every npm package installed under `<node_modules>`, development and
-//!   transitive ones included. It first removes `<output>` from an earlier run, and fails, writing
-//!   nothing, when a package's license isn't satisfied by the `accepted` array of `<about.toml>`,
-//!   the one cargo-about reads.
+//! - `trellis-policy web-notices <about.toml> <web-licenses.toml> <node_modules> <output>` writes
+//!   to `<output>` the license notices of every npm package installed under `<node_modules>`,
+//!   development and transitive ones included. It first removes `<output>` from an earlier run,
+//!   and fails, writing nothing, when a package's license isn't satisfied by the `accepted` array
+//!   of `<about.toml>`, the one cargo-about reads, together with the licenses
+//!   `<web-licenses.toml>` accepts for that package by name. An entry there for a package that
+//!   isn't installed is allowed, so a license can be accepted before its package arrives.
+//! - `trellis-policy stale-web-licenses <web-licenses.toml> <node_modules>` fails on each entry
+//!   of `<web-licenses.toml>` that names no package installed under `<node_modules>`.
 //!
 //! Each exits with 0 when the rules hold, 1 when they don't, and 2 on a usage error, when it
 //! can't read the workspace, its history, or the files it was given, or when it can't write its
 //! output.
 
 use std::ffi::OsString;
+use std::fmt::Display;
 use std::io::{self, Write};
 use std::path::Path;
 use std::process::ExitCode;
 use std::{env, fs};
 
 use trellis_policy::{
-    AcceptedLicenses, ChangedFiles, Head, LicenseVerdict, Rule, WebNotices, Workspace,
+    AcceptedLicenses, ChangedFiles, Head, LicenseVerdict, NpmPackage, Rule, WebLicenses,
+    WebNotices, Workspace,
 };
 
 /// The exit code for a command line, IO or git failure, apart from a broken rule.
@@ -35,7 +41,9 @@ const USAGE_ERROR: u8 = 2;
 /// How to run the command.
 const USAGE: &str = "usage: trellis-policy check [--manifest-path <Cargo.toml>]\n       \
                      trellis-policy rule-changes <base> [--head <commit>]\n       \
-                     trellis-policy web-notices <about.toml> <node_modules> <output>";
+                     trellis-policy web-notices <about.toml> <web-licenses.toml> <node_modules> \
+                     <output>\n       \
+                     trellis-policy stale-web-licenses <web-licenses.toml> <node_modules>";
 
 fn main() -> ExitCode {
     let arguments: Result<Vec<String>, OsString> =
@@ -68,16 +76,29 @@ fn run(arguments: &[String]) -> io::Result<ExitCode> {
         {
             rule_changes(base, &Head::Commit(head.clone()), &mut stdout)
         }
-        [command, about, node_modules, output]
+        [command, about, web_licenses, node_modules, output]
             if command == "web-notices"
-                && [about, node_modules, output]
+                && [about, web_licenses, node_modules, output]
                     .iter()
                     .all(|argument| !argument.starts_with('-')) =>
         {
             web_notices(
                 Path::new(about),
+                Path::new(web_licenses),
                 Path::new(node_modules),
                 Path::new(output),
+                &mut stdout,
+            )
+        }
+        [command, web_licenses, node_modules]
+            if command == "stale-web-licenses"
+                && [web_licenses, node_modules]
+                    .iter()
+                    .all(|argument| !argument.starts_with('-')) =>
+        {
+            stale_web_licenses(
+                Path::new(web_licenses),
+                Path::new(node_modules),
                 &mut stdout,
             )
         }
@@ -194,11 +215,13 @@ fn rule_changes(base: &str, head: &Head, out: &mut impl Write) -> io::Result<Exi
 }
 
 /// Writes the license notices of the npm packages installed under `node_modules` to `output`, or,
-/// when the licenses in the `about.toml` at `about` don't accept every package's license, writes
-/// each such package to `out` with what to do and writes no `output`. It first removes an `output`
+/// when the licenses in the `about.toml` at `about`, with those the `web-licenses.toml` at
+/// `web_licenses` accepts for each package, don't accept every package's license, writes each
+/// such package to `out` with what to do and writes no `output`. It first removes an `output`
 /// from an earlier run.
 fn web_notices(
     about: &Path,
+    web_licenses: &Path,
     node_modules: &Path,
     output: &Path,
     out: &mut impl Write,
@@ -214,9 +237,14 @@ fn web_notices(
         )?;
         return Ok(ExitCode::from(USAGE_ERROR));
     }
-    let loaded = AcceptedLicenses::read(about)
-        .and_then(|accepted| Ok((accepted, WebNotices::collect(node_modules)?)));
-    let (accepted, notices) = match loaded {
+    let loaded = AcceptedLicenses::read(about).and_then(|accepted| {
+        Ok((
+            accepted,
+            WebLicenses::read(web_licenses)?,
+            WebNotices::collect(node_modules)?,
+        ))
+    });
+    let (accepted, per_package, notices) = match loaded {
         Ok(loaded) => loaded,
         Err(error) => {
             writeln!(out, "{prefix}{error}")?;
@@ -224,9 +252,7 @@ fn web_notices(
         }
     };
     let about = about.display();
-    let drop_it = format!("No entry in `accepted` in {about} can accept it, so drop the package.");
-    let unsupported = "trellis doesn't support `WITH` exceptions, so drop the package, or ask the \
-                       trellis owner to support this one.";
+    let web_licenses = web_licenses.display();
     for package in notices.unidentified() {
         writeln!(
             out,
@@ -238,33 +264,10 @@ fn web_notices(
     }
     let mut refused = notices.unidentified().len();
     for package in notices.packages() {
-        let (problem, fix) = match package.license() {
-            None => (
-                "states no license in its package.json".to_owned(),
-                drop_it.clone(),
-            ),
-            Some(license) => match accepted.judge_any(package.licenses()) {
-                LicenseVerdict::Accepted => continue,
-                LicenseVerdict::NotAccepted => (
-                    format!("has the license `{license}`, which isn't accepted"),
-                    format!(
-                        "If that license is acceptable, add its SPDX id to `accepted` in \
-                         {about}; otherwise drop the package."
-                    ),
-                ),
-                LicenseVerdict::Exception => (
-                    format!("has the license `{license}`, which adds an exception"),
-                    unsupported.to_owned(),
-                ),
-                LicenseVerdict::Unreadable => (
-                    format!(
-                        "has the license `{license}`, which isn't a strict SPDX expression: \
-                         current license ids, in their exact case, joined with AND, OR and \
-                         parentheses"
-                    ),
-                    drop_it.clone(),
-                ),
-            },
+        let accepted = per_package.accepted_for(package.name(), &accepted);
+        let Some(Refusal { problem, fix }) = refusal(package, &accepted, &about, &web_licenses)
+        else {
+            continue;
         };
         refused += 1;
         let name = package.name();
@@ -282,7 +285,7 @@ fn web_notices(
         writeln!(
             out,
             "{refused} of {total} npm package(s) under {node_modules} can't be accepted under \
-             {about}, so {output_name} wasn't written."
+             {about} and {web_licenses}, so {output_name} wasn't written."
         )?;
         return Ok(ExitCode::FAILURE);
     }
@@ -294,5 +297,107 @@ fn web_notices(
         out,
         "Wrote the licenses of {total} npm package(s) under {node_modules} to {output_name}."
     )?;
+    Ok(ExitCode::SUCCESS)
+}
+
+/// Why an npm package's license can't be accepted, and what to do about it.
+struct Refusal {
+    /// What is wrong, said after the package's name, version and directory.
+    problem: String,
+    /// What to do.
+    fix: String,
+}
+
+/// Why `package` can't be accepted under `accepted`, the licenses accepted for it, and what to do,
+/// or `None` when it is accepted. `about` and `web_licenses` name the files the licenses come
+/// from.
+fn refusal(
+    package: &NpmPackage,
+    accepted: &AcceptedLicenses,
+    about: &impl Display,
+    web_licenses: &impl Display,
+) -> Option<Refusal> {
+    let drop_it = format!("No entry in `accepted` in {about} can accept it, so drop the package.");
+    let Some(license) = package.license() else {
+        return Some(Refusal {
+            problem: "states no license in its package.json".to_owned(),
+            fix: drop_it,
+        });
+    };
+    match accepted.judge_any(package.licenses()) {
+        LicenseVerdict::Accepted => None,
+        LicenseVerdict::NotAccepted => Some(Refusal {
+            problem: format!("has the license `{license}`, which isn't accepted"),
+            fix: format!(
+                "If that license is acceptable for every package, add its SPDX id to `accepted` \
+                 in {about}; if only for this one, accept it for the package in {web_licenses}; \
+                 otherwise drop the package."
+            ),
+        }),
+        LicenseVerdict::Exception => Some(Refusal {
+            problem: format!("has the license `{license}`, which adds an exception"),
+            fix: "trellis doesn't support `WITH` exceptions, so drop the package, or ask the trellis \
+             owner to support this one."
+                .to_owned(),
+        }),
+        LicenseVerdict::Unreadable => Some(Refusal {
+            problem: format!(
+                "has the license `{license}`, which isn't a strict SPDX expression: current \
+                 license ids, in their exact case, joined with AND, OR and parentheses"
+            ),
+            fix: drop_it,
+        }),
+    }
+}
+
+/// Writes to `out` each entry of the `web-licenses.toml` at `web_licenses` that names no npm
+/// package installed under `node_modules`, with what to do, and fails if there is one.
+fn stale_web_licenses(
+    web_licenses: &Path,
+    node_modules: &Path,
+    out: &mut impl Write,
+) -> io::Result<ExitCode> {
+    let prefix = error_prefix();
+    let loaded = WebLicenses::read(web_licenses)
+        .and_then(|per_package| Ok((per_package, WebNotices::collect(node_modules)?)));
+    let (per_package, notices) = match loaded {
+        Ok(loaded) => loaded,
+        Err(error) => {
+            writeln!(out, "{prefix}{error}")?;
+            return Ok(ExitCode::from(USAGE_ERROR));
+        }
+    };
+    let web_licenses = web_licenses.display();
+    let node_modules = node_modules.display();
+    let stale = per_package.stale(&notices);
+    for name in &stale {
+        writeln!(
+            out,
+            "{prefix}{web_licenses} accepts licenses for {name}, which isn't installed under \
+             {node_modules}. Remove the entry in a rules pull request, unless the code pull \
+             request that adds the package is still open; land that instead."
+        )?;
+    }
+    if !stale.is_empty() {
+        writeln!(
+            out,
+            "{} of {} entries in {web_licenses} name no installed npm package.",
+            stale.len(),
+            per_package.len()
+        )?;
+        return Ok(ExitCode::FAILURE);
+    }
+    match per_package.len() {
+        0 => writeln!(out, "{web_licenses} has no entries.")?,
+        1 => writeln!(
+            out,
+            "The entry in {web_licenses} names an npm package installed under {node_modules}."
+        )?,
+        count => writeln!(
+            out,
+            "Each of the {count} entries in {web_licenses} names an npm package installed under \
+             {node_modules}."
+        )?,
+    }
     Ok(ExitCode::SUCCESS)
 }

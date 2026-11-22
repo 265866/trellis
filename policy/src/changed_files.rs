@@ -61,9 +61,15 @@ const UNTRACKED_REMEDY: &str =
 const NESTED_REPOSITORY_NOTE: &str = "(another git repository, whose files no check sees)";
 
 /// Rule files that aren't tool configuration or agent instruction files: the documents that hold
-/// the rules no check decides and the review checklist, and the template answers that
-/// `copier update` regenerates the rules from.
-const RULE_FILES: [&str; 3] = ["CONTRIBUTING.md", "docs/style.md", ".copier-answers.yml"];
+/// the rules no check decides and the review checklist, the template answers that
+/// `copier update` regenerates the rules from, and the licenses a web UI accepts for one npm
+/// package each.
+const RULE_FILES: [&str; 4] = [
+    "CONTRIBUTING.md",
+    "docs/style.md",
+    ".copier-answers.yml",
+    "web-licenses.toml",
+];
 
 /// The files, besides the licenses and the Markdown files under `docs/` other than
 /// `docs/style.md`, that are neither rules nor code. The docs checks read the readme and the
@@ -1609,6 +1615,22 @@ mod tests {
         for path in ["docs/style.md", "docs/Style.md", "CONTRIBUTING.md"] {
             assert_eq!(role(path), Role::Rule, "{path} holds rules review checks");
         }
+    }
+
+    #[test]
+    fn the_web_licenses_file_is_a_rule_at_the_root() {
+        for path in ["web-licenses.toml", "Web-Licenses.toml"] {
+            assert_eq!(
+                role(path),
+                Role::Rule,
+                "{path} accepts licenses, as about.toml does"
+            );
+        }
+        assert_eq!(
+            role("crates/app/web/web-licenses.toml"),
+            Role::Code,
+            "only the root file is read, so a copy under crates/ is code"
+        );
     }
 
     #[test]

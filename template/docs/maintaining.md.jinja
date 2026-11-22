@@ -257,6 +257,30 @@ A crate reaches a package through:
   when another crate turns that feature on, and the check errs toward failing. Move the code
   behind that feature into a crate of its own, so the crate that must stay clear doesn't depend
   on it.
+{%- if web_ui %}
+
+## Accept a license for one npm package
+
+`accepted` in `about.toml` lists the licenses every crate and every npm package of the web UI may
+use. When only one package needs another license, such as a font under OFL-1.1, accept it for
+that package alone in `web-licenses.toml`, with the reason:
+
+```toml
+[[package]]
+name = "@fontsource/inter"
+licenses = ["OFL-1.1"]
+reason = "A font the web UI ships; OFL-1.1 allows bundling it."
+```
+
+`name` is the package's npm name, with its scope, matched exactly, and the entry covers every
+installed version of it. `just notices` judges each package's license by `accepted` and its
+entry together, so `(OFL-1.1 OR GPL-3.0-only) AND MIT` passes with `OFL-1.1` here and `MIT` in
+`accepted`. The file is a rule, so as for a crate's license, the entry lands first in a rules pull
+request, and the package follows in a code pull request: `just notices` passes an entry for a
+package the web UI doesn't install yet. Once the package is gone, `just stale-licenses`, which the
+weekly Advisories workflow runs on `main`, fails on the entry until a rules pull request removes
+it.
+{%- endif %}
 {%- if published %}
 
 ## Add a crate to a published library
