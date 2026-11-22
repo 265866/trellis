@@ -29,8 +29,9 @@ declare_lint! {
     /// wrote is checked wherever a macro puts it: code a proc macro copies, the path serde parses
     /// from `#[serde(with = "...")]` and adds `deserialize` to, and the fields
     /// `#[serde(remote = "...")]` reads from the type it mirrors. A crate's root is never hidden
-    /// here, though a crate such as `windows` hides its own to keep docs.rs from building its whole
-    /// API: each item under it is checked on its own. Crates whose names start with a prefix in
+    /// here, though `windows` and `windows-sys` hide their own to keep their whole API out of the
+    /// docs: each item and module under it is checked on its own. So a crate that hides its root to
+    /// mark the whole crate private isn't flagged either, only its hidden items and modules. Crates whose names start with a prefix in
     /// `owned_crate_prefixes` are owned, so their hidden items are fair to use:
     ///
     /// ```toml

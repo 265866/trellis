@@ -11,8 +11,9 @@ has the versioning rule.
 ### Fixed
 
 - `foreign_doc_hidden` no longer flags every path into a crate that hides its own root from its
-  docs, as Microsoft's `windows` crate does with `#![cfg_attr(not(feature = "docs"), doc(hidden))]`
-  so docs.rs doesn't build its whole API. Every `use windows::...` failed `just dylint`. A crate's
+  docs, as Microsoft's `windows` and `windows-sys` crates do with
+  `#![cfg_attr(not(feature = "docs"), doc(hidden))]`. Every `use windows::...` failed
+  `just dylint`. A crate's
   root now counts as documented, and each item and module under it is still checked on its own,
   so a hidden one inside such a crate is still flagged.
 
