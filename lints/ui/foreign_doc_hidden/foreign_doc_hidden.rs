@@ -90,6 +90,8 @@ fn main() {
     // Not flagged: this crate owns its own hidden items.
     local_hidden();
 
+    let _ = levels(hidden_fields::Level::Low, 1);
+
     fields(Context {
         visible: 1,
         // Flagged: a hidden field in a struct literal.
@@ -154,4 +156,19 @@ fn hidden_root_paths() -> u32 {
     let total = total + aliased_documented() + aliased_helper();
     // Flagged: a hidden function named through the crate root.
     total + hidden_root::api::internal() + internal() + root_helper()
+}
+
+type LevelAlias = hidden_fields::Level;
+
+fn levels(level: hidden_fields::Level, limit: u32) -> u32 {
+    // Flagged: a hidden variant and a hidden constant, named through type-relative paths in
+    // patterns.
+    let secret = match level {
+        LevelAlias::Secret => 1,
+        LevelAlias::Low => 0,
+    };
+    match limit {
+        hidden_fields::Limits::HIDDEN => secret,
+        _ => 0,
+    }
 }

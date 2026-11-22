@@ -163,18 +163,19 @@ fn report(cx: &LateContext<'_>, adt: AdtDef<'_>, named: &FxHashSet<DefId>, catch
 }
 
 /// Adds the variant `pat` names, if it is a variant pattern. A tuple or unit struct's pattern
-/// names its constructor too, whose parent is the struct, not a variant.
+/// names its constructor too, whose parent is the struct, not a variant. A path pattern's
+/// resolution is recorded at its `PatExpr`, not at the `Pat` around it.
 fn insert_variant(cx: &LateContext<'_>, pat: &Pat<'_>, named: &mut FxHashSet<DefId>) {
-    let (PatKind::Struct(qpath, ..)
-    | PatKind::TupleStruct(qpath, ..)
-    | PatKind::Expr(PatExpr {
-        kind: PatExprKind::Path(qpath),
-        ..
-    })) = &pat.kind
-    else {
-        return;
+    let (qpath, hir_id) = match &pat.kind {
+        PatKind::Struct(qpath, ..) | PatKind::TupleStruct(qpath, ..) => (qpath, pat.hir_id),
+        PatKind::Expr(PatExpr {
+            kind: PatExprKind::Path(qpath),
+            hir_id,
+            ..
+        }) => (qpath, *hir_id),
+        _ => return,
     };
-    match cx.typeck_results().qpath_res(qpath, pat.hir_id) {
+    match cx.typeck_results().qpath_res(qpath, hir_id) {
         Res::Def(DefKind::Variant, id) => {
             named.insert(id);
         }
