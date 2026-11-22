@@ -243,7 +243,7 @@ An update leaves them alone.
   `{% raw %}${{ }}{% endraw %}` expression, for the release's `cargo build` only, such as
   `{% raw %}APP_RELEASE: "${{ inputs.ref && '1' || '' }}"{% endraw %}`, which is set only when the release workflow,
   not a pull request, runs the build. The script runs with bash from the repository's root on
-  each target's runner, Git Bash on Windows, after the build, with these variables:
+  each target's runner{% if 'windows' in platforms %}, Git Bash on Windows{% endif %}, after the build, with these variables:
 
   | Variable | Holds |
   | --- | --- |
@@ -257,20 +257,26 @@ An update leaves them alone.
 {%- endif %}
 
   The build fails unless `DIST` then holds exactly the names `files` lists for the target, each a
-  file with contents, and fails for a target `files` doesn't list, so give a new platform's
-  files in the same update that adds it. The script runs with `-e`; it
-  must not write `dist/`, which the release publishes whole. For the build to read the notices,
-  give it their absolute path, such as
+  file with contents, and fails for a target `files` doesn't list, so give a new platform's files
+  in the same update that adds it. The script runs with `-e`; it must not write `dist/`, which the
+  release publishes whole. For the build to read the notices, give it their absolute path, such as
   `{% raw %}APP_LICENSES: "${{ github.workspace }}/target/THIRD-PARTY-LICENSES.html"{% endraw %}`; a
-  build script reads a relative path from its crate's directory. Git Bash turns an argument that starts with `/` into a path, so call a
-  Windows program such as Inno Setup's `iscc`, which the windows-2025 runners have, with
-  `MSYS_NO_PATHCONV=1`, and give it paths through `cygpath -w`. The script is a rule, like the
-  workflows, and `just actionlint` shellchecks it. Write it, then set the answer in the same rules
-  pull request:
+  build script reads a relative path from its crate's directory.
+{%- if 'windows' in platforms %}
+  Git Bash turns an argument that starts with `/` into a path, so call a Windows program such as
+  Inno Setup's `iscc`, which the windows-2025 runners have, with `MSYS_NO_PATHCONV=1`, and give it
+  paths through `cygpath -w`.
+{%- endif %}
+  The script is a rule, like the workflows, and `just actionlint` shellchecks it. Write it, then
+  set the answer in the same rules pull request, with files for each of the project's targets:
 
   ```sh
   uvx copier update --defaults --vcs-ref=:current: \
-    --data 'release={checksums: SHA256SUMS.txt, files: {x86_64-pc-windows-msvc: ["app-{version}-x64.zip"]}}'
+    --data 'release={checksums: SHA256SUMS.txt, files: {
+{%- for target in targets %}
+      {{ target.triple }}: ["{{ project_name }}-{version}-{{ target.triple }}.{{ 'zip' if target.os == 'windows' else 'tar.gz' }}"]{{ ',' if not loop.last }}
+{%- endfor %}
+    }}'
   ```
 
   The answer replaces the whole mapping, so repeat every key you keep.
