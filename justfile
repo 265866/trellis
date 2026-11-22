@@ -834,7 +834,7 @@ template kind recipes="ci" publish="false" web="false" target="":
       mkdir -p "$font"
       printf '{"name": "@demo/font", "version": "1.0.0", "license": "OFL-1.1"}\n' > "$font/package.json"
       if just notices > "$out/web-notices.txt" 2>&1 \
-        || ! grep --quiet '^error: @demo/font 1.0.0 .* has the license `OFL-1.1`, which isn.t accepted' "$out/web-notices.txt"; then
+        || ! grep --quiet --extended-regexp '^(error: |::error::)@demo/font 1.0.0 .* has the license `OFL-1.1`, which isn.t accepted' "$out/web-notices.txt"; then
         cat "$out/web-notices.txt" >&2
         echo "error: just notices passed an npm package whose license nothing accepts" >&2
         exit 1
@@ -848,7 +848,7 @@ template kind recipes="ci" publish="false" web="false" target="":
       just notices
       if [ "$(uname -s)" = Linux ]; then
         if just stale-licenses > "$out/stale.txt" 2>&1 \
-          || ! grep --quiet '^error: web-licenses.toml accepts licenses for @demo/gone, which isn.t installed' "$out/stale.txt" \
+          || ! grep --quiet --extended-regexp '^(error: |::error::)web-licenses.toml accepts licenses for @demo/gone, which isn.t installed' "$out/stale.txt" \
           || grep --quiet 'for @demo/font,' "$out/stale.txt"; then
           cat "$out/stale.txt" >&2
           echo "error: just stale-licenses didn't name only the web-licenses.toml entry for a package not installed" >&2
