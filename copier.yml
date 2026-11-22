@@ -71,8 +71,9 @@ project_name:
 description:
   type: str
   help: >-
-    One sentence that says what it does, in plain words. It becomes the crate docs, which the
-    lints check, so put a code name such as `JsonValue` in backticks.
+    One sentence that says what it does, in plain words. It becomes the crate docs, where clippy
+    fails a CamelCase word outside backticks, so put each one in backticks, whether a product name
+    such as `SkyBlock` or a code name such as `JsonValue`.
   validator: >-
     {% if not (description | regex_search('^[A-Z][^<>\\[\\]\\n]*[.!?]$')) %}
     Start with a capital letter, end with a period, and leave out <, >, [ and ].
