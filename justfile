@@ -1373,9 +1373,9 @@ release-extras:
 # trellis 0.17.3's recipe with one shared target directory, cargo installs the stale build, records
 # the pinned commit as installed, and that recipe then keeps the stale checker. With
 # CARGO_TARGET_DIR and CARGO_BUILD_BUILD_DIR still naming that directory, `just policy` must install
-# the pinned checker without writing there, and pass. Then `just install-policy` must print nothing and run no cargo, and
-# must start an install when the binary is missing, has changed at the same size, or was recorded
-# at another commit. A failed install must leave neither the record nor its build directory.
+# the pinned checker without writing there, and pass. Then `just install-policy` must print nothing
+# and run no cargo, and must start an install when the binary is missing, has changed at the same
+# size, or was recorded at another commit. A failed install must leave neither the record nor its build directory.
 #
 # Checks that installing the checker recovers from a stale build and a stale record.
 checker-install:
@@ -1455,7 +1455,8 @@ checker-install:
     }
     rm "$bin"
     reinstalls "its binary was missing"
-    printf 'x' | dd of="$bin" bs=1 seek=4096 conv=notrunc 2> /dev/null
+    byte=$(dd if="$bin" bs=1 skip=4096 count=1 2> /dev/null | od -An -tu1 | tr -d ' ')
+    printf "\\$(printf '%03o' $(( byte ^ 1 )))" | dd of="$bin" bs=1 seek=4096 conv=notrunc 2> /dev/null
     reinstalls "its binary had changed at the same size"
     awk '{ $1 = "an-older-commit"; print }' "$out/stamp" > "$stamp"
     reinstalls "it was recorded at another commit"

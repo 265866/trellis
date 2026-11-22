@@ -99,7 +99,10 @@ install-policy:
     bin=target/trellis-policy/bin/trellis-policy stamp=target/trellis-policy/trellis-rev build=target/trellis-policy/build
     record() {
       local hash
-      if command -v sha256sum > /dev/null; then hash=$(sha256sum < "$bin"); else hash=$(shasum -a 256 < "$bin"); fi
+      if command -v sha256sum > /dev/null; then hash=$(sha256sum < "$bin")
+      elif command -v shasum > /dev/null; then hash=$(shasum -a 256 < "$bin")
+      else echo "error: install-policy needs sha256sum or shasum to record the checker it installs" >&2; exit 1
+      fi
       echo "{{ trellis_rev }} $(wc -c < "$bin" | tr -d ' ') ${hash%% *}"
     }
     if [ -f "$bin" ] && [ -f "$stamp" ] && [ "$(cat "$stamp")" = "$(record)" ]; then exit 0; fi
@@ -113,7 +116,7 @@ install-policy:
 # Installs `trellis-policy` at the pinned commit, unless that build is installed.
 [windows]
 install-policy:
-    @$ErrorActionPreference = 'Stop'; $bin = 'target/trellis-policy/bin/trellis-policy.exe'; $stamp = 'target/trellis-policy/trellis-rev'; $build = 'target/trellis-policy/build'; function Get-Record { "{{ trellis_rev }} $((Get-Item -LiteralPath $bin).Length) $((Get-FileHash -LiteralPath $bin -Algorithm SHA256).Hash.ToLowerInvariant())" }; if ((Test-Path -LiteralPath $bin) -and (Test-Path -LiteralPath $stamp) -and "$(Get-Content -LiteralPath $stamp -Raw)".Trim() -eq (Get-Record)) { exit 0 }; [Console]::Error.WriteLine('Installing trellis-policy at {{ trellis_rev }}.'); foreach ($path in $stamp, $build) { if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Recurse -Force } }; $env:CARGO_BUILD_BUILD_DIR = $build; $ErrorActionPreference = 'Continue'; cargo install --quiet --locked --force --root "{{ policy_root }}" --target-dir $build --git https://github.com/265866/trellis --rev {{ trellis_rev }} trellis-policy; $status = $LASTEXITCODE; $ErrorActionPreference = 'Stop'; if (Test-Path -LiteralPath $build) { Remove-Item -LiteralPath $build -Recurse -Force }; if ($status -ne 0) { exit $status }; Set-Content -LiteralPath $stamp -Value (Get-Record) -NoNewline
+    @$ErrorActionPreference = 'Stop'; $bin = 'target/trellis-policy/bin/trellis-policy.exe'; $stamp = 'target/trellis-policy/trellis-rev'; $build = 'target/trellis-policy/build'; function Get-Record { "{{ trellis_rev }} $((Get-Item -LiteralPath $bin).Length) $((Get-FileHash -LiteralPath $bin -Algorithm SHA256).Hash.ToLowerInvariant())" }; if ((Test-Path -LiteralPath $bin) -and (Test-Path -LiteralPath $stamp) -and "$(Get-Content -LiteralPath $stamp -Raw)".Trim() -eq (Get-Record)) { exit 0 }; [Console]::Error.WriteLine('Installing trellis-policy at {{ trellis_rev }}.'); foreach ($path in $stamp, $build) { if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Recurse -Force } }; $env:CARGO_BUILD_BUILD_DIR = $build; $ErrorActionPreference = 'Continue'; cargo install --quiet --locked --force --root "{{ policy_root }}" --target-dir $build --git https://github.com/265866/trellis --rev {{ trellis_rev }} trellis-policy; $status = $LASTEXITCODE; $ErrorActionPreference = 'Stop'; if ($status -ne 0) { if (Test-Path -LiteralPath $build) { Remove-Item -LiteralPath $build -Recurse -Force }; exit $status }; Set-Content -LiteralPath $stamp -Value (Get-Record) -NoNewline; Remove-Item -LiteralPath $build -Recurse -Force -ErrorAction SilentlyContinue
 {%- endraw %}
 {%- endif %}
 {%- raw %}
