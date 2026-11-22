@@ -1,0 +1,11 @@
+# A program that `tests/installer/run.sh` installs beside a generated binary, to hold its own file
+# open while an upgrade runs: `window` shows a window, which Inno Setup's CloseApplications closes,
+# and `hidden` has none, which it can't. Built for Windows alone. Its own workspace, so the root's
+# checks and lockfile leave it alone.
+[package]
+name = "installer-helper"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]

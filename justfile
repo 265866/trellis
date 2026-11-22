@@ -31,6 +31,7 @@ fmt:
     cargo +{{ nightly }} fmt --all
     cargo +{{ nightly }} fmt --all --manifest-path lints/Cargo.toml
     cargo +{{ nightly }} fmt --all --manifest-path tests/musl-c/Cargo.toml
+    cargo +{{ nightly }} fmt --all --manifest-path tests/installer/app/Cargo.toml
     git ls-files -z --cached --others --exclude-standard -- '*.toml' | xargs -0 taplo fmt
 
 # Checks the Rust and TOML files are formatted.
@@ -38,6 +39,7 @@ fmt-check:
     cargo +{{ nightly }} fmt --all -- --check
     cargo +{{ nightly }} fmt --all --manifest-path lints/Cargo.toml -- --check
     cargo +{{ nightly }} fmt --all --manifest-path tests/musl-c/Cargo.toml -- --check
+    cargo +{{ nightly }} fmt --all --manifest-path tests/installer/app/Cargo.toml -- --check
     git ls-files -z --cached --others --exclude-standard -- '*.toml' | xargs -0 taplo fmt --check
 
 # Checks spelling in code and docs.
@@ -748,7 +750,7 @@ update:
 # that target, as a project's CI does for the target a release ships.
 #
 # Generates a project of one kind and runs its checks.
-template kind recipes="ci" publish="false" web="false" target="":
+template kind recipes="ci" publish="false" web="false" target="" installer="false":
     #!/usr/bin/env bash
     set -euo pipefail
     trellis="{{ replace(justfile_directory(), '\', '/') }}"
@@ -759,6 +761,13 @@ template kind recipes="ci" publish="false" web="false" target="":
       out=$(cygpath --mixed "$out")
     fi
     project="$out/demo-{{ kind }}"
+    installer_answer=""
+    if [ "{{ installer }}" = true ]; then
+      # The release answer tests/installer/run.sh expects: an installer and a portable program for
+      # the target.
+      target="{{ target }}"
+      installer_answer="release={files: {$target: [\"demo-binary-{version}-setup.exe\", \"demo-binary-{version}-portable.exe\"]}, installer: {$target: {app_id: EBAC94F7-A24E-431F-B4F6-8E9D669E9E53, file: \"demo-binary-{version}-setup.exe\", name: Demo Binary}}}"
+    fi
     uv tool run copier@9.19.1 copy --quiet --defaults --vcs-ref HEAD \
       --data project_name=demo-{{ kind }} \
       --data "description=A demo {{ kind }} that trellis generates for its tests." \
@@ -766,6 +775,7 @@ template kind recipes="ci" publish="false" web="false" target="":
       --data trellis_path="$trellis" \
       $( [ "{{ publish }}" = true ] && echo "--data publish_crate=true --data license=MIT" ) \
       $( [ "{{ web }}" = true ] && echo "--data web_ui=true" ) \
+      ${installer_answer:+--data "$installer_answer"} \
       "$trellis" "$project"
     cd "$project"
     git init --quiet --initial-branch main
@@ -781,6 +791,9 @@ template kind recipes="ci" publish="false" web="false" target="":
         just "$recipe"
       fi
     done
+    if [ "{{ installer }}" = true ]; then
+      "$trellis/tests/installer/run.sh" "$project" "{{ target }}"
+    fi
     if [ "{{ recipes }}" = ci ]; then
       # `ci` ran as a new project's first run does, with no remote branch to compare with. With
       # one, the checks must have left no change behind.
