@@ -6,6 +6,8 @@ use std::io::{self, ErrorKind};
 use std::num::NonZeroUsize;
 use std::path::Path;
 use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::Duration;
 use std::{env, fs, panic, thread};
 
 use serde_json::Value;
@@ -110,7 +112,12 @@ pub(crate) fn check(workspace: &Workspace) -> Result<Vec<Violation>, PolicyError
                 .to_owned(),
         )
     }));
-    let kit = Kit { texts, scripts };
+    let width = thread::available_parallelism().map_or(1, NonZeroUsize::get);
+    let kit = Kit {
+        texts,
+        scripts,
+        slots: Slots::new(width),
+    };
     let reported = kit.shellcheck(|_, text| text.to_owned())?;
     let disables = kit.texts.values().any(|text| text.contains("disable="));
     let unsilenced = if disables {
@@ -127,7 +134,6 @@ pub(crate) fn check(workspace: &Workspace) -> Result<Vec<Violation>, PolicyError
             .push(finding);
     }
     let groups: Vec<Vec<&Finding>> = groups.into_values().collect();
-    let width = thread::available_parallelism().map_or(1, NonZeroUsize::get);
     for chunk in groups.chunks(width) {
         let each_width = (width / chunk.len()).max(1);
         let closer = in_parallel(chunk, |group| {
@@ -232,6 +238,39 @@ struct Kit {
     texts: BTreeMap<String, String>,
     /// The files that are scripts, which shellcheck runs on.
     scripts: Vec<String>,
+    /// The shellcheck runs that may go at once, however many threads probe.
+    slots: Slots,
+}
+
+/// A count of the runs that may go at once, which a run waits on until one is free.
+struct Slots {
+    /// How many are free.
+    free: AtomicUsize,
+}
+
+impl Slots {
+    /// `count` slots, all free.
+    fn new(count: usize) -> Self {
+        Self {
+            free: AtomicUsize::new(count.max(1)),
+        }
+    }
+
+    /// What `run` returns, run once a slot is free, which it holds until it returns.
+    fn hold<Output>(&self, run: impl FnOnce() -> Output) -> Output {
+        while self
+            .free
+            .try_update(Ordering::AcqRel, Ordering::Acquire, |free| {
+                free.checked_sub(1)
+            })
+            .is_err()
+        {
+            thread::sleep(Duration::from_millis(5));
+        }
+        let output = run();
+        self.free.fetch_add(1, Ordering::AcqRel);
+        output
+    }
 }
 
 impl Kit {
@@ -239,6 +278,14 @@ impl Kit {
     /// temporary directory from each file's text as `edit`, given the file and its text, changes
     /// it, in kit files and in the host files they source.
     fn shellcheck(
+        &self,
+        edit: impl Fn(&str, &str) -> String,
+    ) -> Result<BTreeSet<Finding>, PolicyError> {
+        self.slots.hold(|| self.shellcheck_now(edit))
+    }
+
+    /// What [`Kit::shellcheck`] returns, run without waiting for a slot.
+    fn shellcheck_now(
         &self,
         edit: impl Fn(&str, &str) -> String,
     ) -> Result<BTreeSet<Finding>, PolicyError> {
