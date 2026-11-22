@@ -14,7 +14,8 @@ name: Release
 # On every push to main, release-plz either tags a release (when the push is a merged release PR)
 # or opens and updates the release PR. A tagged release is built from its tag, attested, and only
 # then published on GitHub with its archives, checksums and attestation, so a published release has
-# them. If building or publishing fails, re-running the failed jobs picks up from the same tag.
+# them. Sigstore's transparency log fails at times, so attesting tries three times. If building or
+# publishing fails anyway, re-running the failed jobs picks up from the same tag.
 {%- elif kind == 'binary' -%}
 # On every push to main, release-plz either tags a release (when the push is a merged release PR)
 # or opens and updates the release PR. A tagged release is built from its tag and only then
@@ -24,13 +25,15 @@ name: Release
 {%- elif visibility == 'public' -%}
 # On every push to main, release-plz either tags a release (when the push is a merged release PR)
 # or opens and updates the release PR. A tagged release builds the container image from its tag,
-# pushes it by version, attests and signs it, verifies both, and only then moves the minor and
-# `latest` tags to it and publishes the GitHub release.
+# pushes it by its digest alone, attests and signs it, verifies both, and only then tags it with its
+# version, minor and `latest` and publishes the GitHub release, so no tag names an image that isn't
+# signed. Sigstore's transparency log fails at times, so attesting and signing try three times. If a
+# job fails anyway, re-running it builds and pushes a new digest, which the tags then name.
 {%- else -%}
 # On every push to main, release-plz either tags a release (when the push is a merged release PR)
 # or opens and updates the release PR. A tagged release builds the container image from its tag,
-# pushes it by version, and only then moves the minor and `latest` tags to it and publishes the
-# GitHub release. A private repository's image is neither attested nor signed;
+# pushes it by its digest alone, and only then tags it with its version, minor and `latest` and
+# publishes the GitHub release. A private repository's image is neither attested nor signed;
 # docs/maintaining.md says why.
 {%- endif %}
 #
@@ -166,7 +169,7 @@ jobs:
 {%- raw %}
     needs: [release, build]
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 20
     permissions:
       contents: write
 {%- endraw %}
@@ -207,8 +210,37 @@ jobs:
 {%- if visibility == 'public' %}
 {%- raw %}
 
+      # Sigstore's transparency log fails at times, so a failed attestation is tried twice more.
       - name: Attest the archives
         id: attest
+        continue-on-error: true
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+{%- endraw %}
+          subject-checksums: dist/{{ release.checksums | default('SHA256SUMS') }}
+{%- raw %}
+
+      - name: Wait before attesting the archives again
+        if: steps.attest.outcome == 'failure'
+        run: sleep 60
+
+      - name: Attest the archives again
+        id: attest-again
+        if: steps.attest.outcome == 'failure'
+        continue-on-error: true
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+{%- endraw %}
+          subject-checksums: dist/{{ release.checksums | default('SHA256SUMS') }}
+{%- raw %}
+
+      - name: Wait before attesting the archives a last time
+        if: steps.attest-again.outcome == 'failure'
+        run: sleep 180
+
+      - name: Attest the archives a last time
+        id: attest-last
+        if: steps.attest-again.outcome == 'failure'
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
 {%- endraw %}
@@ -229,7 +261,9 @@ jobs:
           TAG: ${{ needs.release.outputs.tag }}
 {%- endraw %}
 {%- if visibility == 'public' %}
-          BUNDLE: {% raw %}${{ steps.attest.outputs.bundle-path }}{% endraw %}
+          # A failed attempt still sets bundle-path, to a file it never wrote, so the path comes from
+          # the attempt that succeeded.
+          BUNDLE: {% raw %}${{ steps.attest.outcome == 'success' && steps.attest.outputs.bundle-path || steps.attest-again.outcome == 'success' && steps.attest-again.outputs.bundle-path || steps.attest-last.outputs.bundle-path }}{% endraw %}
 {%- endif %}
         run: |
 {%- if visibility == 'public' %}
@@ -253,7 +287,7 @@ jobs:
     needs: release
     if: needs.release.outputs.tag != ''
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 60
     permissions:
       contents: write
       packages: write
@@ -311,8 +345,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ github.token }}
 
-      # Pushed under its version only. No cache: a cache written by another workflow could change
-      # what ships.
+      # No cache: a cache written by another workflow could change what ships.
       - name: Build and push
         id: build
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
@@ -322,8 +355,8 @@ jobs:
 {%- endraw %}
           platforms: {{ targets | map(attribute='arch') | map('extract', {'x86_64': 'linux/amd64', 'aarch64': 'linux/arm64'}) | join(',') }}
 {%- raw %}
-          push: true
-          tags: ${{ env.IMAGE }}:${{ needs.release.outputs.tag }}
+          # Pushed by its digest alone, so no tag names it until the last step.
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
           sbom: true
           provenance: mode=max
           no-cache: true
@@ -331,7 +364,36 @@ jobs:
 {%- if visibility == 'public' %}
 {%- raw %}
 
+      # Sigstore's transparency log fails at times, so a failed attestation is tried twice more.
       - name: Attest the image
+        id: attest
+        continue-on-error: true
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+      - name: Wait before attesting the image again
+        if: steps.attest.outcome == 'failure'
+        run: sleep 60
+
+      - name: Attest the image again
+        id: attest-again
+        if: steps.attest.outcome == 'failure'
+        continue-on-error: true
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+      - name: Wait before attesting the image a last time
+        if: steps.attest-again.outcome == 'failure'
+        run: sleep 180
+
+      - name: Attest the image a last time
+        if: steps.attest-again.outcome == 'failure'
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-name: ${{ env.IMAGE }}
@@ -346,12 +408,21 @@ jobs:
           DIGEST: ${{ steps.build.outputs.digest }}
           GH_TOKEN: ${{ github.token }}
         run: |
-          cosign sign --yes "$IMAGE@$DIGEST"
-          cosign verify "$IMAGE@$DIGEST" \
+          # Runs a command up to three times, a minute and then three minutes apart, since
+          # Sigstore's transparency log fails at times.
+          try() {
+            for wait in 0 60 180; do
+              sleep "$wait"
+              "$@" && return
+            done
+            return 1
+          }
+          try cosign sign --yes "$IMAGE@$DIGEST"
+          try cosign verify "$IMAGE@$DIGEST" \
             --certificate-oidc-issuer https://token.actions.githubusercontent.com \
             --certificate-identity "https://github.com/$GITHUB_REPOSITORY/.github/workflows/release.yml@refs/heads/main" \
             > /dev/null
-          gh attestation verify "oci://$IMAGE@$DIGEST" --repo "$GITHUB_REPOSITORY" \
+          try gh attestation verify "oci://$IMAGE@$DIGEST" --repo "$GITHUB_REPOSITORY" \
             --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" \
             --source-ref refs/heads/main
 
@@ -360,13 +431,13 @@ jobs:
 {%- else %}
 {% endif %}
 {%- raw %}
-      - name: Move the minor and latest tags
+      - name: Tag the image with its version, minor and latest
         env:
           DIGEST: ${{ steps.build.outputs.digest }}
         run: |
           version=${TAG#v}
           docker buildx imagetools create "$IMAGE@$DIGEST" \
-            --tag "$IMAGE:${version%.*}" --tag "$IMAGE:latest"
+            --tag "$IMAGE:$TAG" --tag "$IMAGE:${version%.*}" --tag "$IMAGE:latest"
 
       # The notes name the digest, which docs/verifying-releases.md tells users to
 {%- endraw %}
