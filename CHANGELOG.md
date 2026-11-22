@@ -6,6 +6,103 @@ part lists what a project's owner must do around the update: a rule that can fla
 a setting to change, or a step to do by hand. [CONTRIBUTING.md](CONTRIBUTING.md#release-trellis)
 has the versioning rule.
 
+## v0.18.0
+
+### Action required in projects
+
+Each item below names the command that finds it. On the update's branch, `just policy` and
+`just dylint` pass in a project that none of them touch.
+
+- **A crate takes its version from the workspace.** `just policy` now fails a member whose
+  `[package] version` isn't `version.workspace = true`, as `edition`, `rust-version` and `publish`
+  already must be. release-plz rewrites a crate's own version in its `Cargo.toml`, which is code,
+  beside the version in the root `Cargo.toml`, which is a rule, so the release pull request failed
+  "Rule changes stand alone". trellis doesn't support crates versioned apart from the workspace. In
+  a code pull request, check that the crate's version matches the workspace's and write
+  `version.workspace = true`.
+- **A member's path dependency on another member carries no `version`.** `just policy` now fails
+  one, in `[dependencies]` and `[dev-dependencies]` and their `[target]` forms, since release-plz
+  rewrites that `version` when it bumps the workspace past what the requirement allows, with the
+  same failure. `cargo add --path` writes the `version` of a normal dependency, so a project gets
+  there without meaning to, and found out only at its second release. In a code pull request,
+  remove the `version` and keep the `path`. Where both crates are published, which crates.io needs
+  the version for, the report gives the two lines that move it to `[workspace.dependencies]` of the
+  root `Cargo.toml` instead, with `crate.workspace = true` in the member.
+- **release-plz writes no changelog into a crate.** `just policy` now fails a `release-plz.toml`
+  that would update a crate's changelog in the crate's own directory, which is code, with the same
+  failure, and fails a project without `release-plz.toml`, whose defaults do so. The template's
+  file writes one `CHANGELOG.md` at the root and is unaffected; the report gives the fix for each
+  setting that turns a crate's changelog on.
+- **A project whose code places a constructor, such as through GPUI's `actions!`, lists the macro
+  in `dylint.toml`.** `just dylint` runs the new custom lint `code_before_main`, which reports a
+  `static` in a workspace crate that sits in a section the loader runs before `main`:
+  `.preinit_array`, `.init_array` and `.ctors` on ELF targets, `__mod_init_func` or any section of
+  type `mod_init_funcs` on Apple targets, and the Windows CRT's `.CRT$XI*`, `.CRT$XC*`, `.CRT$XD*`
+  and `.CRT$XL*`, each with any suffix. `deny.toml` bans `ctor`, `inventory` and `linkme`, but a
+  framework let in through a `wrappers` exception can still expand a constructor into the
+  project's own code: GPUI's `actions!` and `#[derive(Action)]` expand `inventory::submit!`. The
+  report lands on the outermost macro call in the source and names the macro to list. The lint
+  takes no `expect`: list the macros in the new `constructor_macros` key of `dylint.toml`, in a
+  rules pull request, each as the crate that defines it and its name, such as
+  `["gpui::actions", "gpui_macros::Action"]`. A constructor one of the project's own macros writes
+  stays reported, even inside a listed macro. The update adds `constructor_macros = []`; a
+  `dylint.toml` that keeps its own version through a conflict needs that line under
+  `[trellis_lints]`, or `just dylint` stops with "missing field `constructor_macros`".
+
+These checks read release-plz 0.4.3, the version the template pins, whose library crate is
+`release_plz_core` 0.43.0. A release pull request can change the root `Cargo.toml`, `Cargo.lock`,
+changelogs and members' `Cargo.toml` files; with these checks, every way it could change code fails
+at the pull request that brings it in.
+
+### What an update changes in a project that needs no action
+
+- **Every kind:** `Cargo.toml` and `justfile` move to the new trellis commit, and the justfile's
+  `install-policy` is new, as Fixed says. `dylint.toml` gains `constructor_macros = []`, and
+  `.copier-answers.yml`, `CONTRIBUTING.md`, `docs/maintaining.md` and `docs/style.md` change text.
+  The first recipe that runs the checker prints `Installing trellis-policy at <commit>.` once, and
+  later runs print nothing for it.
+- **A binary or a service, with or without a web UI,** also changes
+  `.github/workflows/release.yml`: comments in a public project; in a private one, a service's
+  image job's limit drops to 45 minutes and a binary's publishing job's to 15.
+- **A library, published or not,** changes nothing more.
+- **A binary with a `release` answer that names its own files** also changes `docs/install.md` and
+  `README.md`.
+
+A change in any other file is the project's own, and `just policy`, `just dylint` and `just ci`
+pass after the update unless an item above applies.
+
+### Fixed
+
+- `just install-policy`, and every recipe that runs the checker after it, could install an older
+  `trellis-policy` than the pinned commit when `CARGO_TARGET_DIR`, `build.target-dir` or
+  `build.build-dir` named a directory that held an older build, and record the pinned commit as
+  installed, so `just policy` checked the project with the old checker, which passes a rule it
+  doesn't know. cargo builds the checker at the same path at every trellis commit and doesn't look
+  at the times of files in its git cache, so it took the older build as current. The checker now
+  builds in a fresh directory of its own, `target/trellis-policy/build`, deleted afterwards, and
+  `target/trellis-policy/trellis-rev` records the commit, size and SHA-256 of the binary it
+  installed. A run installs again unless all three match, and says so in one line. A project
+  already stuck on an older checker reinstalls on its next run, with nothing to delete by hand.
+- A private project's release jobs keep their earlier limits, 45 minutes for the image and 15 for
+  publishing; the longer ones cover the attest and sign retries, which run only in public projects.
+  The image job's comment says no tag names the image until the step that tags it.
+- The generated `docs/maintaining.md` gives the order that moves a root deploy kit into its crate
+  and passes every check: first a code pull request that makes the kit's references to the rest of
+  the repository independent of its place, such as finding the repository's root with
+  `git rev-parse --show-toplevel` rather than `..` and writing a link out of the kit as a full URL,
+  then the move as renames, with the links to the kit in the README and the pages under `docs/`
+  fixed in the same pull request. It said to fix such files after the move, which `just links`
+  fails. It also says moving is optional, and that a host which runs the kit from a clone keeps it
+  at the root.
+- The paragraph after changing an answer in `docs/maintaining.md` is separate again from the code
+  block or paragraph before it, and its `restricted_crates` example says each list names every
+  crate that may reach the package, such as a UI crate beside the main one.
+- With a `release` answer that names its own files, `docs/install.md` covers a release file that is
+  a bare program again, says to make one executable on Linux or macOS, and says to install the new
+  release unless the program updates itself; the README's license sentence says `just notices` is
+  for a build from source.
+- The description wraps at 100 columns in `README.md` and `CONTRIBUTING.md`.
+
 ## v0.17.3
 
 ### Fixed
