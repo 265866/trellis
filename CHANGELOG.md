@@ -6,6 +6,21 @@ part lists what a project's owner must do around the update: a rule that can fla
 a setting to change, or a step to do by hand. [CONTRIBUTING.md](CONTRIBUTING.md#release-trellis)
 has the versioning rule.
 
+## v0.15.0
+
+### Action required in projects
+
+- **In a service with a web UI, commit a text `bun.lock`.** `just web-install` and the image's
+  build now fail when the web UI's directory has no `bun.lock`. Through v0.13.1 the image's build
+  already failed without the file, because its copy step named it. v0.14.0 copies the web UI's
+  whole directory instead, and under it a web UI with only a binary `bun.lockb` passed every check.
+  One with no lockfile at all still failed `just deny`, whose `bun audit` needs a lockfile, though
+  `bun install --frozen-lockfile` itself passes without one and then picks the versions itself.
+  Before the update, if the web UI's directory has a `bun.lockb` and no `bun.lock`, run
+  `bun install --save-text-lockfile --lockfile-only` there and commit the change in a code pull
+  request. That writes `bun.lock` with the same versions and removes `bun.lockb`. A project
+  generated from trellis has a `bun.lock`, and one without a web UI is not affected.
+
 ## v0.14.0
 
 ### Action required in projects
