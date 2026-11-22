@@ -25,6 +25,27 @@ has the versioning rule.
   error, `gh api` writes GitHub's JSON body to stdout even with `--jq`, and the recipe read that
   body as the ruleset's ID and enforcement, so `just check-github` could never pass there.
 
+## Unreleased
+
+### Action required in projects
+
+- **Remove the entries in `about.toml` for crates your dependencies no longer bring in.** The
+  weekly Advisories workflow now also runs `just stale-licenses`, which fails on such an entry.
+  Run `just stale-licenses` before the update; it names each one. Remove each, and its exception
+  in `deny.toml`, in the update's pull request or a rules pull request before it. A library has no
+  `about.toml` and is not affected.
+
+### Fixed
+
+- A rules pull request can accept a license for one crate before the code pull request that adds
+  the crate. `just notices` failed on the entry, since cargo-about warns about an entry for a crate
+  the dependency graph doesn't hold and the recipe fails on any output, while the code pull request
+  can't change `about.toml`, a rule, so no order worked. `just notices` now lets that one warning
+  through, and `just stale-licenses`, which the weekly Advisories workflow runs on `main`, fails on
+  an entry whose crate has left the graph, so a stale entry is still caught. Any other output, a
+  clarification that no longer applies included, still fails `just notices`. The generated
+  CONTRIBUTING.md's "Send a change" gives the order.
+
 ## v0.15.0
 
 ### Action required in projects

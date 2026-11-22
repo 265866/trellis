@@ -157,7 +157,10 @@ build-release:
 {%- raw %}
 
 # A clarification in about.toml that no longer applies is only logged, and a clean run logs
-# nothing, so any output fails it.
+# nothing, so any output fails it, but one warning: an entry for a crate the dependency graph
+# doesn't hold. That is how a rules pull request accepts a license for a crate before the code
+# pull request that adds it, as CONTRIBUTING.md says; `just stale-licenses`, which the weekly
+# Advisories workflow runs, fails on an entry whose crate has left the graph.
 #
 # Writes the license notices every release ships to target/THIRD-PARTY-LICENSES.html.
 [unix]
@@ -165,15 +168,36 @@ notices:{% endraw %}{{ ' web-notices' if web_ui else '' }}{% raw %}
     #!/usr/bin/env bash
     set -uo pipefail
     mkdir -p target
-    log=$(cargo about generate --locked --fail about.hbs -o target/THIRD-PARTY-LICENSES.html 2>&1)
+    log=$(cargo about --color never generate --locked --fail about.hbs -o target/THIRD-PARTY-LICENSES.html 2>&1)
     status=$?
+    log=$(awk '$0 == "warning: config found for a crate not present in the graph" { skip = 1; next }
+      skip && $0 == "" { skip = 0; next } !skip' <<< "$log")
     if [ -n "$log" ]; then echo "$log" >&2; fi
     [ "$status" -eq 0 ] && [ -z "$log" ]
 
 # Writes the license notices every release ships to target/THIRD-PARTY-LICENSES.html.
 [windows]
 notices:{% endraw %}{{ ' web-notices' if web_ui else '' }}{% raw %}
-    New-Item -ItemType Directory -Force target > $null; $log = cargo about generate --locked --fail about.hbs -o target/THIRD-PARTY-LICENSES.html 2>&1; $status = $LASTEXITCODE; $log | ForEach-Object { [Console]::Error.WriteLine("$_") }; if ($status -ne 0 -or $log) { exit 1 }
+    New-Item -ItemType Directory -Force target > $null; $log = cargo about --color never generate --locked --fail about.hbs -o target/THIRD-PARTY-LICENSES.html 2>&1; $status = $LASTEXITCODE; $skip = $false; $kept = foreach ($line in $log) { $text = "$line"; if ($text -eq 'warning: config found for a crate not present in the graph') { $skip = $true } elseif ($skip -and $text -eq '') { $skip = $false } elseif (-not $skip) { $text } }; $kept | ForEach-Object { [Console]::Error.WriteLine($_) }; if ($status -ne 0 -or $kept) { exit 1 }
+
+# Each entry in about.toml for a crate the dependency graph doesn't hold, which `just notices`
+# lets through so a license can be accepted before its crate arrives, fails this once its crate is
+# gone. The weekly Advisories workflow runs it on `main`; remove such an entry in a rules pull
+# request.
+#
+# Checks that every crate about.toml names is in the dependency graph.
+stale-licenses:
+    #!/usr/bin/env bash
+    set -uo pipefail
+    log=$(cargo about --color never generate --locked --fail about.hbs -o /dev/null 2>&1)
+    status=$?
+    stale=$(awk '$0 == "warning: config found for a crate not present in the graph" { found = 1 }
+      found && /^[0-9]+ .* \[/ { sub(/^[0-9]+ [^[]*\[/, ""); sub(/\].*/, ""); print; found = 0 }' <<< "$log")
+    if [ -n "$stale" ]; then
+      echo "error: about.toml has entries for crates the dependency graph doesn't hold: $(echo $stale). Remove each in a rules pull request." >&2
+      exit 1
+    fi
+    if [ "$status" -ne 0 ]; then echo "$log" >&2; exit "$status"; fi
 {%- endraw %}
 {%- endif %}
 {%- raw %}
