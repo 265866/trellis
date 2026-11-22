@@ -40,7 +40,7 @@ installed. They don't run on Alpine or another musl distribution.
    set `{{ crate_name | upper }}_WEB_DIR` to where you keep it.
 {%- endif %}
 
-To update, install the new release{{ ' the same way' if not release.files }}.
+To update, install the new release{{ ' the same way' if not release.files else ', unless the program updates itself' }}.
 
 ## Build from source
 

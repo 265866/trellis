@@ -239,7 +239,9 @@ must build without a UI toolkit then can't reach one through a new dependency. `
 every other crate that reaches the package, with the path. It also fails a key that lists crates
 but matches no package, so a misspelled key can't pass while it restricts nothing. An empty list
 lets no crate reach the package, and may name one no crate depends on yet, to keep the first
-dependency out. The setting is a rule, so add or change it in a rules pull request:
+dependency out. Each list names every crate that may reach its package, so where a UI crate
+depends on GPUI beside `{{ crate_name }}`, list it too. The setting is a rule, so add or change it
+in a rules pull request:
 
 ```toml
 [workspace.metadata.policy.restricted_crates]
@@ -516,16 +518,19 @@ Adding Linux or Windows asks for the processors again, and the update takes the 
 {%- endif %}
 
 {%- if kind == 'service' %}
+
 The change is a rule change, so it can't also change code. Once it merges, run `just check-github`
 on `main`, and `just setup-github` if it reports a wrong setting. Changing the architectures needs
 nothing on GitHub, since `CI passed` covers whatever platforms CI runs. Some answers also change
 what GitHub needs:
 {%- elif 'linux' in platforms or 'windows' in platforms %}
+
 The change is a rule change, so it can't also change code. Once it merges, run `just check-github`
 on `main`, and `just setup-github` if it reports a wrong setting. Changing the platforms or
 architectures needs nothing on GitHub, since `CI passed` covers whatever platforms CI runs. Some
 answers also change what GitHub needs:
 {%- else %}
+
 The change is a rule change, so it can't also change code. Once it merges, run `just check-github`
 on `main`, and `just setup-github` if it reports a wrong setting. Changing the platforms needs
 nothing on GitHub, since `CI passed` covers whatever platforms CI runs. Some answers also change
