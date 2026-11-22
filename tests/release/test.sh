@@ -178,4 +178,17 @@ release missing ''
 git checkout --quiet "$held"
 release missing ''
 git checkout --quiet main
+
+# A commit adds v0.6.0, and a later one adds v0.6.1, whose run tags first. The earlier commit's
+# version has no tag, so its run must fail rather than leave v0.6.0 unreleased without a word.
+changelog v0.6.0 "$asks"
+overtaken=$(git rev-parse HEAD)
+changelog v0.6.1 '- A fix.'
+commit tag --annotate --message v0.6.1 v0.6.1
+git checkout --quiet "$overtaken"
+if FAKE_LOG="$out/log" FAKE_NOTES="$out/notes" FAKE_RELEASE=missing PATH="$out/bin:$PATH" \
+  just release > /dev/null 2>&1; then
+  fail "just release passed on a commit whose version a later tag overtook"
+fi
+git checkout --quiet main
 echo "just changelog and just release behave as expected."

@@ -114,19 +114,24 @@ changelog:
 # run can pass first; tagging it would release changes the notes don't list. GitHub refuses a tag
 # that exists, so of two runs that race, the second skips. The tag is annotated, as the ones made
 # by hand were, and the release's notes are the section. A rerun on the commit it tagged publishes
-# the release a failed run missed; on any other commit it does nothing. That includes a commit a
-# newer tag already holds, whose run finished after a later commit's run tagged, so its
-# CHANGELOG.md still names an older version.
+# the release a failed run missed, until a newer version is tagged; on any other commit it does
+# nothing. That includes a commit whose run finished after a later commit's run tagged a newer
+# version, while its own CHANGELOG.md names a version already tagged on another commit. A commit
+# that names a version no commit has, such as one a later version overtook before its run tagged
+# it, fails, so the missing release is noticed.
 #
 # Tags and releases the version `just changelog` prints.
 release:
     #!/usr/bin/env bash
     set -euo pipefail
+    head=$(git rev-parse HEAD)
+    named=$(sed -n 's/^## //p' CHANGELOG.md | head -n 1)
     latest=$(git tag --list 'v*' --sort=-version:refname \
       | grep --extended-regexp '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' | head -n 1) || true
-    if [ -n "$latest" ] && [ "$(git rev-parse "$latest^{commit}")" != "$(git rev-parse HEAD)" ] \
-      && git merge-base --is-ancestor HEAD "$latest"; then
-      echo "$latest, tagged on a later commit, already holds this one, so there's nothing to release."
+    released=$(git rev-parse --quiet --verify "refs/tags/$named^{commit}") || true
+    if [ -n "$latest" ] && [ -n "$released" ] && [ "$released" != "$head" ] \
+      && [ "$(git rev-parse "$latest^{commit}")" != "$head" ] && git merge-base --is-ancestor HEAD "$latest"; then
+      echo "$named is released at $released, and $latest, tagged on a later commit, holds this one, so there's nothing to release."
       exit 0
     fi
     version=$(just changelog)
@@ -135,7 +140,6 @@ release:
       exit 0
     fi
     section() { awk '/^## / { if (seen) exit; seen = 1 } seen'; }
-    head=$(git rev-parse HEAD)
     tagged=$(git rev-parse --quiet --verify "refs/tags/$version^{commit}") || true
     if [ -z "$tagged" ]; then
       if [ "$(section < CHANGELOG.md)" = "$(git show HEAD^:CHANGELOG.md 2> /dev/null | section)" ]; then
