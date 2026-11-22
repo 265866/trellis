@@ -355,6 +355,14 @@ as `[webpki-roots]` with `accepted = ["CDLA-Permissive-2.0"]`{% endif %}. {% if 
 with an entry for a crate the dependency graph doesn't hold yet. Then add the dependency in a code
 pull request. Accepting the license for every crate, in `allow`{% if kind != 'library' %} or `accepted`{% endif %}, lets any later
 dependency use it too, so do that only when the owner decides it.
+
+A dependency that brings in a crate `deny.toml` bans, such as `paste`, fails `just deny` however
+deep in the dependency graph the banned crate sits. Letting it in is the owner's decision, and it
+lands in two pull requests too. First, in a rules pull request, add the crate that depends on the
+banned one directly to the ban's `wrappers`, with the reason in a comment, such as
+`wrappers = ["some-crate"]` under `crate = "paste"`. Only that crate may then depend on it, and
+`just deny` passes, with a warning, while the dependency graph doesn't hold the wrapper yet. Then
+add the dependency in a code pull request.
 {%- if web_ui %}
 
 An npm package of the web UI under a license `about.toml` doesn't accept lands the same way.
