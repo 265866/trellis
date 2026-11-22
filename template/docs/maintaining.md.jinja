@@ -319,7 +319,7 @@ An update leaves them alone.
 - **Release files.** The `release` answer, a YAML mapping, changes what a release attaches.
   `files` maps each target triple to the names of its files, with `{version}` for the version,
   and `release/package.sh`, which you write, writes exactly those files for its target; the
-  release build replaces trellis's archive with them, and the release attests and publishes them
+  release build replaces trellis's archive with them, and the release {{ 'attests and publishes them' if visibility == 'public' else 'publishes them, unattested,' }}
   with the rest. [Install](install.md), [Verify a release](verifying-releases.md) and
   [Stability](stability.md) then list those names, so changing one breaks your users as
   "Keep releases verifiable" says. `checksums` names the checksums file, `name` starts the
