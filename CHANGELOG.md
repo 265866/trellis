@@ -6,6 +6,94 @@ part lists what a project's owner must do around the update: a rule that can fla
 a setting to change, or a step to do by hand. [CONTRIBUTING.md](CONTRIBUTING.md#release-trellis)
 has the versioning rule.
 
+## v0.16.0
+
+### Action required in projects
+
+- **Remove the entries in `about.toml` for crates your dependencies no longer bring in.** The
+  weekly Advisories workflow now also runs `just stale-licenses`, which fails on an entry for a
+  crate the dependency graph doesn't hold. On the update's branch, run `just stale-licenses`; it
+  names each one. Remove each, and its exception in `deny.toml`, in the update's pull request,
+  unless the code pull request that adds its crate is still open. A library has no `about.toml`
+  and is not affected.
+- **In a binary whose workflows you edited to build for glibc, install system packages or raise
+  the build timeout, move those edits to the new `build` answer.** Run
+  `uvx copier update --defaults --data 'build={libc: gnu, setup: true, timeout: 90}'`, keeping
+  the keys you need, and resolve `.github/workflows/ci.yml` and `build-release.yml` to trellis's
+  version, keeping none of your own lines. The update writes a starter `.github/setup-build.sh`
+  that installs nothing, or keeps one you wrote first; put in it what your edited steps did, such
+  as the `apt-get install` of the libraries GTK or GPUI link, freeing disk space and the macOS
+  Metal Toolchain download, keyed on `RUNNER_OS`. All of it lands in the update's pull request. A
+  binary that didn't edit its workflows needs nothing: the answer defaults to `{}`, which keeps
+  musl, no setup and 60 minutes.
+- **In a service whose `Containerfile` you edited to add environment defaults, a working
+  directory, ports or files, move those edits to the new `image` answer.** First, in a code pull
+  request, put the files the image adds under `crates/<crate>/image/` at their paths below the
+  image's root, with notices under `crates/<crate>/image/usr/share/doc/<project>/`. They are data:
+  none may be a link or an ELF program or library, none stays executable, and they go under
+  `/usr/share` or a directory of their own, such as `/app`, never in one the base image keeps. Then
+  run the update with the answer set, such as
+  `uvx copier update --defaults --data 'image={env: {HOST: 0.0.0.0, PORT: "8740"}, workdir: /app, expose: [8740], files: true}'`,
+  quoting each env value, and resolve `Containerfile` to trellis's version, keeping none of your
+  own lines. A service that didn't edit its `Containerfile` needs nothing: the answer defaults to
+  `{}`, which changes nothing in the image.
+- **In a binary whose release workflows you edited to name its own release files, build an
+  installer, change the checksums file's name or set build variables, move those edits to the new
+  `release` answer.** Write `release/package.sh`, which gets `TARGET`, `VERSION`, `BINARY`,
+  `NOTICES` and `DIST` and must write exactly the files the answer names for its target to
+  `DIST`, as the generated `docs/maintaining.md` says. Then run the update with the answer, such
+  as
+  `uvx copier update --defaults --data 'release={name: Arcwise, checksums: SHA256SUMS.txt, files: {x86_64-pc-windows-msvc: ["arcwise-{version}-x64-setup.exe", "arcwise-{version}-x64.zip"]}}'`,
+  and resolve `.github/workflows/build-release.yml` and `release.yml` to trellis's version,
+  keeping none of your own lines. The script and the answer land in the update's pull request. A
+  binary that didn't edit its release workflows needs nothing: the answer defaults to `{}`, which
+  keeps trellis's archives and `SHA256SUMS`.
+- **In a binary that added a web UI by hand, move it to the `web_ui` answer.** `web_ui` is now
+  asked of binaries too, with the same recipes, CI steps, Renovate rules and `<CRATE>_WEB_DIR` as
+  a service. A binary's release build then builds the UI with the pinned Bun and each archive
+  carries it as `web/` beside the program, with its notices in `THIRD-PARTY-LICENSES-WEB.txt`.
+  Land the app in `crates/<crate>/web` in a code pull request first, as "Web UI" under "Change an
+  answer" in the generated `docs/maintaining.md` says, then run
+  `uvx copier update --defaults --data web_ui=true` and resolve the files you had edited for it
+  to trellis's version. A binary that has no web UI needs nothing: the update records
+  `web_ui: false` without asking.
+
+### Added
+
+- A binary's `build` answer: `libc: gnu` builds and releases for Linux with glibc, for a program
+  that links system libraries musl can't, such as GTK, WebKitGTK or a GPUI app's Vulkan and
+  Wayland stack; `setup: true` runs the project's `.github/setup-build.sh` in CI's build jobs and
+  the release's, on every runner, and `just actionlint` shellchecks it; `timeout` raises those
+  jobs' limit from 60 minutes. The generated `docs/install.md` says which systems a glibc release
+  runs on.
+- A service's `image` answer: `env` (environment defaults), `workdir`, `expose` (ports) and
+  `files: true`, which copies `crates/<crate>/image/` onto the image's root, owned by root,
+  readable by the image's user and executable by none, under the binary and trellis's license
+  files. The image stays distroless and nonroot.
+- `web_ui` for a binary, whose release archives carry the built UI.
+- A binary's `release` answer: `files` names each target's release files, which the project's
+  `release/package.sh` writes and the release build checks, attests and publishes in place of
+  trellis's archive; `checksums` names the checksums file, `name` starts the release's title, and
+  `env` sets variables for the release's build only. The generated docs list the names.
+- The generated `docs/maintaining.md` gains an "Extend what trellis generates" section that lists
+  these.
+
+### Fixed
+
+- A rules pull request can accept a license for one crate before the code pull request that adds
+  the crate. `just notices` failed on the entry, since cargo-about warns about an entry for a crate
+  the dependency graph doesn't hold and the recipe fails on any output, while the code pull request
+  can't change `about.toml`, a rule, so no order worked. `just notices` now lets that one warning
+  through, and `just stale-licenses`, which the weekly Advisories workflow runs on `main`, fails on
+  an entry whose crate has left the graph, so a stale entry is still caught. Any other output, a
+  clarification that no longer applies included, still fails `just notices`. The generated
+  CONTRIBUTING.md's "Send a change" gives the order.
+- After an update moves the trellis commit, a local `just dylint` builds the lints at the new
+  commit. cargo-dylint kept the library it built from the old one, so a local run checked with the
+  old lints. `just dylint` now records the commit in `target/dylint/trellis-rev` and deletes
+  `target/dylint/libraries` when the commit changes, and CI caches the record with the library.
+  The first `just dylint` after this update rebuilds the lints once.
+
 ## v0.15.1
 
 ### Fixed
