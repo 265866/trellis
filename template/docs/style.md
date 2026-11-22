@@ -161,16 +161,20 @@ Beyond the Google guide, the workspace also turns on:
   hold one file, with the other's contents; that the workspace excludes nothing, pulls in no
   non-member crate by path, and loads only the trellis lints as its dylint library; that each
   crate's `Cargo.toml` holds only allowed keys (no `test = false`, `harness = false` outside a
-  `[[bench]]`, `auto*` or `required-features`), inherits `edition`, `rust-version` and `publish`,
-  and `license` when the workspace has one, and keeps its sources, `#[path]` files included, inside
-  the crate, with no symbolic link in or above its directory; that the repository holds no git
-  submodule, or other git repository, anywhere, since a checkout that initializes one holds files no
-  check or review read; that `.cargo/config.toml` holds only the Windows `+crt-static` flags; that a
-  crate depends directly only on proc-macro crates listed in `proc_macro_crates`, since a proc macro
-  writes code the custom lints don't check; that the root `AGENTS.md` is the only file of
-  instructions for coding agents; that every crate's commits reach the release notes through
-  `changelog_include` in `release-plz.toml`; that no crate but the ones `restricted_crates` lists
-  for a package reaches it, directly or through other packages, when that setting is there, and that
+  `[[bench]]`, `auto*` or `required-features`), inherits `version`, `edition`, `rust-version` and
+  `publish`, and `license` when the workspace has one (the crates share one version, which
+  release-plz bumps in the root `Cargo.toml` alone; trellis doesn't support a crate versioned apart
+  from the others), and keeps its sources, `#[path]` files included, inside the crate, with no
+  symbolic link in or above its directory; that the repository holds no git submodule, or other git
+  repository, anywhere, since a checkout that initializes one holds files no check or review read;
+  that `.cargo/config.toml` holds only the Windows `+crt-static` flags; that a crate depends
+  directly only on proc-macro crates listed in `proc_macro_crates`, since a proc macro writes code
+  the custom lints don't check; that the root `AGENTS.md` is the only file of instructions for
+  coding agents; that `release-plz.toml` exists, that every crate's commits reach the release notes
+  through `changelog_include` in it, and that release-plz can write no crate's changelog into its
+  directory or another place that is code, since a release pull request would change it beside the
+  root `Cargo.toml`'s version, a rule; that no crate but the ones `restricted_crates` lists for a
+  package reaches it, directly or through other packages, when that setting is there, and that
   each of its keys that lists crates matches a package; that every shell script in a deploy kit,
   under `crates/<crate>/deploy/` or the root `deploy/`, passes shellcheck, with no `.shellcheckrc`
   or `SHELLCHECK_OPTS` read, the files they source included, and that each shellcheck directive

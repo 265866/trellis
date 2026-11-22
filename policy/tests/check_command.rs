@@ -79,7 +79,8 @@ const CONFIG_FILES: [(&str, &str); 14] = [
     (".config/nextest.toml", "[profile.default]\n"),
     (
         "release-plz.toml",
-        "[workspace]\n\n[[package]]\nname = \"demo\"\nchangelog_update = true\n\
+        "[workspace]\nchangelog_update = false\n\n[[package]]\nname = \"demo\"\n\
+         changelog_path = \"./CHANGELOG.md\"\nchangelog_update = true\n\
          changelog_include = [\"demo_core\"]\n",
     ),
     ("renovate.json", "{}\n"),
@@ -806,6 +807,53 @@ fn a_version_on_an_unpublished_path_dependency_fails() {
 }
 
 #[test]
+fn a_member_version_of_its_own_fails() {
+    let project = Project::new();
+    let own_version = member_manifest("demo_core", "")
+        .replace("\nversion.workspace = true", "\nversion = \"0.1.0\"");
+    project.write("crates/demo_core/Cargo.toml", &own_version);
+    project.lock();
+    project.check().assert_reports(
+        1,
+        "error: [member_manifests] crates/demo_core/Cargo.toml: `[package] version` is \"0.1.0\", \
+         but it must be `version.workspace = true`, because the project shares one version",
+    );
+    project.write(
+        "crates/demo_core/Cargo.toml",
+        &member_manifest("demo_core", ""),
+    );
+    project.lock();
+    project.check().assert_passes();
+}
+
+#[test]
+fn a_crate_changelog_release_plz_would_write_fails() {
+    let project = Project::new();
+    project.write(
+        "release-plz.toml",
+        "[workspace]\n\n[[package]]\nname = \"demo\"\nchangelog_path = \"./CHANGELOG.md\"\n\
+         changelog_update = true\nchangelog_include = [\"demo_core\"]\n",
+    );
+    project.check().assert_reports(
+        1,
+        "error: [release_changelog] release-plz.toml: release-plz could write the changelog of \
+         `demo_core` to `crates/demo_core/CHANGELOG.md`, which is code",
+    );
+}
+
+#[test]
+fn a_binary_without_a_release_plz_file_fails() {
+    let project = Project::new();
+    fs::remove_file(project.path().join("release-plz.toml"))
+        .expect("the release-plz config should be removed");
+    project.check().assert_reports(
+        1,
+        "error: [release_changelog] release-plz.toml: `release-plz.toml` is missing, so \
+         release-plz falls back to its defaults.",
+    );
+}
+
+#[test]
 fn an_excluded_crate_fails() {
     let project = Project::new();
     project.root_manifest("exclude = [\"lints\"]\n", PATH_LIBRARY);
@@ -1381,7 +1429,8 @@ fn a_member_the_release_changelog_leaves_out_fails() {
 
     project.write(
         "release-plz.toml",
-        "[[package]]\nname = \"demo\"\nchangelog_update = true\n\
+        "[workspace]\nchangelog_update = false\n\n[[package]]\nname = \"demo\"\n\
+         changelog_path = \"./CHANGELOG.md\"\nchangelog_update = true\n\
          changelog_include = [\"demo_core\", \"demo_server\"]\n",
     );
     project.check().assert_passes();
@@ -3269,7 +3318,8 @@ fn restricted_workspace(
     );
     project.write(
         "release-plz.toml",
-        "[workspace]\n\n[[package]]\nname = \"demo\"\nchangelog_update = true\n\
+        "[workspace]\nchangelog_update = false\n\n[[package]]\nname = \"demo\"\n\
+         changelog_path = \"./CHANGELOG.md\"\nchangelog_update = true\n\
          changelog_include = [\"demo_core\", \"demo_ui\", \"demo_widgets\"]\n",
     );
     project.policy_setting(restricted);

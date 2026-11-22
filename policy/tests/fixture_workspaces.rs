@@ -690,13 +690,18 @@ fn a_version_in_the_workspace_dependencies_passes() {
 }
 
 #[test]
-fn without_a_release_plz_file_the_changelog_has_nothing_to_check() {
+fn a_published_library_without_a_release_plz_file_fails() {
     let fixture = Fixture::new("");
     let violations = release_changelog::check(&fixture.workspace())
         .unwrap_or_else(|error| panic!("the check should run, but {error}"));
-    assert!(
-        violations.is_empty(),
-        "a workspace without release-plz.toml passes: {violations:?}"
+    assert_violations(
+        &violations,
+        &[Expected {
+            file: "release-plz.toml",
+            message: "`release-plz.toml` is missing, so release-plz falls back to its defaults",
+        }],
+        "both members are published, and release-plz's defaults would write a changelog into \
+         each crate",
     );
 }
 
@@ -705,7 +710,8 @@ fn the_release_changelog_must_take_in_every_other_member() {
     let fixture = Fixture::new("");
     fixture.write(
         "release-plz.toml",
-        "[[package]]\nname = \"app\"\nchangelog_update = true\nchangelog_include = []\n",
+        "[workspace]\nchangelog_update = false\n\n[[package]]\nname = \"app\"\n\
+         changelog_path = \"./CHANGELOG.md\"\nchangelog_update = true\nchangelog_include = []\n",
     );
     let violations = release_changelog::check(&fixture.workspace())
         .unwrap_or_else(|error| panic!("the check should run, but {error}"));
@@ -717,6 +723,42 @@ fn the_release_changelog_must_take_in_every_other_member() {
     assert!(
         mentions(&violations, "`derive` is a workspace member"),
         "the message should name the missing crate: {violations:?}"
+    );
+}
+
+#[test]
+fn a_changelog_release_plz_would_write_into_a_crate_fails() {
+    let fixture = Fixture::new("");
+    fixture.write(
+        "release-plz.toml",
+        "[workspace]\ngit_only = true\n\n[[package]]\nname = \"app\"\n\
+         changelog_path = \"./CHANGELOG.md\"\nchangelog_update = true\n\
+         changelog_include = [\"derive\"]\n",
+    );
+    let violations = release_changelog::check(&fixture.workspace())
+        .unwrap_or_else(|error| panic!("the check should run, but {error}"));
+    assert_violations(
+        &violations,
+        &[Expected {
+            file: "release-plz.toml",
+            message: "release-plz could write the changelog of `derive` to \
+                      `crates/derive/CHANGELOG.md`, which is code",
+        }],
+        "`derive` has no entry and `[workspace]` leaves `changelog_update` at release-plz's \
+         default, so its changelog lands in its crate; the main package's goes to the root",
+    );
+    fixture.write(
+        "release-plz.toml",
+        "[workspace]\ngit_only = true\nchangelog_update = false\n\n[[package]]\nname = \"app\"\n\
+         changelog_path = \"./CHANGELOG.md\"\nchangelog_update = true\n\
+         changelog_include = [\"derive\"]\n",
+    );
+    let violations = release_changelog::check(&fixture.workspace())
+        .unwrap_or_else(|error| panic!("the check should run, but {error}"));
+    assert!(
+        violations.is_empty(),
+        "with `changelog_update = false` in `[workspace]`, only the root changelog is written: \
+         {violations:?}"
     );
 }
 

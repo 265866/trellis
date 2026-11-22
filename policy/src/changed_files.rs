@@ -388,6 +388,13 @@ enum Role {
     Other,
 }
 
+/// Whether the file at `path`, relative to the repository root with `/` separators, is code to
+/// `trellis-policy rule-changes`: a crate's file, a deploy kit's or a Rust file, or a member's
+/// `Cargo.toml`, which is code apart from its rule settings.
+pub(crate) fn is_code(path: &str) -> bool {
+    matches!(role(path), Role::Code | Role::MemberManifest)
+}
+
 /// What the file at `path`, relative to the repository root, is. Rule names match in any case,
 /// since a case-insensitive file system finds `Clippy.toml` or `Build.rs` for the name a tool
 /// looks for; the names that make a file code or neither match exactly. A path Windows reads as

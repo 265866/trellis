@@ -44,22 +44,49 @@ const PACKAGE_KEYS: [&str; 16] = [
     "build",
 ];
 
-/// The `[package]` keys a member must inherit from `[workspace.package]`, each with why it must.
-const INHERITED_PACKAGE_KEYS: [(&str, &str); 3] = [
-    (
-        "edition",
-        "the edition decides the language and its lints, so every crate is built and linted with \
-         the workspace's",
-    ),
-    (
-        "rust-version",
-        "clippy turns off the lints for APIs newer than `rust-version`, so every crate is linted \
-         against the workspace's",
-    ),
-    (
-        "publish",
-        "a crate is published only when the workspace says so",
-    ),
+/// A `[package]` key a member must inherit from `[workspace.package]`.
+#[derive(Clone, Copy, Debug)]
+struct InheritedKey {
+    /// The key.
+    key: &'static str,
+    /// Why the member must inherit it.
+    why: &'static str,
+    /// How the workspace's value changes.
+    change: &'static str,
+}
+
+/// How a `[workspace.package]` value that the owner sets changes.
+const OWNER_CHANGES: &str = "To change it, change `[workspace.package]` in the root Cargo.toml, in a pull request of its own.";
+
+/// The `[package]` keys a member must inherit from `[workspace.package]`.
+const INHERITED_PACKAGE_KEYS: [InheritedKey; 4] = [
+    InheritedKey {
+        key: "version",
+        why: "the project shares one version, which release-plz bumps in the root Cargo.toml, a \
+              rule; it would also rewrite a crate's own `version` in the crate's Cargo.toml, which \
+              is code, so the release pull request would fail \"Rule changes stand alone\". trellis \
+              doesn't support crates versioned apart from the workspace",
+        change: "release-plz sets the workspace's version in each release pull request. Write \
+                 `version.workspace = true` in a code pull request; the crate then takes the \
+                 workspace's version from its next build.",
+    },
+    InheritedKey {
+        key: "edition",
+        why: "the edition decides the language and its lints, so every crate is built and linted \
+              with the workspace's",
+        change: OWNER_CHANGES,
+    },
+    InheritedKey {
+        key: "rust-version",
+        why: "clippy turns off the lints for APIs newer than `rust-version`, so every crate is \
+              linted against the workspace's",
+        change: OWNER_CHANGES,
+    },
+    InheritedKey {
+        key: "publish",
+        why: "a crate is published only when the workspace says so",
+        change: OWNER_CHANGES,
+    },
 ];
 
 /// The keys a target table (`[lib]`, `[[bin]]`, `[[test]]`, `[[bench]]` or `[[example]]`) may
@@ -79,8 +106,13 @@ const PLATFORM_KEYS: [&str; 3] = ["dependencies", "dev-dependencies", "build-dep
 /// setting turns off a crate's tests or doctests (`test = false`, `doctest = false`,
 /// `harness = false` outside a bench, `autotests = false`), builds code the checks don't see
 /// (`required-features`, `proc-macro`), or reads sources from outside the crate's directory. The
-/// crate's edition, `rust-version` and `publish` come from `[workspace.package]`, and so does its
-/// license when `[workspace.package]` has one. Every target's `path` stays inside the crate's
+/// crate's version, edition, `rust-version` and `publish` come from `[workspace.package]`, and so
+/// does its license when `[workspace.package]` has one.
+///
+/// A trellis project shares one version: release-plz bumps it in the root `Cargo.toml`, a rule,
+/// and a crate with a `version` of its own would get it rewritten in its `Cargo.toml`, which is
+/// code, so the release pull request would fail "Rule changes stand alone". Crates versioned apart
+/// from the workspace are outside what trellis supports. Every target's `path` stays inside the crate's
 /// directory.
 #[must_use]
 pub fn check(workspace: &Workspace) -> Vec<Violation> {
@@ -142,14 +174,13 @@ fn problems(manifest: &Table, workspace_license: Option<&Value>) -> Vec<String> 
 /// Adds what is wrong with the `[package]` table `package` to `problems`.
 fn package_problems(package: &Value, problems: &mut Vec<String>) {
     unknown_keys("[package]", package, &PACKAGE_KEYS, problems);
-    for (key, why) in INHERITED_PACKAGE_KEYS {
+    for InheritedKey { key, why, change } in INHERITED_PACKAGE_KEYS {
         let value = package.get(key);
         if !inherits(value) {
             let found = value.map_or_else(|| "missing".to_owned(), toml_file::render);
             problems.push(format!(
                 "`[package] {key}` is {found}, but it must be `{key}.workspace = true`, because \
-                 {why}. To change it, change `[workspace.package]` in the root Cargo.toml, in a \
-                 pull request of its own."
+                 {why}. {change}"
             ));
         }
     }
@@ -204,8 +235,9 @@ fn unknown(key: &str) -> String {
 mod tests {
     use super::*;
 
-    const PACKAGE: &str = "[package]\nname = \"app\"\nedition.workspace = true\n\
-                           rust-version.workspace = true\npublish.workspace = true\n";
+    const PACKAGE: &str = "[package]\nname = \"app\"\nversion.workspace = true\n\
+                           edition.workspace = true\nrust-version.workspace = true\n\
+                           publish.workspace = true\n";
 
     fn problems_in(text: &str) -> Vec<String> {
         problems(&toml_file::parse(text).unwrap(), None)
@@ -214,7 +246,7 @@ mod tests {
     #[test]
     fn the_usual_manifest_passes() {
         let text = format!(
-            "{PACKAGE}version.workspace = true\ndescription = \"An app\"\n\
+            "{PACKAGE}description = \"An app\"\n\
              repository.workspace = true\n\
              [features]\nx = []\n[dependencies]\na.workspace = true\n\
              [target.'cfg(unix)'.dependencies]\nb = \"1\"\n[dev-dependencies]\nc = \"1\"\n\
@@ -344,29 +376,70 @@ mod tests {
     }
 
     #[test]
+    fn a_version_of_its_own_ends_with_the_code_fix_not_the_owner_change() {
+        let own = |key: &str, value: &str| {
+            let text = PACKAGE.replace(
+                &format!("\n{key}.workspace = true"),
+                &format!("\n{key} = {value}"),
+            );
+            let problems = problems_in(&text);
+            assert_eq!(problems.len(), 1, "one problem for {key}: {problems:?}");
+            problems[0].clone()
+        };
+        let version = own("version", "\"0.2.0\"");
+        assert!(
+            version.contains(
+                "trellis doesn't support crates versioned apart from the workspace. \
+                              release-plz sets the workspace's version in each release pull \
+                              request. Write `version.workspace = true` in a code pull request"
+            ) && !version.contains("To change it"),
+            "release-plz owns the workspace's version, so the owner isn't told to change it: \
+             {version}"
+        );
+        let edition = own("edition", "\"2021\"");
+        assert!(
+            edition.ends_with(OWNER_CHANGES),
+            "the owner changes the workspace's edition: {edition}"
+        );
+    }
+
+    #[test]
     fn a_package_key_of_its_own_instead_of_the_workspace_one_fails() {
+        let version = "version.workspace = true\n";
         let edition = "edition.workspace = true\n";
         let rust_version = "rust-version.workspace = true\n";
         let publish = "publish.workspace = true\n";
         for (keys, key) in [
             (
-                format!("edition = \"2015\"\n{rust_version}{publish}"),
+                format!("version = \"0.1.0\"\n{edition}{rust_version}{publish}"),
+                "`[package] version` is \"0.1.0\", but it must be `version.workspace = true`",
+            ),
+            (
+                format!("version = {{ workspace = false }}\n{edition}{rust_version}{publish}"),
+                "`[package] version` is { workspace = false }",
+            ),
+            (
+                format!("{edition}{rust_version}{publish}"),
+                "`[package] version` is missing",
+            ),
+            (
+                format!("{version}edition = \"2015\"\n{rust_version}{publish}"),
                 "`[package] edition`",
             ),
             (
-                format!("{edition}rust-version = \"1.0\"\n{publish}"),
+                format!("{version}{edition}rust-version = \"1.0\"\n{publish}"),
                 "`[package] rust-version`",
             ),
             (
-                format!("{edition}{rust_version}publish = true\n"),
+                format!("{version}{edition}{rust_version}publish = true\n"),
                 "`[package] publish`",
             ),
             (
-                format!("{rust_version}{publish}"),
+                format!("{version}{rust_version}{publish}"),
                 "`[package] edition` is missing",
             ),
             (
-                format!("{edition}{rust_version}"),
+                format!("{version}{edition}{rust_version}"),
                 "`[package] publish` is missing",
             ),
         ] {
