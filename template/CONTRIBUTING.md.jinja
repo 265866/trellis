@@ -69,12 +69,14 @@ rustfmt, and the nightly the custom lints build on.
 
 `just web-install` fails when a `node_modules/.bin`, in `crates/{{ crate_name }}/web` or in a
 directory above it, holds a `bun` or `bunx` command, and the image's build fails when the web UI's
-own does. `bun run` looks there before the Bun you installed, so the web UI's scripts would run on
-that Bun instead. In a directory above, delete that `node_modules`. In the web UI's own,
-`bun why bun` shows which package asks for it. When it is only a peer dependency that an older Bun
-wrote into `bun.lock`, delete `bun.lock` and `node_modules`, where Bun otherwise keeps the package,
+own `node_modules/.bin` holds one. `bun run` looks there before the Bun you installed, so the web
+UI's scripts would run on that Bun instead. In a directory above, delete that `node_modules`. In
+the web UI's own, run `bun why bun`. When it finds no package, the command is left from an earlier
+install, which Bun keeps, so delete `node_modules`. When it names a package that asks for `bun`
+only as a peer, an older Bun wrote that into `bun.lock`, so delete `bun.lock` and `node_modules`
 and run `bun install` with the Bun you installed, which leaves that peer out. That also moves every
-other package to the newest version its range allows, so read the lockfile's diff.
+other package to the newest version its range allows, so read the lockfile's diff. When it names a
+package that depends on `bun` outright, remove that package with `bun remove`.
 {%- endif %}
 
 ### Editors
