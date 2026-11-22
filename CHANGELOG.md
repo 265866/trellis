@@ -6,6 +6,24 @@ part lists what a project's owner must do around the update: a rule that can fla
 a setting to change, or a step to do by hand. [CONTRIBUTING.md](CONTRIBUTING.md#release-trellis)
 has the versioning rule.
 
+## v0.19.1
+
+### Fixed
+
+- A framework's macro listed in `constructor_macros` now passes `just dylint` with that entry
+  alone. `inventory::submit!`, which GPUI's `actions!` and `#[derive(Action)]` expand, writes an
+  `allow(non_upper_case_globals)` around the constructor it places, and `suppression_policy`
+  refused it unless `inventory` was also in `trusted_macro_crates`. A lint level such a macro
+  writes around its own constructor is now left to `code_before_main`: it passes when the macro is
+  listed, and otherwise only `code_before_main` reports the call, once. A level that names a lint
+  group or `code_before_main`, or sits where something has turned `code_before_main` off, is
+  checked as before, so the change hides nothing else.
+- The generated `CONTRIBUTING.md` and the `constructor_macros` comment in `dylint.toml` say that
+  GPUI places a constructor only for an action it registers: give each action
+  `#[action(no_register)]`, and the project needs no entry and the lint stays strict, at the cost
+  of invoking the action by name or from a keymap file. GPUI's `register_action!` always places
+  one.
+
 ## v0.19.0
 
 ### Action required in projects
