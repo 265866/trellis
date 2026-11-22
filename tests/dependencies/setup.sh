@@ -349,10 +349,13 @@ pub(crate) fn retries() -> u32 {
 }
 EOF
 
+# thiserror writes a hidden `AsDisplay` call at each message's span, so `foreign_doc_hidden` must
+# skip it for a bare `{0}`, a bare `{section}` and a `{0}` in text alike.
 cat >$core/src/settings_error.rs <<'EOF'
 //! Why the settings couldn't be read.
 
 use std::io;
+use std::num::ParseIntError;
 use std::string::FromUtf8Error;
 
 /// Why the settings couldn't be read.
@@ -380,10 +383,13 @@ pub enum SettingsError {
     /// The settings set a section that only tests read.
     #[error("the section {0:>5} is read only when cfg!(test) holds")]
     TestSection(String),
-    /// The settings file isn't UTF-8. The message is the source's own, a bare positional field.
+    /// The settings file isn't UTF-8.
     #[error("{0}")]
     Encoding(#[from] FromUtf8Error),
-    /// The settings name a section nobody knows. The message is a bare named field.
+    /// The settings hold a number that doesn't parse.
+    #[error("the settings hold a bad number: {0}")]
+    Number(#[from] ParseIntError),
+    /// The settings name a section nobody knows.
     #[error("{section}")]
     UnknownSection {
         /// The section the settings name.
