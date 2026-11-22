@@ -114,12 +114,21 @@ changelog:
 # run can pass first; tagging it would release changes the notes don't list. GitHub refuses a tag
 # that exists, so of two runs that race, the second skips. The tag is annotated, as the ones made
 # by hand were, and the release's notes are the section. A rerun on the commit it tagged publishes
-# the release a failed run missed; on any other commit it does nothing.
+# the release a failed run missed; on any other commit it does nothing. That includes a commit a
+# newer tag already holds, whose run finished after a later commit's run tagged, so its
+# CHANGELOG.md still names an older version.
 #
 # Tags and releases the version `just changelog` prints.
 release:
     #!/usr/bin/env bash
     set -euo pipefail
+    latest=$(git tag --list 'v*' --sort=-version:refname \
+      | grep --extended-regexp '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' | head -n 1) || true
+    if [ -n "$latest" ] && [ "$(git rev-parse "$latest^{commit}")" != "$(git rev-parse HEAD)" ] \
+      && git merge-base --is-ancestor HEAD "$latest"; then
+      echo "$latest, tagged on a later commit, already holds this one, so there's nothing to release."
+      exit 0
+    fi
     version=$(just changelog)
     if [ -z "$version" ]; then
       echo "CHANGELOG.md's newest heading is Unreleased, so there's nothing to release."

@@ -3,7 +3,7 @@
 # v0.1.0 and v0.4.0, with a fake gh that logs each call. `changelog` must accept `Unreleased`, the
 # newest tag and each next version the bump rule allows, and reject the rest; `release` must tag
 # and publish a new version once, publish only the release a failed run missed, and do nothing for
-# a version another commit has, or that another run tagged first.
+# a version another commit has, that another run tagged first, or that a newer tag holds.
 set -euo pipefail
 # Keeps the user's git config, such as commit signing or hooks, out of the scratch repository.
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
@@ -136,6 +136,8 @@ release missing ''
 
 changelog v0.4.0 '- A note on a later commit.'
 release missing ''
+# A commit before the one that adds the next section, which that version's tag will hold.
+held=$(git rev-parse HEAD)
 
 changelog v0.5.0 "$asks
 
@@ -170,4 +172,10 @@ release exists 'release view v0.5.0'
 
 commit commit --quiet --allow-empty --message 'A later commit'
 release missing ''
+
+# The earlier commit's run finishes after v0.5.0 is tagged on a later commit: its CHANGELOG.md
+# still names v0.4.0, older than the newest tag, and it must do nothing rather than fail.
+git checkout --quiet "$held"
+release missing ''
+git checkout --quiet main
 echo "just changelog and just release behave as expected."
