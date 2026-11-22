@@ -59,6 +59,14 @@ impl AcceptedLicenses {
         Ok(Self { licensees })
     }
 
+    /// These licenses and `licensees` together, as accepted for one npm package.
+    #[must_use]
+    pub(crate) fn with(&self, licensees: &[Licensee]) -> Self {
+        let mut all = self.licensees.clone();
+        all.extend_from_slice(licensees);
+        Self { licensees: all }
+    }
+
     /// Judges the SPDX license expression `expression`.
     ///
     /// The expression is parsed in the `spdx` crate's strict mode, which fails closed: license

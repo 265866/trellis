@@ -5,9 +5,12 @@
 //! The `trellis-policy check [--manifest-path <Cargo.toml>]` command runs every [`Rule`] on a
 //! workspace. The `trellis-policy rule-changes <base> [--head <commit>]` command keeps changes to
 //! the rules and changes to the code they check in separate pull requests. The
-//! `trellis-policy web-notices <about.toml> <node_modules> <output>` command writes the license
-//! notices of the npm packages a web UI installs, as [`WebNotices`], and fails when a package's
-//! license isn't one of the [`AcceptedLicenses`].
+//! `trellis-policy web-notices <about.toml> <web-licenses.toml> <node_modules> <output>` command
+//! writes the license notices of the npm packages a web UI installs, as [`WebNotices`], and fails
+//! when a package's license isn't one of the [`AcceptedLicenses`] or of the [`WebLicenses`]
+//! accepted for that package. The `trellis-policy stale-web-licenses <web-licenses.toml>
+//! <node_modules>` command fails on an entry of [`WebLicenses`] for a package that isn't
+//! installed.
 
 mod accepted_licenses;
 pub mod agent_files;
@@ -44,6 +47,7 @@ mod tool_config;
 mod unidentified_package;
 mod upstream;
 mod violation;
+mod web_licenses;
 mod web_notices;
 mod workspace;
 pub mod workspace_shape;
@@ -56,5 +60,6 @@ pub use policy_error::PolicyError;
 pub use rule::Rule;
 pub use unidentified_package::UnidentifiedPackage;
 pub use violation::Violation;
+pub use web_licenses::WebLicenses;
 pub use web_notices::WebNotices;
 pub use workspace::Workspace;

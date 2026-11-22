@@ -710,11 +710,14 @@ update:
 # missing bun.lock and a package that provides a `bun` command, and read the app's bunfig.toml. A
 # library's `just dylint` must delete a lint library built from another trellis commit and keep one
 # built from this one. After `ci`, an about.toml entry for a crate the graph doesn't hold must pass
-# `just notices` and fail `just stale-licenses`, and a deploy kit in the root `deploy/` and one in
-# the first crate's `deploy/` must pass `just policy` and `just rule-changes` beside a code
-# change, the root kit printing nothing more than no kit, while a script shellcheck faults in
-# either fails `just policy`. A `target` runs `test` and `build-release` for that target, as a
-# project's CI does for the target a release ships.
+# `just notices` and fail `just stale-licenses`. With a web UI, an npm package under a license
+# `accepted` lacks must fail `just notices` until web-licenses.toml accepts it for that package,
+# and an entry there for a package not installed must pass `just notices` and fail
+# `just stale-licenses`. A deploy kit in the root `deploy/` and one in the first crate's `deploy/`
+# must pass `just policy` and `just rule-changes` beside a code change, the root kit printing
+# nothing more than no kit, while a script shellcheck faults in either fails `just policy`. A
+# `target` runs `test` and `build-release` for that target, as a project's CI does for the target
+# a release ships.
 #
 # Generates a project of one kind and runs its checks.
 template kind recipes="ci" publish="false" web="false" target="":
@@ -821,6 +824,42 @@ template kind recipes="ci" publish="false" web="false" target="":
       cp "$out/about.toml" about.toml
       if [ "$(uname -s)" = Linux ]; then just stale-licenses; fi
       echo "just notices passed an about.toml entry ahead of its crate, and just stale-licenses named it."
+    fi
+    if [[ "{{ recipes }}" = ci || " {{ recipes }} " = *" notices "* ]] && [ "{{ web }}" = true ]; then
+      # A license accepted for one npm package in web-licenses.toml, and in a rules pull request
+      # before the code pull request adds the package, as for a crate. The package stands in for a
+      # font under a license `accepted` lacks; a frozen install leaves it in place.
+      cp web-licenses.toml "$out/web-licenses.toml"
+      font="crates/demo_{{ kind }}/web/node_modules/@demo/font"
+      mkdir -p "$font"
+      printf '{"name": "@demo/font", "version": "1.0.0", "license": "OFL-1.1"}\n' > "$font/package.json"
+      if just notices > "$out/web-notices.txt" 2>&1 \
+        || ! grep --quiet '^error: @demo/font 1.0.0 .* has the license `OFL-1.1`, which isn.t accepted' "$out/web-notices.txt"; then
+        cat "$out/web-notices.txt" >&2
+        echo "error: just notices passed an npm package whose license nothing accepts" >&2
+        exit 1
+      fi
+      entry() { printf '\n[[package]]\nname = "%s"\nlicenses = ["OFL-1.1"]\nreason = "%s"\n' "$1" "$2" >> web-licenses.toml; }
+      entry @demo/font "A font the web UI ships."
+      just notices
+      grep --quiet --line-regexp --fixed-strings '@demo/font 1.0.0: OFL-1.1' target/THIRD-PARTY-LICENSES-WEB.txt \
+        || { echo "error: the web notices don't list the package web-licenses.toml accepts" >&2; exit 1; }
+      entry @demo/gone "A font the web UI dropped."
+      just notices
+      if [ "$(uname -s)" = Linux ]; then
+        if just stale-licenses > "$out/stale.txt" 2>&1 \
+          || ! grep --quiet '^error: web-licenses.toml accepts licenses for @demo/gone, which isn.t installed' "$out/stale.txt" \
+          || grep --quiet 'for @demo/font,' "$out/stale.txt"; then
+          cat "$out/stale.txt" >&2
+          echo "error: just stale-licenses didn't name only the web-licenses.toml entry for a package not installed" >&2
+          exit 1
+        fi
+      fi
+      rm -r "$font"
+      cp "$out/web-licenses.toml" web-licenses.toml
+      just web-notices
+      if [ "$(uname -s)" = Linux ]; then just stale-licenses; fi
+      echo "just notices passed a web-licenses.toml entry for its package alone and ahead of it, and just stale-licenses named it."
     fi
     if [ "{{ recipes }}" = ci ] && [ "{{ kind }}" = binary ] && [ "$(uname -s)" = Linux ]; then
       # The release build's own steps, run for this machine's target, must archive the program, its

@@ -7,6 +7,10 @@ name: Advisories
 # the graph: `just notices` lets such an entry through, so a license can be accepted before its
 # crate.
 {%- endif %}
+{%- if web_ui %}
+# `just stale-licenses` installs the web UI's packages and flags an entry in web-licenses.toml
+# for one that isn't installed, for the same reason.
+{%- endif %}
 on:
   schedule:
     - cron: "0 6 * * 1"

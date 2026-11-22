@@ -1,4 +1,5 @@
-//! `trellis-policy web-notices` on `node_modules` directories laid out as Bun installs them.
+//! `trellis-policy web-notices` and `trellis-policy stale-web-licenses` on `node_modules`
+//! directories laid out as Bun installs them.
 
 use std::ffi::OsStr;
 #[cfg(unix)]
@@ -14,20 +15,26 @@ const ABOUT: &str = "accepted = [\"Apache-2.0\", \"BSD-2-Clause\", \"BSD-3-Claus
                      \"MIT\", \"Unicode-3.0\", \"Zlib\"]\n\n\
                      targets = [\"x86_64-unknown-linux-gnu\"]\n";
 
-/// A web UI's install in a temporary directory, deleted on drop: `about.toml`, `node_modules/`,
-/// and the notices the command writes, `notices.txt`.
+/// The `web-licenses.toml` of a generated project, which accepts nothing beyond `about.toml`.
+const WEB_LICENSES: &str = "# Licenses accepted for one npm package each, beyond `accepted` in \
+                            about.toml.\n";
+
+/// A web UI's install in a temporary directory, deleted on drop: `about.toml`,
+/// `web-licenses.toml`, `node_modules/`, and the notices the command writes, `notices.txt`.
 struct Install {
     /// The temporary directory.
     directory: TempDir,
 }
 
 impl Install {
-    /// An install with the generated project's `about.toml` and an empty `node_modules/`.
+    /// An install with the generated project's `about.toml` and `web-licenses.toml`, and an empty
+    /// `node_modules/`.
     fn new() -> Self {
         let install = Self {
             directory: TempDir::new().expect("the temporary directory should be created"),
         };
         install.write("about.toml", ABOUT);
+        install.write("web-licenses.toml", WEB_LICENSES);
         fs::create_dir(install.path("node_modules")).expect("node_modules should be created");
         install
     }
@@ -77,17 +84,34 @@ impl Install {
         names
     }
 
-    /// Runs `trellis-policy web-notices about.toml node_modules notices.txt` outside CI.
+    /// Runs `trellis-policy web-notices about.toml web-licenses.toml node_modules notices.txt`
+    /// outside CI.
     fn run(&self) -> Run {
         self.run_under(Ci::Local)
     }
 
-    /// Runs `trellis-policy web-notices about.toml node_modules notices.txt` under `ci`.
+    /// Runs `trellis-policy web-notices about.toml web-licenses.toml node_modules notices.txt`
+    /// under `ci`.
     fn run_under(&self, ci: Ci) -> Run {
         run(
             self.directory.path(),
-            &["web-notices", "about.toml", "node_modules", "notices.txt"],
+            &[
+                "web-notices",
+                "about.toml",
+                "web-licenses.toml",
+                "node_modules",
+                "notices.txt",
+            ],
             ci,
+        )
+    }
+
+    /// Runs `trellis-policy stale-web-licenses web-licenses.toml node_modules` outside CI.
+    fn run_stale(&self) -> Run {
+        run(
+            self.directory.path(),
+            &["stale-web-licenses", "web-licenses.toml", "node_modules"],
+            Ci::Local,
         )
     }
 
@@ -255,7 +279,12 @@ fn the_notices_have_a_heading_then_an_entry_per_package() {
     );
     assert_eq!(
         install.listing(),
-        ["about.toml", "node_modules", "notices.txt"],
+        [
+            "about.toml",
+            "node_modules",
+            "notices.txt",
+            "web-licenses.toml"
+        ],
         "nothing but the notices is left beside them"
     );
 }
@@ -579,8 +608,8 @@ fn a_place_without_a_usable_package_json_is_refused() {
              if an installer wrote it.",
             "error: node_modules/manifest-directory has a package.json that isn't a file, so its \
              license can't be checked.",
-            "7 of 8 npm package(s) under node_modules can't be accepted under about.toml, so \
-             notices.txt wasn't written.",
+            "7 of 8 npm package(s) under node_modules can't be accepted under about.toml and \
+             web-licenses.toml, so notices.txt wasn't written.",
         ],
     );
     assert_eq!(install.notices(), None, "no notices are written");
@@ -735,7 +764,8 @@ fn every_package_whose_license_isnt_accepted_fails_and_nothing_is_written() {
         "{\"name\": \"@scope/none\", \"version\": \"2.0.0\"}\n",
     );
     let run = install.run();
-    let add = "If that license is acceptable, add its SPDX id to `accepted` in about.toml; \
+    let add = "If that license is acceptable for every package, add its SPDX id to `accepted` in \
+               about.toml; if only for this one, accept it for the package in web-licenses.toml; \
                otherwise drop the package.";
     let drop = "No entry in `accepted` in about.toml can accept it, so drop the package.";
     run.assert_reports(
@@ -762,8 +792,8 @@ fn every_package_whose_license_isnt_accepted_fails_and_nothing_is_written() {
                 "error: @scope/none 2.0.0 in node_modules/@scope/none states no license in its \
                  package.json. {drop}"
             ),
-            "6 of 7 npm package(s) under node_modules can't be accepted under about.toml, so \
-             notices.txt wasn't written.",
+            "6 of 7 npm package(s) under node_modules can't be accepted under about.toml and \
+             web-licenses.toml, so notices.txt wasn't written.",
         ],
     );
     assert_eq!(
@@ -796,15 +826,30 @@ fn a_usage_error_exits_with_2() {
     let install = Install::new();
     for arguments in [
         &["web-notices"][..],
-        &["web-notices", "about.toml", "node_modules"],
+        &["web-notices", "about.toml", "node_modules", "notices.txt"],
         &[
             "web-notices",
             "about.toml",
+            "web-licenses.toml",
             "node_modules",
             "notices.txt",
             "extra",
         ],
-        &["web-notices", "--about", "node_modules", "notices.txt"],
+        &[
+            "web-notices",
+            "--about",
+            "web-licenses.toml",
+            "node_modules",
+            "notices.txt",
+        ],
+        &["stale-web-licenses", "web-licenses.toml"],
+        &[
+            "stale-web-licenses",
+            "web-licenses.toml",
+            "node_modules",
+            "extra",
+        ],
+        &["stale-web-licenses", "--licenses", "node_modules"],
     ] {
         let run = run(install.directory.path(), arguments, Ci::Local);
         assert_eq!(
@@ -813,8 +858,12 @@ fn a_usage_error_exits_with_2() {
             "{arguments:?} is a usage error: {run:#?}"
         );
         assert!(
-            run.stderr
-                .contains("trellis-policy web-notices <about.toml> <node_modules> <output>"),
+            run.stderr.contains(
+                "trellis-policy web-notices <about.toml> <web-licenses.toml> <node_modules> \
+                 <output>"
+            ) && run
+                .stderr
+                .contains("trellis-policy stale-web-licenses <web-licenses.toml> <node_modules>"),
             "{arguments:?} prints the usage: {run:#?}"
         );
     }
@@ -827,6 +876,7 @@ fn an_argument_that_isnt_utf8_is_a_usage_error() {
     let arguments = [
         OsStr::new("web-notices"),
         OsStr::from_bytes(b"about\xff.toml"),
+        OsStr::new("web-licenses.toml"),
         OsStr::new("node_modules"),
         OsStr::new("notices.txt"),
     ];
@@ -896,6 +946,7 @@ fn a_read_error_exits_with_2() {
         &[
             "web-notices",
             "about.toml",
+            "web-licenses.toml",
             "node_modules",
             "missing/notices.txt",
         ],
@@ -923,4 +974,185 @@ fn a_directory_name_that_isnt_utf8_is_a_read_error() {
              be named",
         ],
     );
+}
+
+#[test]
+fn an_entry_accepts_licenses_for_every_version_of_its_package_alone() {
+    let install = Install::new();
+    install.write(
+        "web-licenses.toml",
+        &format!(
+            "{WEB_LICENSES}\n[[package]]\nname = \"@fontsource/inter\"\nlicenses = [\"OFL-1.1\"]\n\
+             reason = \"A font the web UI ships.\"\n\n[[package]]\nname = \"mixed\"\n\
+             licenses = [\"MPL-2.0\"]\nreason = \"Unmodified, so its source stays available.\"\n\n\
+             [[package]]\nname = \"not-installed-yet\"\nlicenses = [\"CC0-1.0\"]\n\
+             reason = \"Lands in the next pull request.\"\n"
+        ),
+    );
+    install.package(
+        "node_modules/@fontsource/inter",
+        "@fontsource/inter",
+        "5.0.0",
+        "\"OFL-1.1\"",
+    );
+    install.package(
+        "node_modules/a/node_modules/@fontsource/inter",
+        "@fontsource/inter",
+        "4.5.0",
+        "\"OFL-1.1\"",
+    );
+    install.package("node_modules/a", "a", "1.0.0", "\"MIT\"");
+    install.package(
+        "node_modules/mixed",
+        "mixed",
+        "2.0.0",
+        "\"(MPL-2.0 OR GPL-3.0-only) AND MIT\"",
+    );
+    install.run().assert_reports(
+        0,
+        &["Wrote the licenses of 4 npm package(s) under node_modules to notices.txt."],
+    );
+    assert_eq!(
+        install.entries(),
+        [
+            "@fontsource/inter 4.5.0: OFL-1.1",
+            "@fontsource/inter 5.0.0: OFL-1.1",
+            "a 1.0.0: MIT",
+            "mixed 2.0.0: (MPL-2.0 OR GPL-3.0-only) AND MIT",
+        ],
+        "both versions of the font, and the package whose expression needs its entry and \
+         `accepted` together, are accepted, beside an entry for a package not installed yet"
+    );
+
+    install.package("node_modules/inter", "inter", "1.0.0", "\"OFL-1.1\"");
+    install.package(
+        "node_modules/@fontsource/roboto",
+        "@fontsource/roboto",
+        "5.0.0",
+        "\"OFL-1.1\"",
+    );
+    install.package(
+        "node_modules/b",
+        "b",
+        "1.0.0",
+        "\"MPL-2.0 AND GPL-3.0-only\"",
+    );
+    let run = install.run();
+    run.assert_reports(
+        1,
+        &[
+            "error: inter 1.0.0 in node_modules/inter has the license `OFL-1.1`, which isn't \
+             accepted.",
+            "error: @fontsource/roboto 5.0.0 in node_modules/@fontsource/roboto has the license \
+             `OFL-1.1`, which isn't accepted.",
+            "error: b 1.0.0 in node_modules/b has the license `MPL-2.0 AND GPL-3.0-only`",
+            "3 of 7 npm package(s) under node_modules can't be accepted",
+        ],
+    );
+    assert!(
+        !run.stdout.contains("mixed") && !run.stdout.contains("@fontsource/inter"),
+        "the packages the entries name stay accepted: {run:#?}"
+    );
+    assert_eq!(install.notices(), None, "no notices are left");
+}
+
+#[test]
+fn a_malformed_web_licenses_file_is_a_read_error() {
+    for (web_licenses, message) in [
+        ("accepted = [\"OFL-1.1\"]\n", "unknown key `accepted`"),
+        (
+            "[[package]]\nlicenses = [\"OFL-1.1\"]\nreason = \"A font.\"\n",
+            "`package` entry 1 has no `name`",
+        ),
+        (
+            "[[package]]\nname = \"a\"\nlicenses = [\"OFL\"]\nreason = \"A font.\"\n",
+            "has \"OFL\" in `licenses`, which isn't an SPDX license id",
+        ),
+        (
+            "[[package]]\nname = \"a\"\nlicenses = [\"OFL-1.1\"]\nreason = \"\"\n",
+            "`package` entry 1 has the reason \"\"",
+        ),
+        ("[[package]\n", "web-licenses.toml isn't valid TOML"),
+    ] {
+        let install = Install::new();
+        install.package("node_modules/a", "a", "1.0.0", "\"MIT\"");
+        install.write("web-licenses.toml", web_licenses);
+        install.write("notices.txt", "notices from an earlier run\n");
+        install
+            .run()
+            .assert_reports(2, &["error: web-licenses.toml", message]);
+        assert_eq!(install.notices(), None, "no notices are left");
+        install
+            .run_stale()
+            .assert_reports(2, &["error: web-licenses.toml", message]);
+    }
+
+    let missing = Install::new();
+    fs::remove_file(missing.path("web-licenses.toml")).expect("the file should be removed");
+    missing
+        .run()
+        .assert_reports(2, &["error: couldn't read web-licenses.toml: "]);
+    missing
+        .run_stale()
+        .assert_reports(2, &["error: couldn't read web-licenses.toml: "]);
+}
+
+#[test]
+fn stale_web_licenses_names_each_entry_for_a_package_not_installed() {
+    let install = Install::new();
+    install.package(
+        "node_modules/@fontsource/inter",
+        "@fontsource/inter",
+        "5.0.0",
+        "\"OFL-1.1\"",
+    );
+    install.run_stale().assert_reports(
+        0,
+        &["Each of the 0 entries in web-licenses.toml names an npm package"],
+    );
+
+    install.write(
+        "web-licenses.toml",
+        &format!(
+            "{WEB_LICENSES}\n[[package]]\nname = \"@fontsource/inter\"\nlicenses = [\"OFL-1.1\"]\n\
+             reason = \"A font the web UI ships.\"\n"
+        ),
+    );
+    install.run_stale().assert_reports(
+        0,
+        &[
+            "Each of the 1 entries in web-licenses.toml names an npm package installed under \
+           node_modules.",
+        ],
+    );
+
+    install.write(
+        "web-licenses.toml",
+        &format!(
+            "{WEB_LICENSES}\n[[package]]\nname = \"@fontsource/roboto\"\nlicenses = [\"OFL-1.1\"]\n\
+             reason = \"A font the web UI dropped.\"\n\n[[package]]\nname = \"@fontsource/inter\"\n\
+             licenses = [\"OFL-1.1\"]\nreason = \"A font the web UI ships.\"\n\n[[package]]\n\
+             name = \"inter\"\nlicenses = [\"OFL-1.1\"]\nreason = \"Misspelled.\"\n"
+        ),
+    );
+    let run = install.run_stale();
+    run.assert_reports(
+        1,
+        &[
+            "error: web-licenses.toml accepts licenses for @fontsource/roboto, which isn't \
+             installed under node_modules. Remove the entry in a rules pull request, unless the \
+             code pull request that adds the package is still open; land that instead.",
+            "error: web-licenses.toml accepts licenses for inter, which isn't installed",
+            "2 of 3 entries in web-licenses.toml name no installed npm package.",
+        ],
+    );
+    assert!(
+        !run.stdout.contains("for @fontsource/inter,"),
+        "the installed package's entry isn't stale: {run:#?}"
+    );
+
+    fs::remove_dir_all(install.path("node_modules")).expect("node_modules should be removed");
+    install
+        .run_stale()
+        .assert_reports(2, &["error: couldn't read node_modules: "]);
 }
