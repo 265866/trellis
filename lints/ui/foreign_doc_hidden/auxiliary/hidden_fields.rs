@@ -58,3 +58,21 @@ pub struct Remote {
     #[doc(hidden)]
     pub own: u32,
 }
+
+/// A level with a variant hidden from the docs.
+pub enum Level {
+    /// The documented variant.
+    Low,
+    /// The hidden variant.
+    #[doc(hidden)]
+    Secret,
+}
+
+/// A type with a constant hidden from the docs.
+pub struct Limits;
+
+impl Limits {
+    /// The hidden constant.
+    #[doc(hidden)]
+    pub const HIDDEN: u32 = 9;
+}

@@ -115,6 +115,7 @@ fn main() {
     let _ = nested_wildcards(None, Err(()));
     let _ = tuple_structs(Wrapper(1), Ok(std::num::Wrapping(2)), None);
     let _ = unit_and_braced_structs(Err(TooDeep), Span { start: 1 }, 0..1);
+    let _ = (through_an_alias(IntErrorKind::Zero), IntErrorKind::Zero.describe());
     let _ = struct_constructors_outside_match(None, std::marker::PhantomPinned, Err(()));
 }
 
@@ -195,5 +196,30 @@ fn struct_constructors_outside_match(
     }
     match pinned {
         std::marker::PhantomPinned => value,
+    }
+}
+
+type KindAlias = IntErrorKind;
+
+fn through_an_alias(kind: IntErrorKind) -> &'static str {
+    // Flagged: `KindAlias::Empty` names `Empty`, so the help leaves it out.
+    match kind {
+        KindAlias::Empty => "empty",
+        IntErrorKind::Zero => "zero",
+        _ => "other",
+    }
+}
+
+trait Describe {
+    fn describe(&self) -> &'static str;
+}
+
+impl Describe for IntErrorKind {
+    fn describe(&self) -> &'static str {
+        // Flagged: a variant named only through `Self::` still makes the match one to check.
+        match self {
+            Self::Empty => "empty",
+            _ => "other",
+        }
     }
 }

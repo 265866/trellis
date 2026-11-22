@@ -96,7 +96,7 @@ LL |     r#helper();
    = help: use the crate's documented API instead, as the Google Rust Style Guide's "Do not access items marked `#[doc(hidden)]` that you don't own" asks
 
 warning: `hidden_fields::Context::hidden` is `#[doc(hidden)]` in `hidden_fields`
-  --> $DIR/foreign_doc_hidden.rs:96:9
+  --> $DIR/foreign_doc_hidden.rs:98:9
    |
 LL |         hidden: 2,
    |         ^^^^^^
@@ -104,7 +104,7 @@ LL |         hidden: 2,
    = help: use the crate's documented API instead, as the Google Rust Style Guide's "Do not access items marked `#[doc(hidden)]` that you don't own" asks
 
 warning: `hidden_fields::Context::hidden` is `#[doc(hidden)]` in `hidden_fields`
-  --> $DIR/foreign_doc_hidden.rs:104:26
+  --> $DIR/foreign_doc_hidden.rs:106:26
    |
 LL |     let hidden = context.hidden + (&context).hidden;
    |                          ^^^^^^
@@ -112,7 +112,7 @@ LL |     let hidden = context.hidden + (&context).hidden;
    = help: use the crate's documented API instead, as the Google Rust Style Guide's "Do not access items marked `#[doc(hidden)]` that you don't own" asks
 
 warning: `hidden_fields::Context::hidden` is `#[doc(hidden)]` in `hidden_fields`
-  --> $DIR/foreign_doc_hidden.rs:104:46
+  --> $DIR/foreign_doc_hidden.rs:106:46
    |
 LL |     let hidden = context.hidden + (&context).hidden;
    |                                              ^^^^^^
@@ -120,7 +120,7 @@ LL |     let hidden = context.hidden + (&context).hidden;
    = help: use the crate's documented API instead, as the Google Rust Style Guide's "Do not access items marked `#[doc(hidden)]` that you don't own" asks
 
 warning: `hidden_fields::Wrapper::0` is `#[doc(hidden)]` in `hidden_fields`
-  --> $DIR/foreign_doc_hidden.rs:106:30
+  --> $DIR/foreign_doc_hidden.rs:108:30
    |
 LL |     let wrapped = Wrapper(3).0;
    |                              ^
@@ -128,7 +128,7 @@ LL |     let wrapped = Wrapper(3).0;
    = help: use the crate's documented API instead, as the Google Rust Style Guide's "Do not access items marked `#[doc(hidden)]` that you don't own" asks
 
 warning: `hidden_fields::Event::Order::seed` is `#[doc(hidden)]` in `hidden_fields`
-  --> $DIR/foreign_doc_hidden.rs:108:66
+  --> $DIR/foreign_doc_hidden.rs:110:66
    |
 LL |     let Event::Order { shelf, seed } = (Event::Order { shelf: 4, seed: 5 });
    |                                                                  ^^^^
@@ -136,7 +136,7 @@ LL |     let Event::Order { shelf, seed } = (Event::Order { shelf: 4, seed: 5 })
    = help: use the crate's documented API instead, as the Google Rust Style Guide's "Do not access items marked `#[doc(hidden)]` that you don't own" asks
 
 warning: `hidden_fields::Event::Order::seed` is `#[doc(hidden)]` in `hidden_fields`
-  --> $DIR/foreign_doc_hidden.rs:108:31
+  --> $DIR/foreign_doc_hidden.rs:110:31
    |
 LL |     let Event::Order { shelf, seed } = (Event::Order { shelf: 4, seed: 5 });
    |                               ^^^^
@@ -144,7 +144,7 @@ LL |     let Event::Order { shelf, seed } = (Event::Order { shelf: 4, seed: 5 })
    = help: use the crate's documented API instead, as the Google Rust Style Guide's "Do not access items marked `#[doc(hidden)]` that you don't own" asks
 
 warning: `hidden_root::api::internal` is `#[doc(hidden)]` in `hidden_root`
-  --> $DIR/foreign_doc_hidden.rs:146:23
+  --> $DIR/foreign_doc_hidden.rs:148:23
    |
 LL | use hidden_root::api::internal;
    |                       ^^^^^^^^
@@ -152,7 +152,7 @@ LL | use hidden_root::api::internal;
    = help: use the crate's documented API instead, as the Google Rust Style Guide's "Do not access items marked `#[doc(hidden)]` that you don't own" asks
 
 warning: `hidden_root::internals` is `#[doc(hidden)]` in `hidden_root`
-  --> $DIR/foreign_doc_hidden.rs:147:18
+  --> $DIR/foreign_doc_hidden.rs:149:18
    |
 LL | use hidden_root::internals::helper as root_helper;
    |                  ^^^^^^^^^
@@ -160,7 +160,7 @@ LL | use hidden_root::internals::helper as root_helper;
    = help: use the crate's documented API instead, as the Google Rust Style Guide's "Do not access items marked `#[doc(hidden)]` that you don't own" asks
 
 warning: `hidden_root::internals` is `#[doc(hidden)]` in `hidden_root`
-  --> $DIR/foreign_doc_hidden.rs:148:17
+  --> $DIR/foreign_doc_hidden.rs:150:17
    |
 LL | use root_alias::internals::helper as aliased_helper;
    |                 ^^^^^^^^^
@@ -168,7 +168,7 @@ LL | use root_alias::internals::helper as aliased_helper;
    = help: use the crate's documented API instead, as the Google Rust Style Guide's "Do not access items marked `#[doc(hidden)]` that you don't own" asks
 
 warning: `hidden_root::api::internal` is `#[doc(hidden)]` in `hidden_root`
-  --> $DIR/foreign_doc_hidden.rs:156:31
+  --> $DIR/foreign_doc_hidden.rs:158:31
    |
 LL |     total + hidden_root::api::internal() + internal() + root_helper()
    |                               ^^^^^^^^
@@ -176,12 +176,36 @@ LL |     total + hidden_root::api::internal() + internal() + root_helper()
    = help: use the crate's documented API instead, as the Google Rust Style Guide's "Do not access items marked `#[doc(hidden)]` that you don't own" asks
 
 warning: `hidden_root::api::internal` is `#[doc(hidden)]` in `hidden_root`
-  --> $DIR/foreign_doc_hidden.rs:156:44
+  --> $DIR/foreign_doc_hidden.rs:158:44
    |
 LL |     total + hidden_root::api::internal() + internal() + root_helper()
    |                                            ^^^^^^^^
    |
    = help: use the crate's documented API instead, as the Google Rust Style Guide's "Do not access items marked `#[doc(hidden)]` that you don't own" asks
 
-warning: 23 warnings emitted
+warning: `hidden_fields::Level::Secret` is `#[doc(hidden)]` in `hidden_fields`
+  --> $DIR/foreign_doc_hidden.rs:167:21
+   |
+LL |         LevelAlias::Secret => 1,
+   |                     ^^^^^^
+   |
+   = help: use the crate's documented API instead, as the Google Rust Style Guide's "Do not access items marked `#[doc(hidden)]` that you don't own" asks
+
+warning: `hidden_fields::Limits::HIDDEN` is `#[doc(hidden)]` in `hidden_fields`
+  --> $DIR/foreign_doc_hidden.rs:171:32
+   |
+LL |         hidden_fields::Limits::HIDDEN => secret,
+   |                                ^^^^^^
+   |
+   = help: use the crate's documented API instead, as the Google Rust Style Guide's "Do not access items marked `#[doc(hidden)]` that you don't own" asks
+
+warning: `hidden_fields::Limits::HIDDEN` is `#[doc(hidden)]` in `hidden_fields`
+  --> $DIR/foreign_doc_hidden.rs:176:32
+   |
+LL |         hidden_fields::Limits::HIDDEN..=100 => at_limit,
+   |                                ^^^^^^
+   |
+   = help: use the crate's documented API instead, as the Google Rust Style Guide's "Do not access items marked `#[doc(hidden)]` that you don't own" asks
+
+warning: 26 warnings emitted
 

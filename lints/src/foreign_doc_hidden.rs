@@ -150,18 +150,30 @@ impl<'tcx> LateLintPass<'tcx> for ForeignDocHidden {
                     check_field(cx, ty, qpath, pat.hir_id, field.hir_id, field.ident);
                 }
             }
-            PatKind::TupleStruct(ref qpath, ..)
-            | PatKind::Expr(&PatExpr {
+            PatKind::TupleStruct(ref qpath, ..) => {
+                check_type_relative(cx, qpath, pat.hir_id, written);
+            }
+            PatKind::Expr(&PatExpr {
                 kind: PatExprKind::Path(ref qpath),
+                hir_id,
                 ..
-            }) => check_type_relative(cx, qpath, pat.hir_id, written),
+            }) => check_type_relative(cx, qpath, hir_id, written),
+            PatKind::Range(start, end, _) => {
+                for bound in [start, end].into_iter().flatten() {
+                    if let PatExprKind::Path(ref qpath) = bound.kind {
+                        check_type_relative(cx, qpath, bound.hir_id, written);
+                    }
+                }
+            }
             _ => {}
         }
     }
 }
 
 /// Checks the associated item a type-relative path such as `u8::MAX` reaches, if `written` says
-/// the caller wrote its name; `check_path` sees only paths that resolve without types.
+/// the caller wrote its name; `check_path` sees only paths that resolve without types. `hir_id` is
+/// where typeck recorded the path's resolution, which for a path pattern is its `PatExpr`, not the
+/// `Pat` around it.
 fn check_type_relative(
     cx: &LateContext<'_>,
     qpath: &QPath<'_>,
