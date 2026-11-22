@@ -436,7 +436,7 @@ fn symbolic_link(target: impl AsRef<Path>, link: &Path) {
 fn a_generated_project_passes() {
     let run = Project::new().check();
     run.assert_passes();
-    run.assert_reports(0, "All 14 structure rules hold");
+    run.assert_reports(0, "All 15 structure rules hold");
 }
 
 #[test]
@@ -779,6 +779,30 @@ fn an_unpinned_or_extra_dylint_library_fails() {
     project
         .check()
         .assert_reports(1, "but it must hold exactly one entry");
+}
+
+#[test]
+fn a_version_on_an_unpublished_path_dependency_fails() {
+    let project = Project::new();
+    project.write(
+        "crates/demo/Cargo.toml",
+        &member_manifest(
+            "demo",
+            "demo_core = { version = \"0.1.0\", path = \"../demo_core\" }\n",
+        ),
+    );
+    project.lock();
+    project.check().assert_reports(
+        1,
+        "error: [internal_dependency_versions] crates/demo/Cargo.toml: `[dependencies] demo_core` \
+         gives the workspace crate `demo_core` a `version` beside its `path`.",
+    );
+    project.write(
+        "crates/demo/Cargo.toml",
+        &member_manifest("demo", "demo_core = { path = \"../demo_core\" }\n"),
+    );
+    project.lock();
+    project.check().assert_passes();
 }
 
 #[test]

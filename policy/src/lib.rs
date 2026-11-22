@@ -26,6 +26,7 @@ mod git_attributes;
 mod head;
 mod html;
 pub mod internal_dependencies;
+pub mod internal_dependency_versions;
 mod lint_expectations;
 pub mod lints_tables;
 mod markdown;

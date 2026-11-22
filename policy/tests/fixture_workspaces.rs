@@ -9,7 +9,7 @@ use std::{env, fs};
 use tempfile::TempDir;
 use trellis_policy::{
     Violation, Workspace, agent_files, build_scripts, config_files, docs_layout,
-    internal_dependencies, proc_macros, release_changelog,
+    internal_dependencies, internal_dependency_versions, proc_macros, release_changelog,
 };
 
 /// The manifest of the member `app`, which depends on the member `derive` only for its tests.
@@ -555,6 +555,127 @@ fn forbidden_build_and_target_specific_dependencies_fail() {
         ],
         "a build-dependency counts as an edge, and so does a dependency only for a platform \
          other than the one the check runs on",
+    );
+}
+
+/// The violations of `internal_dependency_versions::check`, sorted by file.
+fn version_violations(fixture: &Fixture) -> Vec<Violation> {
+    let mut violations = internal_dependency_versions::check(&fixture.workspace());
+    violations.sort_by(|left, right| left.file().cmp(right.file()));
+    violations
+}
+
+#[test]
+fn a_version_on_a_path_dependency_fails_in_every_code_table() {
+    let fixture = Fixture::new("");
+    fixture.member("core", "publish = false\n");
+    fixture.member("published", "");
+    fixture.member("tested", "");
+    fixture.member(
+        "server",
+        "publish = false\n\n[dependencies]\n\
+         published = { version = \"0.1.0\", path = \"../published\" }\n\
+         [dev-dependencies]\nhelper = { package = \"core\", path = \"../core\", version = \"0.1\" }\n",
+    );
+    fixture.member(
+        "client",
+        "[target.'cfg(target_os = \"haiku\")'.dependencies]\n\
+         core = { path = \"../core/\", version = \"0.1.0\" }\n",
+    );
+    fixture.member(
+        "library",
+        "[dependencies]\npublished = { version = \"0.1.0\", path = \"../published\" }\n\
+         [dev-dependencies]\ntesting = { package = \"tested\", version = \"0.1.0\", \
+         path = \"../tested\" }\n",
+    );
+    fixture.write("crates/generated/build.rs", "fn main() {}\n");
+    fixture.member(
+        "generated",
+        "publish = []\n\n[dependencies]\ncore = { path = \"../core\" }\n\
+         [build-dependencies]\ncore = { path = \"../core\", version = \"0.1.0\" }\n",
+    );
+    let violations = version_violations(&fixture);
+    assert_violations(
+        &violations,
+        &[
+            Expected {
+                file: "crates/client/Cargo.toml",
+                message: "gives the workspace crate `core` a `version` beside its `path`. \
+                          release-plz rewrites that `version` whenever it bumps `core`",
+            },
+            Expected {
+                file: "crates/library/Cargo.toml",
+                message: "`[dependencies] published` gives the workspace crate `published` a \
+                          `version`",
+            },
+            Expected {
+                file: "crates/library/Cargo.toml",
+                message: "`[dev-dependencies] testing` gives the workspace crate `tested` a \
+                          `version`",
+            },
+            Expected {
+                file: "crates/server/Cargo.toml",
+                message: "`[dependencies] published` gives the workspace crate `published` a \
+                          `version`",
+            },
+            Expected {
+                file: "crates/server/Cargo.toml",
+                message: "`[dev-dependencies] helper` gives the workspace crate `core` a \
+                          `version`",
+            },
+        ],
+        "a normal or dev-dependency fails on any platform and under another name, whether or not \
+         either crate is published, and a build-dependency or one without a `version` passes",
+    );
+    let fixes: Vec<&str> = violations
+        .iter()
+        .map(|violation| {
+            let message = violation.message();
+            if message.contains("`core` isn't published") {
+                "core unpublished"
+            } else if message.contains("`server` isn't published") {
+                "server unpublished"
+            } else if message.contains("out of the published package") {
+                "dev-dependency"
+            } else if message.contains("to `[workspace.dependencies]`") {
+                "workspace dependency"
+            } else {
+                "none"
+            }
+        })
+        .collect();
+    assert_eq!(
+        fixes,
+        [
+            "core unpublished",
+            "workspace dependency",
+            "dev-dependency",
+            "server unpublished",
+            "server unpublished",
+        ],
+        "each message gives the fix for its case: {violations:?}"
+    );
+}
+
+#[test]
+fn a_version_in_the_workspace_dependencies_passes() {
+    let fixture = Fixture::new("");
+    let root = fs::read_to_string(fixture.path().join("Cargo.toml"))
+        .expect("the root manifest should be read");
+    fixture.write(
+        "Cargo.toml",
+        &format!(
+            "{root}\n[workspace.dependencies]\n\
+             core = {{ version = \"0.1.0\", path = \"crates/core\" }}\n"
+        ),
+    );
+    fixture.member("core", "");
+    fixture.member("library", "[dependencies]\ncore.workspace = true\n");
+    let violations = version_violations(&fixture);
+    assert!(
+        violations.is_empty(),
+        "release-plz's rewrite of `[workspace.dependencies]` changes neither rules nor code, so a \
+         published crate keeps the `version` there: {violations:?}"
     );
 }
 

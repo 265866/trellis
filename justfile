@@ -728,9 +728,10 @@ update:
 # and an entry there for a package not installed must pass `just notices` and fail
 # `just stale-licenses`. A deploy kit in the root `deploy/` and one in the first crate's `deploy/`
 # must pass `just policy` and `just rule-changes` beside a code change, the root kit printing
-# nothing more than no kit, while a script shellcheck faults in either fails `just policy`. A
-# `target` runs `test` and `build-release` for that target, as a project's CI does for the target
-# a release ships.
+# nothing more than no kit, while a script shellcheck faults in either fails `just policy`, and so
+# does the `version` that `cargo add --path` gives a binary's or service's dependency on its other
+# crate. A `target` runs `test` and `build-release` for that target, as a project's CI does for
+# the target a release ships.
 #
 # Generates a project of one kind and runs its checks.
 template kind recipes="ci" publish="false" web="false" target="":
@@ -799,6 +800,19 @@ template kind recipes="ci" publish="false" web="false" target="":
         rm "$kit/backup"
       done
       git checkout --quiet -- crates && rm -r deploy "$crate_kit"
+      if [ "{{ kind }}" != library ]; then
+        # `cargo add --path` gives the dependency on the other crate a `version`, which
+        # release-plz would rewrite beside the root's at each release, so `just policy` fails.
+        core=$(basename crates/*_core)
+        cargo remove --quiet --offline --package "${core%_core}" "$core"
+        cargo add --quiet --offline --package "${core%_core}" --path "crates/$core"
+        if just policy > "$out/policy.txt" 2>&1 || ! grep --quiet "\[internal_dependency_versions\] crates/${core%_core}/Cargo.toml: \`\[dependencies\] $core\` gives" "$out/policy.txt"; then
+          cat "$out/policy.txt" >&2
+          echo "error: just policy passed a version on the path dependency cargo add wrote" >&2
+          exit 1
+        fi
+        git checkout --quiet -- crates Cargo.lock
+      fi
     fi
     if [ "{{ kind }}" = library ] && [[ " {{ recipes }} " = *" dylint "* || "{{ recipes }}" = ci ]]; then
       # A lint library built from another trellis commit is deleted before `just dylint` runs, as
