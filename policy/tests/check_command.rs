@@ -3021,12 +3021,16 @@ fn a_directive_where_shellcheck_takes_a_closer_one_fails() {
     }
 }
 
-/// A kit file a script sources by its absolute path in the checkout is reported as the kit's.
+/// A kit file a script sources by its absolute path in the checkout fails, since shellcheck then
+/// reads the checkout, with the file's directives as they are, instead of the kit's copy.
 #[cfg(unix)]
 #[test]
-fn a_kit_file_sourced_by_its_absolute_path_is_checked() {
+fn a_kit_file_sourced_by_its_absolute_path_fails() {
     let project = Project::new();
-    project.write("deploy/lib/common", "clean() {\n  rm -rf $1\n}\n");
+    project.write(
+        "deploy/lib/common",
+        "# shellcheck disable=SC2086 # r\nclean() {\n  rm -rf $1\n}\n",
+    );
     let library = project.path().join("deploy/lib/common");
     project.write(
         "deploy/run.sh",
@@ -3034,6 +3038,47 @@ fn a_kit_file_sourced_by_its_absolute_path_is_checked() {
     );
     project.check().assert_reports(
         1,
-        "error: [deploy_scripts] deploy/lib/common: shellcheck reports, at line:column 2:10",
+        "error: [deploy_scripts] deploy/run.sh: This file names a kit file by its absolute path in \
+         the checkout",
     );
+}
+
+/// A directive that hides a finding where a closer one would silence it fails though another
+/// directive for its code, or a heredoc line that reads like one, sits between them.
+#[test]
+fn a_directive_fails_past_another_for_its_code() {
+    for inner in [
+        "  # shellcheck disable=SC2086 # r\n  echo $line\n",
+        "  cat <<EOF\n# shellcheck disable=SC2086 # in the generated file\nEOF\n",
+    ] {
+        let project = Project::new();
+        project.write(
+            "deploy/run.sh",
+            &format!(
+                "#!/bin/bash\n# shellcheck disable=SC2086 # r\nset -eu\nwhile read -r line; do\n\
+                 {inner}done < $1\n"
+            ),
+        );
+        project
+            .check()
+            .assert_reports(1, "but one right above line 4 would silence it there alone");
+    }
+}
+
+/// A probe that breaks the parse doesn't count as a closer place, though the broken parse also
+/// drops other findings: a directive above an `if` whose `[[ ]]` spans lines passes beside
+/// sourced files shellcheck can't find.
+#[test]
+fn a_probe_that_breaks_the_parse_is_no_closer_place() {
+    let project = Project::new();
+    project.write(
+        "deploy/run.sh",
+        "#!/bin/bash\nset -eu\n\
+         # shellcheck disable=SC1091 # r\n. /nonexistent/a.conf\n\
+         # shellcheck disable=SC1091 # r\n. /nonexistent/b.conf\n\
+         # shellcheck disable=SC1091 # r\n. /nonexistent/c.conf\n\
+         a=${1:-}\nb=${2:-}\n\
+         # shellcheck disable=SC2053 # r\nif [[ -n $a &&\n      $a == $b ]]; then\n  echo same\nfi\n",
+    );
+    project.check().assert_passes();
 }

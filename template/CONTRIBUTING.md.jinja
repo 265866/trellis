@@ -337,9 +337,11 @@ above it as shellcheck takes a directive. shellcheck applies a directive to the 
 below it, so `just policy` runs it again with every `disable` taken out and asks shellcheck
 whether a directive closer to each finding a directive hid would silence it alone. If one would,
 such as above a line in the function or block the directive sits over, or in the file a sourced
-line reads, the directive fails. Where shellcheck takes no closer one, such as after a `|`, inside
-an array or a heredoc, above a `case` pattern or above the `done` that ends a loop, it passes, so a
-directive above a `case` covers its pattern lines, one-line bodies included. It also fails a directive after
+line reads, the directive fails, though another directive for the code sits between. Where
+shellcheck takes no closer one, such as after a `|`, `&&` or `||`, inside `[[ ]]`, an array or a
+heredoc, above a `case` pattern or above the `done` that ends a loop, it passes, so a directive
+above a `case` covers its pattern lines, one-line bodies included. A file that names a kit file by
+its absolute path in the checkout fails, since shellcheck would read the checkout, not the copy. It also fails a directive after
 code on its line or spelled with an unusual space, one that disables anything but codes, such as
 `all` or a range, or a parse check other than SC1090 and SC1091, one without a reason, `shell=` in
 a file with a `#!` line, `source=` or `source-path=` that leaves `deploy/`, any key but
