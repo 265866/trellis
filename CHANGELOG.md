@@ -6,6 +6,33 @@ part lists what a project's owner must do around the update: a rule that can fla
 a setting to change, or a step to do by hand. [CONTRIBUTING.md](CONTRIBUTING.md#release-trellis)
 has the versioning rule.
 
+## v0.17.2
+
+### Added
+
+- A service's or binary's deploy kit can live in `crates/<crate>/deploy/`, inside the crate it
+  deploys, as well as in the root `deploy/`. release-plz counts only commits under a crate's own
+  directory, so a change to a root kit alone never opened a release, and the kit's fix waited for
+  the crate's next change. A kit in the crate releases with it. `just policy` checks its scripts
+  with shellcheck as it does the root kit's, each kit in a copy of its own, and
+  `just rule-changes` classes its files the same way. The generated `docs/maintaining.md` says how to
+  move the root kit there in one rules pull request. Its files must move unchanged except those
+  that are rules by their names, such as a `*.just` module or an `action.yml`, which the same pull
+  request may fix along with the references to the kit's path. Code that names `deploy/` or
+  climbs out of the kit with `..` is fixed in a code pull request right after, since the kit sits
+  two directories deeper. A library keeps its kit in the root `deploy/`, since a crate's package
+  would upload a kit inside it. A root kit stays accepted, with no warning. Until it moves, a
+  change to a root kit alone ships with the crate's next release, and its owner adds the change's
+  line to that release's notes by hand.
+- A project with a web UI can accept a license for one npm package, such as `OFL-1.1` for a font,
+  in the new `web-licenses.toml`, a rule file. Each `[[package]]` entry names the package exactly,
+  the SPDX licenses accepted for it and a reason, and covers every installed version of that name.
+  `just notices` judges each npm package by `accepted` in `about.toml` together with its own
+  entry, and passes an entry for a package not yet installed, so the rules pull request goes
+  first, as for a crate. `just stale-licenses`, run weekly by the Advisories workflow, fails on an
+  entry whose package is gone. The file isn't part of `about.toml` because cargo-about reads every
+  table there as a crate's settings. A project without a web UI gets no file.
+
 ## v0.17.1
 
 ### Added
