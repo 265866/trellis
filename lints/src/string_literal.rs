@@ -26,12 +26,17 @@ impl Literal {
     /// Whether a macro may have parsed the path whose segments are `names` from this string: the
     /// names are among its identifiers in order, which holds however a path is written, or are
     /// the string's identifiers followed by more, as the `flag::deserialize` serde makes of
-    /// `#[serde(with = "flag")]`. A string that can't be read may hold any path.
+    /// `#[serde(with = "flag")]`. A string with no identifier or integer, such as `"::"`, spells
+    /// nothing, and thiserror's `"{0}"` spells only the field `0`. A string that can't be read may
+    /// hold any path.
     pub(crate) fn may_spell(&self, names: &[&str]) -> bool {
         let Self::Value(value) = self else {
             return true;
         };
         let identifiers = identifiers(value);
+        if identifiers.is_empty() {
+            return false;
+        }
         let mut remaining = identifiers.iter();
         names
             .iter()
@@ -67,7 +72,8 @@ pub(crate) fn normalized(text: &str) -> Cow<'_, str> {
     }
 }
 
-/// The identifiers of `value` read as Rust tokens, in order, raw ones without their `r#`.
+/// The identifiers of `value` read as Rust tokens, in order, raw ones without their `r#`, and its
+/// unsuffixed integers, which name tuple fields.
 fn identifiers(value: &str) -> Vec<&str> {
     let mut identifiers = Vec::new();
     let mut start = 0;
@@ -76,6 +82,10 @@ fn identifiers(value: &str) -> Vec<&str> {
         match token.kind {
             TokenKind::Ident => identifiers.push(&value[start..end]),
             TokenKind::RawIdent => identifiers.push(&value[start + 2..end]),
+            TokenKind::Literal {
+                kind: LiteralKind::Int { .. },
+                suffix_start,
+            } if suffix_start == token.len => identifiers.push(&value[start..end]),
             _ => {}
         }
         start = end;
@@ -349,6 +359,10 @@ fn spells_paths() {
     assert!(spells("flag", &["flag", "deserialize"]));
 
     assert!(!spells("a message", &["hidden_fields", "helper"]));
+    assert!(!spells("{0}", &["as_display"]));
+    assert!(spells("0", &["0"]));
+    assert!(!spells("{0:>5} {1}", &["as_display"]));
+    assert!(!spells("", &["helper"]));
     assert!(Literal::Unreadable.may_spell(&["anything"]));
 }
 

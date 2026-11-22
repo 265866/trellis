@@ -13,9 +13,13 @@ has the versioning rule.
 - `foreign_doc_hidden` no longer flags every path into a crate that hides its own root from its
   docs, as Microsoft's `windows` and `windows-sys` crates do with
   `#![cfg_attr(not(feature = "docs"), doc(hidden))]`. Every `use windows::...` failed
-  `just dylint`. A crate's
-  root now counts as documented, and each item and module under it is still checked on its own,
-  so a hidden one inside such a crate is still flagged.
+  `just dylint`. A crate's root now counts as documented, and each item and module under it is
+  still checked on its own, so a hidden one inside such a crate is still flagged.
+- `foreign_doc_hidden` no longer flags a thiserror message that is only a positional
+  placeholder, such as `#[error("{0}")]`. thiserror writes `AsDisplay::as_display` for the field
+  at the message's span, and the lint read a string with no identifier in it as one that could
+  spell any path, so it took the call for code the caller wrote. `#[error("text: {0}")]` and
+  `#[error("{name}")]` already passed.
 
 ## v0.15.0
 

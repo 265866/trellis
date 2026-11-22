@@ -61,6 +61,11 @@ struct Mirrored {
 #[defaulted(own = "a message")]
 struct Messaged;
 
+// Not flagged: the same at a message that is only a placeholder, as `#[error("{0}")]` is.
+#[derive(defaulted::Defaulted)]
+#[defaulted(own = "{0}")]
+struct OnlyPlaceholder;
+
 fn main() {
     let value = 7_u8;
 
