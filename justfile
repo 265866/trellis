@@ -167,10 +167,10 @@ links:
 
 # Checks that the template pins the same toolchains as this repository and its lints, that the
 # config files and workflows both keep are the same apart from the Advisories workflow's web UI
-# step, that both `[workspace.lints]` tables agree apart from the library-only lints, that the
-# template's two lists of accepted licenses agree, that the versions template/dylint.toml.jinja
-# says trellis read each trusted macro crate at are the ones tests/dependencies/setup.sh pins, and
-# that every tool and runner image has one version wherever it's pinned in a form the recipe reads,
+# step and what only a project with license notices runs, that both `[workspace.lints]` tables
+# agree apart from the library-only lints, that the template's two lists of accepted licenses
+# agree, that the versions template/dylint.toml.jinja says trellis read each trusted macro crate
+# at are the ones tests/dependencies/setup.sh pins, and that every tool and runner image has one version wherever it's pinned in a form the recipe reads,
 # such as `name@version`. A value it can't find or read fails, as does a file it reads that's gone.
 #
 # Checks that pinned versions and the shared config files agree.
@@ -241,7 +241,8 @@ pins:
     done
     # The template's Advisories workflow adds a step only a project with a web UI gets.
     if ! diff .github/workflows/deny.yml \
-      <(sed "/^{%- if web_ui %}$/,/^{%- endif %}$/d" template/.github/workflows/deny.yml.jinja) >&2; then
+      <(sed "/^{%- if web_ui %}$/,/^{%- endif %}$/d; /^{%- if kind != 'library' %}$/,/^{%- endif %}$/d
+        s/{{{{ ',cargo-about@[^']*' if kind != 'library' else '' }}//" template/.github/workflows/deny.yml.jinja) >&2; then
       echo "error: .github/workflows/deny.yml differs from template/.github/workflows/deny.yml.jinja" >&2
       status=1
     fi
@@ -695,8 +696,10 @@ update:
 # `ci`, a service also builds and runs its image when Docker is installed, under umask 077 with its
 # license files 0600, and the image's user must be able to read them. A web UI's build and license
 # notices must be in it too, and its install must refuse a missing bun.lock and a package that
-# provides a `bun` command, and read the app's bunfig.toml. A `target` runs `test` and
-# `build-release` for that target, as a project's CI does for the target a release ships.
+# provides a `bun` command, and read the app's bunfig.toml. After `ci`, an about.toml entry for a
+# crate the graph doesn't hold must pass `just notices` and fail `just stale-licenses`. A `target`
+# runs `test` and `build-release` for that target, as a project's CI does for the target a release
+# ships.
 #
 # Generates a project of one kind and runs its checks.
 template kind recipes="ci" publish="false" web="false" target="":
@@ -737,6 +740,28 @@ template kind recipes="ci" publish="false" web="false" target="":
       # one, the checks must have left no change behind.
       git update-ref refs/remotes/origin/main HEAD
       just rule-changes
+    fi
+    if [[ "{{ recipes }}" = ci || " {{ recipes }} " = *" notices "* ]] && [ -f about.toml ]; then
+      # A rules pull request accepts a license for a crate before the code pull request adds it:
+      # `just notices` passes the entry, and `just stale-licenses` fails until the crate arrives.
+      cp about.toml "$out/about.toml"
+      # The second entry sits on line 99, where cargo-about widens its line numbers.
+      printf '\n[not-a-dependency]\naccepted = ["CC0-1.0"]\n' >> about.toml
+      while [ "$(wc -l < about.toml)" -lt 98 ]; do echo >> about.toml; done
+      printf '[gone-dependency]\naccepted = ["MIT"]\n' >> about.toml
+      just notices
+      if [ "$(uname -s)" = Linux ]; then
+        if just stale-licenses > "$out/stale.txt" 2>&1 || ! grep --quiet 'has 2 entries' "$out/stale.txt" \
+          || ! grep --quiet '^error: .*\[not-a-dependency\]' "$out/stale.txt" \
+          || ! grep --quiet '^error: .*\[gone-dependency\]' "$out/stale.txt"; then
+          cat "$out/stale.txt" >&2
+          echo "error: just stale-licenses didn't name every entry for a crate the graph doesn't hold" >&2
+          exit 1
+        fi
+      fi
+      cp "$out/about.toml" about.toml
+      if [ "$(uname -s)" = Linux ]; then just stale-licenses; fi
+      echo "just notices passed an about.toml entry ahead of its crate, and just stale-licenses named it."
     fi
     if [ "{{ recipes }}" = ci ] && [ "{{ kind }}" = service ] && command -v docker > /dev/null; then
       # A checkout or a `just notices` under umask 077 leaves the license files 0600, which the
