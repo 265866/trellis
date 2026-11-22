@@ -206,6 +206,10 @@ pins:
       "$(channel template/rust-toolchain.toml)" "$(channel rust-toolchain.toml)"
     check "lints_nightly in template/justfile.jinja and lints/rust-toolchain.toml" \
       "$(variable lints_nightly template/justfile.jinja)" "$(channel lints/rust-toolchain.toml)"
+    lockfile() { extract "bun.lock command" "$1" "$2"; }
+    check "the bun.lock command in template/docs/maintaining.md.jinja and template/justfile.jinja's web-install" \
+      "$(lockfile 's/^ *`\(bun install [^`]*\)`, the command `just web-install` names.*/\1/p' template/docs/maintaining.md.jinja)" \
+      "$(lockfile 's/.*Write it there with \(bun install [^.]*\) and commit it\..*/\1/p' template/justfile.jinja)"
     check "rust-version in template/Cargo.toml.jinja and Cargo.toml" \
       "$(key rust-version template/Cargo.toml.jinja)" "$(key rust-version Cargo.toml)"
     check "rust-version in Cargo.toml and the stable toolchain" \
