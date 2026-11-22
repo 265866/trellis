@@ -21,6 +21,8 @@ need admin rights on the repository or the release token, so `just ci` leaves th
 | `crates/{{ crate_name }}` | The {{ 'service' if kind == 'service' else 'program' }}: `main.rs` starts it and wires the parts together. No logic that a test would want to call.
 {%- if kind == 'service' %} `{{ project_name }} --version` prints the version line and exits 0 without starting the service, since CI's `Container image` job runs the image that way.
 {%- else %} `{{ project_name }} --version` prints the version line and exits 0.
+{%- if 'windows' in platforms %} A build with `#![windows_subsystem = "windows"]`, as a Windows GUI app has, gets no console, so on Windows its `--version` prints only into a pipe or a file, such as `{{ project_name }} --version > version.txt`. The test of it passes either way, since it reads through a pipe.
+{%- endif %}
 {%- endif %} `tests/command_line.rs` runs the built binary and checks it. |
 | `crates/{{ crate_name }}_core` | The logic. A crate of its own keeps the binary's command-line and runtime dependencies out of it, lets `just docs` check the doc comments of both crates, and gives `internal_dependencies` its first edge: the binary depends on the logic, never the reverse. |
 {%- endif %}
