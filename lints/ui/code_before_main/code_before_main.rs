@@ -44,6 +44,11 @@ static CRT_XCU: extern "C" fn() = init;
 #[unsafe(link_section = ".CRT$XCT")]
 static CRT_XCT: extern "C" fn() = init;
 
+// Flagged: a comma doesn't make a Windows name a Mach-O one; the linker still sorts it among them.
+#[used]
+#[unsafe(link_section = ".CRT$XCU,x")]
+static CRT_XCU_COMMA: extern "C" fn() = init;
+
 // Flagged: ELF's array that runs before even the constructors.
 #[used]
 #[unsafe(link_section = ".preinit_array")]

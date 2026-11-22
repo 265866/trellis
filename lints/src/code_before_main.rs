@@ -145,16 +145,16 @@ fn is_allowed(macros: &[Expansion], allowed: &[String]) -> bool {
 /// may have any priority or other suffix the linker accepts. A Mach-O name is
 /// `segment,section[,type[,attributes]]`, and LLVM trims the space around each part.
 fn is_constructor_section(section: &str) -> bool {
-    if section.contains(',') {
-        let parts: Vec<&str> = section.split(',').map(str::trim).collect();
-        return parts.get(1) == Some(&"__mod_init_func") || parts.get(2) == Some(&"mod_init_funcs");
-    }
+    let parts: Vec<&str> = section.split(',').map(str::trim).collect();
+    let mach_o =
+        parts.get(1) == Some(&"__mod_init_func") || parts.get(2) == Some(&"mod_init_funcs");
     let has_prefix = |prefix: &str| {
         section
             .strip_prefix(prefix)
             .is_some_and(|rest| rest.is_empty() || rest.starts_with('.'))
     };
-    has_prefix(".preinit_array")
+    mach_o
+        || has_prefix(".preinit_array")
         || has_prefix(".init_array")
         || has_prefix(".ctors")
         || [".CRT$XI", ".CRT$XC", ".CRT$XD", ".CRT$XL"]
