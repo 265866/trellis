@@ -76,8 +76,7 @@ impl<'tcx> LateLintPass<'tcx> for NonExhaustiveWildcard {
             .filter(|&parent| tcx.def_kind(parent) == DefKind::Enum)
             .map(|parent| tcx.adt_def(parent))
         {
-            if !adt.is_enum()
-                || adt.did().is_local()
+            if adt.did().is_local()
                 || !adt.is_variant_list_non_exhaustive()
                 || !checked.insert(adt.did())
             {
