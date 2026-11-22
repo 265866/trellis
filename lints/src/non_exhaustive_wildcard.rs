@@ -1,6 +1,6 @@
 use clippy_utils::diagnostics::span_lint_and_help;
 use rustc_data_structures::fx::FxHashSet;
-use rustc_hir::def::{DefKind, Res};
+use rustc_hir::def::{CtorOf, DefKind, Res};
 use rustc_hir::def_id::DefId;
 use rustc_hir::{Arm, Expr, ExprKind, MatchSource, Pat, PatExpr, PatExprKind, PatKind};
 use rustc_lint::{LateContext, LateLintPass};
@@ -72,10 +72,11 @@ impl<'tcx> LateLintPass<'tcx> for NonExhaustiveWildcard {
         let mut checked = FxHashSet::default();
         for adt in named
             .iter()
-            .map(|&variant| tcx.adt_def(tcx.parent(variant)))
+            .map(|&variant| tcx.parent(variant))
+            .filter(|&parent| tcx.def_kind(parent) == DefKind::Enum)
+            .map(|parent| tcx.adt_def(parent))
         {
-            if !adt.is_enum()
-                || adt.did().is_local()
+            if adt.did().is_local()
                 || !adt.is_variant_list_non_exhaustive()
                 || !checked.insert(adt.did())
             {
@@ -161,7 +162,8 @@ fn report(cx: &LateContext<'_>, adt: AdtDef<'_>, named: &FxHashSet<DefId>, catch
     );
 }
 
-/// Adds the variant `pat` names, if it is a variant pattern.
+/// Adds the variant `pat` names, if it is a variant pattern. A tuple or unit struct's pattern
+/// names its constructor too, whose parent is the struct, not a variant.
 fn insert_variant(cx: &LateContext<'_>, pat: &Pat<'_>, named: &mut FxHashSet<DefId>) {
     let (PatKind::Struct(qpath, ..)
     | PatKind::TupleStruct(qpath, ..)
@@ -176,7 +178,7 @@ fn insert_variant(cx: &LateContext<'_>, pat: &Pat<'_>, named: &mut FxHashSet<Def
         Res::Def(DefKind::Variant, id) => {
             named.insert(id);
         }
-        Res::Def(DefKind::Ctor(..), id) => {
+        Res::Def(DefKind::Ctor(CtorOf::Variant, _), id) => {
             if let Some(variant) = cx.tcx.opt_parent(id) {
                 named.insert(variant);
             }
