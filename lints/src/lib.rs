@@ -133,7 +133,7 @@ const PASSES: &[Pass] = &[
     Pass::Late(|| Box::new(single_impl_trait::SingleImplTrait)),
     Pass::Late(|| Box::new(str_replace_on_literal::StrReplaceOnLiteral)),
     Pass::Late(|| Box::new(string_concat_chain::StringConcatChain)),
-    Pass::Early(|| Box::new(suppression_policy::SuppressionPolicy)),
+    Pass::Early(|| Box::<suppression_policy::SuppressionPolicy>::default()),
     Pass::Late(|| Box::new(try_new_result::TryNewResult)),
     Pass::Early(|| Box::new(unsafe_outside_unsafe_crate::UnsafeOutsideUnsafeCrate)),
 ];

@@ -1,0 +1,11 @@
+warning: code written in the source under the lint levels of `non_upper_case_globals` that a macro from `registry` writes, which `trusted_macro_lints` in `dylint.toml` doesn't allow there
+  --> $DIR/code_before_main_direct.rs:15:1
+   |
+LL | registry::submit!(start);
+   | ^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: move the code into a function or a constant with a name, and refer to it here by that name, so clippy checks it; or, once you have read that the macro writes the level and that no code following the style guide trips the lint, list the lint for the crate in `trusted_macro_lints` in `dylint.toml`, which is a rule change
+   = note: `#[warn(suppression_policy)]` on by default
+
+warning: 1 warning emitted
+

@@ -27,6 +27,17 @@
 //! isn't credited to the item's macros either: the call, not they, may have built it, so it stays
 //! [`Origin::Unwritten`], as an attribute such a macro builds outside any item a macro wrote
 //! does.
+//!
+//! A lint level that a macro from outside the workspace writes on an item holding a static in a
+//! constructor section, which the same expansion writes, is `code_before_main`'s to judge, as
+//! `inventory::submit!` writes `allow(non_upper_case_globals)` on the `const _` around its
+//! constructor. If `constructor_macros` lets the static pass, the macro's crate counts as trusted
+//! for it, and the attribute is [`Origin::Trusted`], so `trusted_macro_lints` still decides what it
+//! may set over code written in the source. Otherwise it is [`Origin::Constructor`]:
+//! `code_before_main` reports the macro call, and fixing that removes the attribute, so
+//! `suppression_policy` checks it as the macro's only if `code_before_main` is off at one of the
+//! statics, where it would report nothing. A level that names anything but lints, or a lint group
+//! or `code_before_main` itself, is never judged so: it is checked as the macro's, as before.
 
 use std::collections::HashMap;
 
@@ -67,6 +78,16 @@ pub(crate) enum Origin {
     /// Built from tokens of the crate's source that aren't this attribute there, outside any item
     /// a macro from another crate wrote.
     Unwritten,
+    /// A lint level that a macro from a crate `trusted_macro_crates` doesn't list wrote on an item
+    /// holding a static in a constructor section that `constructor_macros` doesn't let pass,
+    /// which the same expansion wrote.
+    Constructor {
+        name: Symbol,
+        /// The crate that defines the macro.
+        defined_in: Symbol,
+        /// The statics, which `code_before_main` reports where it is on.
+        statics: Vec<NodeId>,
+    },
 }
 
 impl Origin {
@@ -82,6 +103,11 @@ impl Origin {
             Self::Macro {
                 name,
                 defined_in: Some(krate),
+            }
+            | Self::Constructor {
+                name,
+                defined_in: krate,
+                ..
             } => format!(", which the macro `{name}` from `{krate}` writes"),
             Self::Unwritten => {
                 ", which a macro built from tokens that aren't an attribute in the source"
@@ -93,10 +119,15 @@ impl Origin {
     /// What to do about a lint level that a macro from another crate wrote, which the crate's code
     /// can't change: stop calling the macro, rather than trust its crate.
     pub(crate) fn untrusted_crate_help(&self) -> Option<String> {
-        let Self::Macro {
+        let (Self::Macro {
             name,
             defined_in: Some(krate),
-        } = self
+        }
+        | Self::Constructor {
+            name,
+            defined_in: krate,
+            ..
+        }) = self
         else {
             return None;
         };
@@ -107,7 +138,8 @@ impl Origin {
         ))
     }
 
-    /// Whether the lints check the attribute as one a macro wrote.
+    /// Whether the lints check the attribute as one a macro wrote. `suppression_policy` checks an
+    /// [`Origin::Constructor`] itself, once it knows where `code_before_main` is on.
     pub(crate) fn is_untrusted(&self) -> bool {
         matches!(self, Self::Macro { .. } | Self::Unwritten)
     }
@@ -159,7 +191,75 @@ pub(crate) fn origin(cx: &EarlyContext<'_>, source: &LocalSource, attribute: &At
             .filter(|_| !source.in_macro_call(attribute.span))
             .map_or(Origin::Unwritten, |expansion| item_origin(cx, expansion));
     };
-    macro_origin(cx, *expanded)
+    constructor_origin(cx, source, attribute, *expanded)
+        .unwrap_or_else(|| macro_origin(cx, *expanded))
+}
+
+/// The origin of `attribute`, whose token at `expanded` an expansion produced, if that expansion
+/// is a macro from outside the workspace that also wrote a static in a constructor section on the
+/// item the attribute is on, as the module docs explain.
+fn constructor_origin(
+    cx: &EarlyContext<'_>,
+    source: &LocalSource,
+    attribute: &Attribute,
+    expanded: Span,
+) -> Option<Origin> {
+    let expansion = expanded.ctxt().outer_expn();
+    let constructors = source.constructors_under(attribute, expansion);
+    if constructors.is_empty() {
+        return None;
+    }
+    let data = expansion.expn_data();
+    let ExpnKind::Macro(_, name) = data.kind else {
+        return None;
+    };
+    let id = data.macro_def_id.filter(|id| id.krate != LOCAL_CRATE)?;
+    let krate = crate_name(id.krate);
+    let in_workspace = crate::config::get(cx.sess())
+        .macro_crates
+        .iter()
+        .any(|listed| listed.replace('-', "_") == krate.as_str());
+    if in_workspace || is_trusted(cx, krate) || !names_only_other_lints(cx, attribute) {
+        return None;
+    }
+    Some(
+        if constructors.iter().all(|constructor| constructor.allowed) {
+            Origin::Trusted {
+                crates: vec![krate],
+            }
+        } else {
+            Origin::Constructor {
+                name,
+                defined_in: krate,
+                statics: constructors
+                    .iter()
+                    .map(|constructor| constructor.id)
+                    .collect(),
+            }
+        },
+    )
+}
+
+/// Whether `attribute` is a lint level that names only lints, none of them a lint group, a
+/// deprecated alias of one included, or `code_before_main`, by its last segment, so a tool prefix
+/// can't hide the name.
+fn names_only_other_lints(cx: &EarlyContext<'_>, attribute: &Attribute) -> bool {
+    let meta = meta(attribute);
+    if !matches!(
+        meta.path.as_str(),
+        "allow" | "warn" | "expect" | "deny" | "forbid"
+    ) {
+        return false;
+    }
+    let groups = crate::suppression_policy::lint_groups(cx);
+    meta.items().iter().all(|item| match &item.kind {
+        MetaKind::Word => {
+            !groups.contains(&item.path)
+                && item.path.rsplit("::").next() != Some("code_before_main")
+        }
+        MetaKind::Value(_) => item.path == "reason",
+        _ => false,
+    })
 }
 
 /// The expansion that wrote the innermost item around each attribute of `krate` that is inside an
