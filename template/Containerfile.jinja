@@ -105,7 +105,7 @@ COPY --from=web /web/dist /usr/share/{{ project_name }}/web
 ENV {{ crate_name | upper }}_WEB_DIR=/usr/share/{{ project_name }}/web
 {%- endif %}
 {%- if image.env %}
-ENV {% for name, value in image.env.items() %}{{ name }}="{{ value | string | replace('\\', '\\\\') | replace('"', '\\"') | replace('$', '\\$') }}"{{ ' \\\n    ' if not loop.last else '' }}{% endfor %}
+ENV {% for name, value in image.env | dictsort %}{{ name }}="{{ value | string | replace('\\', '\\\\') | replace('"', '\\"') | replace('$', '\\$') }}"{{ ' \\\n    ' if not loop.last else '' }}{% endfor %}
 {%- endif %}
 {%- if image.workdir %}
 WORKDIR {{ image.workdir }}
