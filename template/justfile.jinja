@@ -195,7 +195,7 @@ build-release:
 # pull request that adds it, as CONTRIBUTING.md says; `just stale-licenses`, which the weekly
 # Advisories workflow runs, fails on an entry whose crate has left the graph.
 #
-# Writes the license notices every release ships to target/THIRD-PARTY-LICENSES.html.
+# Writes the license notices {% endraw %}{{ 'release/package.sh gets' if release.files else 'every release ships' }}{% raw %} to target/THIRD-PARTY-LICENSES.html.
 [unix]
 notices:{% endraw %}{{ ' web-notices' if web_ui else '' }}{% raw %}
     #!/usr/bin/env bash
@@ -208,7 +208,7 @@ notices:{% endraw %}{{ ' web-notices' if web_ui else '' }}{% raw %}
     if [ -n "$log" ]; then echo "$log" >&2; fi
     [ "$status" -eq 0 ] && [ -z "$log" ]
 
-# Writes the license notices every release ships to target/THIRD-PARTY-LICENSES.html.
+# Writes the license notices {% endraw %}{{ 'release/package.sh gets' if release.files else 'every release ships' }}{% raw %} to target/THIRD-PARTY-LICENSES.html.
 [windows]
 notices:{% endraw %}{{ ' web-notices' if web_ui else '' }}{% raw %}
     New-Item -ItemType Directory -Force target > $null; $log = cargo about --color never generate --locked --fail about.hbs -o target/THIRD-PARTY-LICENSES.html 2>&1; $status = $LASTEXITCODE; $skip = $false; $kept = foreach ($line in $log) { $text = if ($line -is [System.Management.Automation.ErrorRecord]) { $line.Exception.Message } else { "$line" }; if ($text -eq 'warning: config found for a crate not present in the graph') { $skip = $true } elseif ($skip -and $text -eq '') { $skip = $false } elseif (-not $skip) { $text } }; $kept | ForEach-Object { [Console]::Error.WriteLine($_) }; if ($status -ne 0 -or $kept) { exit 1 }

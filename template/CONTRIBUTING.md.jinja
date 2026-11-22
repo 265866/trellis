@@ -127,7 +127,7 @@ nightly rustfmt, and stable rustfmt ignores them with a warning. For rust-analyz
 | `just docs` | The docs, private items included, warnings as errors. |
 | `just build-release` | The release build. |
 {%- if kind != 'library' %}
-| `just notices` | The license notices a release ships, in `target/THIRD-PARTY-LICENSES.html`{{ ', and the web UI\'s in `target/THIRD-PARTY-LICENSES-WEB.txt` (`just web-notices`)' if web_ui else '' }}. It fails on a license `about.toml` doesn't accept{{ ', unless `web-licenses.toml` accepts it for that npm package' if web_ui else '' }}. |
+| `just notices` | The license notices {{ '`release/package.sh` gets' if release.files else 'a release ships' }}, in `target/THIRD-PARTY-LICENSES.html`{{ ', and the web UI\'s in `target/THIRD-PARTY-LICENSES-WEB.txt` (`just web-notices`)' if web_ui else '' }}. It fails on a license `about.toml` doesn't accept{{ ', unless `web-licenses.toml` accepts it for that npm package' if web_ui else '' }}. |
 {%- endif %}
 {%- if web_ui %}
 | `just web-check`, `just web-build` | The web UI's `check` script, and its build. |

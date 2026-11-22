@@ -93,6 +93,10 @@ your option.
 {%- if kind == 'binary' and not release.files %}
 Each release archive holds `THIRD-PARTY-LICENSES.html`, the licenses of the crates it is built
 with{% if web_ui %}, and `THIRD-PARTY-LICENSES-WEB.txt`, those of the web UI's packages{% endif %}.
+{%- elif kind == 'binary' %}
+`just notices` writes the licenses of the crates it is built with to
+`target/THIRD-PARTY-LICENSES.html`{% if web_ui %}, and those of the web UI's packages to
+`target/THIRD-PARTY-LICENSES-WEB.txt`{% endif %}.
 {%- elif kind == 'service' %}
 The image holds the licenses of the crates it is built with in
 `/usr/share/doc/{{ project_name }}/THIRD-PARTY-LICENSES.html`.
