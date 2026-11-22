@@ -414,8 +414,9 @@ An update leaves them alone.
   `action.yml` or a `*.just` module, count as rules at both paths, as a workflow or justfile
   outside the kit that names its path does when it changes, such as a workflow's
   `uses: ./deploy` or a justfile's `import 'deploy/tasks.just'`. Change those paths in the same
-  pull request, in the kit's rule files too, and the pull request is a rules change. A code file added, removed or changed in it
-  makes it no longer a move, so the kit's code counts at both paths and mixes with its rules.
+  pull request, in the kit's rule files too, and the pull request is a rules change. A code file
+  added, removed or changed in it makes it no longer a move, so the kit's code counts at both
+  paths and mixes with its rules.
 
   The kit sits two directories deeper after the move, so a code file that names the old place,
   such as `deploy/install.sh` in a unit or a README, or that climbs out of the kit with `..`, such
