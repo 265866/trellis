@@ -18,10 +18,10 @@ and the template entries CI runs for a generated binary's other targets and on W
 `published library on Windows`. To run one
 of them where its runner's system matches yours, pass its target to `just template`, such as
 `just template binary "test build-release" false false x86_64-unknown-linux-musl`. Nor does it
-run the `C code for musl` jobs, `Service image for ARM64` or `Run the service image on ARM64`. The
-second cross-compiles a generated service's arm64 image, as `just service-image linux/arm64
-<absolute path>` does, and the third starts it on ARM64. Besides the checks a generated project
-has, it runs:
+run the `C code for musl` jobs, `Checker install (Windows)`, `Service image for ARM64` or
+`Run the service image on ARM64`. The third cross-compiles a generated service's arm64 image, as
+`just service-image linux/arm64 <absolute path>` does, and the fourth starts it on ARM64. Besides
+the checks a generated project has, it runs:
 
 | Recipe | Checks |
 | --- | --- |
@@ -34,7 +34,8 @@ has, it runs:
 | `just build-extras` | Generates a binary whose `build` answer builds for glibc, runs `.github/setup-build.sh` and raises the timeout, and checks both build jobs run the script after the toolchain, with the timeout and the glibc target and no musl-gcc, that `just actionlint` shellchecks the script, and that the glibc build links dynamically. A binary with the default answer gets none of it. |
 | `just image-extras` | Generates a service whose `image` answer sets environment defaults, a working directory, ports and files, builds its image, and checks the image carries each, keeps its nonroot user and trellis's license file, and lets that user read the files. A service with the default answer gets none of them. |
 | `just release-extras` | Generates a binary whose `release` answer names its files, checksums file, title and build environment, runs its release build's own steps with a `release/package.sh`, and checks they leave exactly the named files and fail on one fewer or one more, that the workflows and docs carry the answer, and that `just actionlint` shellchecks the script. The answer's checks must refuse what it doesn't take. |
-| `just templates` | `template` for each kind, `shapes`, `dependencies`, `update`, `build-extras`, `image-extras` and `release-extras`. |
+| `just checker-install` | Generates a library as a user gets it, with its checker fetched from a scratch copy of this checkout, and checks that `just install-policy` installs the pinned checker whatever an earlier install left: a stale build in a target directory that `CARGO_TARGET_DIR` names, which trellis 0.17.3 installed and then kept, and a binary that is missing, changed or recorded at another commit. A run with the pinned checker installed must print nothing. CI runs it on Windows too, where the project installs through PowerShell. |
+| `just templates` | `template` for each kind, `shapes`, `dependencies`, `update`, `build-extras`, `image-extras`, `release-extras` and `checker-install`. |
 
 A generated project's check that fails is a trellis bug: fix the template, the lints or the
 checker, never the generated project.
