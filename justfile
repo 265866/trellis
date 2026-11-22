@@ -949,8 +949,16 @@ build-extras:
       first_build=$(line "$([ "$workflow" = ci ] && echo 'run: just lint' || echo 'run: just notices')")
       [ -n "$setup" ] || fail "$file's build job doesn't run .github/setup-build.sh"
       [ -n "$toolchain" ] && [ -n "$first_build" ] || fail "$file's build job has no toolchain step or first build"
-      [ "$toolchain" -lt "$setup" ] && [ "$setup" -lt "$first_build" ] \
-        || fail "$file doesn't run the setup between the toolchain and the first build"
+      [ "$setup" -lt "$first_build" ] || fail "$file doesn't run the setup before the first build"
+      # The setup frees disk space too, so it runs before any step that restores a cache, which
+      # can fill the runner's disk, and in the release, which caches nothing, after the toolchain.
+      cache=$(grep --line-number --max-count 1 --extended-regexp 'uses: (Swatinem/rust-cache|actions/cache)' <<< "$job" | cut -d: -f1) || true
+      if [ "$workflow" = ci ]; then
+        [ -n "$cache" ] && [ "$setup" -lt "$cache" ] || fail "$file restores a cache before it runs the setup"
+      else
+        [ -z "$cache" ] || fail "$file's build job restores a cache"
+        [ "$toolchain" -lt "$setup" ] || fail "$file doesn't run the setup after the toolchain"
+      fi
     done
     grep --quiet '^      - .github/setup-build.sh$' .github/workflows/build-release.yml \
       || fail "a pull request that changes the setup script doesn't run the release build"

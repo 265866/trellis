@@ -220,7 +220,9 @@ An update leaves them alone.
   musl, for a program that links system libraries such as GTK, WebKitGTK or Vulkan, which musl
   can't; [Install](install.md) then says which systems the release runs on. `setup: true` runs
   `.github/setup-build.sh` in CI's build jobs and the release's, on every runner before the
-  build, with the runner's system in `RUNNER_OS` and the target in `TARGET`. trellis writes a
+  build, with the runner's system in `RUNNER_OS` and the target in `TARGET`. In CI it runs right
+  after the checkout, before the cache is restored, so it can free the disk space the cache and
+  the build need. trellis writes a
   starter that installs nothing, and an update never overwrites your version. It can install
   packages with `sudo apt-get`, free disk space, or download a toolchain component such as
   Xcode's Metal compiler; a step that fails fails the build, with its output. It is a rule, like
