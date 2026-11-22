@@ -1174,6 +1174,7 @@ release-extras:
       bullet=$(awk '/^- \*\*Release files\.\*\*/ { on = 1; print; next } on && /^(- \*\*|## )/ { exit } on' "$out/docs/docs/maintaining.md")
       if [[ "$platforms" = *windows* ]]; then
         grep --quiet 'Git Bash on Windows' <<< "$bullet" || fail "the docs don't say the release script runs with Git Bash on Windows"
+        grep --quiet 'cygpath -w' <<< "$bullet" || fail "the docs don't say how to call a Windows program from Git Bash"
       elif grep --quiet 'Git Bash\|iscc\|cygpath' <<< "$bullet"; then
         fail "the docs give Windows release advice to a project without Windows: $bullet"
       fi

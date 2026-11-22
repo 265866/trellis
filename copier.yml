@@ -331,8 +331,8 @@ release:
   help: >-
     What a binary's releases attach, as a YAML mapping, or {} for trellis's archives. `files` maps
     each target triple to the names of the files `release/package.sh` writes for it, quoted, with
-    `{version}` for the version, such as
-    `{x86_64-pc-windows-msvc: ["app-{version}-x64.zip"]}`.
+    `{version}` for the version, such as `{<target triple>: ["app-{version}.tar.gz"]}`, with an
+    entry for each target the project releases for.
     `checksums` names the checksums file, `SHA256SUMS` by default, `name` is the name the
     release's title starts with, and `env` sets environment variables, each a quoted string, for
     the release's build only. Most binaries need nothing.
@@ -377,7 +377,7 @@ release:
     {%- endif -%}
     {%- if 'files' in release -%}
     {%- if release.files is not mapping -%}
-    {%- set ns.error = '`files` maps each target triple to its file names, such as `{x86_64-pc-windows-msvc: ["app-{version}-x64.zip"]}`.' -%}
+    {%- set ns.error = '`files` maps each target triple to its file names, such as `{<target triple>: ["app-{version}.tar.gz"]}`.' -%}
     {%- else -%}
     {%- for triple, names in release.files.items() -%}
     {%- if not (triple is string and triple | regex_search('^[a-z0-9_]+(-[a-z0-9_]+){2,3}\\Z')) -%}
