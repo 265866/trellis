@@ -710,10 +710,11 @@ update:
 # missing bun.lock and a package that provides a `bun` command, and read the app's bunfig.toml. A
 # library's `just dylint` must delete a lint library built from another trellis commit and keep one
 # built from this one. After `ci`, an about.toml entry for a crate the graph doesn't hold must pass
-# `just notices` and fail `just stale-licenses`, and a deploy kit in `deploy/` must pass
-# `just policy` and `just rule-changes` beside a code change, while a script shellcheck faults
-# fails `just policy`. A `target` runs `test` and `build-release` for that target, as a project's
-# CI does for the target a release ships.
+# `just notices` and fail `just stale-licenses`, and a deploy kit in the root `deploy/` and one in
+# the first crate's `deploy/` must pass `just policy` and `just rule-changes` beside a code
+# change, the root kit printing nothing more than no kit, while a script shellcheck faults in
+# either fails `just policy`. A `target` runs `test` and `build-release` for that target, as a
+# project's CI does for the target a release ships.
 #
 # Generates a project of one kind and runs its checks.
 template kind recipes="ci" publish="false" web="false" target="":
@@ -754,20 +755,34 @@ template kind recipes="ci" publish="false" web="false" target="":
       # one, the checks must have left no change behind.
       git update-ref refs/remotes/origin/main HEAD
       just rule-changes
-      # A deploy kit is code that `just policy` shellchecks: a kit change passes beside a code
-      # change, and a script shellcheck faults fails.
+      # A deploy kit, in the root `deploy/` or a crate's `deploy/`, is code that `just policy`
+      # shellchecks: a kit change passes beside a code change, a passing root kit prints nothing
+      # more than no kit does, and a script shellcheck faults fails in either kit.
+      source=$(git ls-files 'crates/*/src/*.rs' | head -n 1)
+      crate_kit="${source%%/src/*}/deploy"
+      just policy 2> "$out/policy.err" > "$out/no-kit.txt" || { cat "$out/policy.err" >&2; exit 1; }
       mkdir deploy
       printf '#!/usr/bin/env bash\nset -euo pipefail\nmkdir -p "$HOME/.local/share/demo"\n' > deploy/install.sh
       printf '[Unit]\nDescription=demo\n' > deploy/demo.service
-      echo "// A code change beside the kit." >> "$(git ls-files 'crates/*/src/*.rs' | head -n 1)"
+      just policy 2> "$out/policy.err" > "$out/root-kit.txt" || { cat "$out/policy.err" >&2; exit 1; }
+      diff "$out/no-kit.txt" "$out/root-kit.txt" \
+        || { echo "error: just policy printed more for a passing root deploy kit than for none" >&2; exit 1; }
+      echo "// A code change beside the kit." >> "$source"
       just policy rule-changes
-      printf '#!/bin/sh\nrm -rf $1/old\n' > deploy/backup
-      if just policy > "$out/policy.txt" 2>&1 || ! grep --quiet 'deploy/backup: shellcheck reports' "$out/policy.txt"; then
-        cat "$out/policy.txt" >&2
-        echo "error: just policy passed a deploy script that shellcheck faults" >&2
-        exit 1
-      fi
-      git checkout --quiet -- crates && rm -r deploy
+      mkdir "$crate_kit"
+      printf '#!/usr/bin/env bash\nset -euo pipefail\nmkdir -p "$HOME/.local/share/demo"\n' > "$crate_kit/install.sh"
+      printf '[Unit]\nDescription=demo\n' > "$crate_kit/demo.service"
+      just policy rule-changes
+      for kit in deploy "$crate_kit"; do
+        printf '#!/bin/sh\nrm -rf $1/old\n' > "$kit/backup"
+        if just policy > "$out/policy.txt" 2>&1 || ! grep --quiet "$kit/backup: shellcheck reports" "$out/policy.txt"; then
+          cat "$out/policy.txt" >&2
+          echo "error: just policy passed a script in $kit that shellcheck faults" >&2
+          exit 1
+        fi
+        rm "$kit/backup"
+      done
+      git checkout --quiet -- crates && rm -r deploy "$crate_kit"
     fi
     if [ "{{ kind }}" = library ] && [[ " {{ recipes }} " = *" dylint "* || "{{ recipes }}" = ci ]]; then
       # A lint library built from another trellis commit is deleted before `just dylint` runs, as

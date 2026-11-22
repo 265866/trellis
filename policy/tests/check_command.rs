@@ -3583,3 +3583,181 @@ fn a_source_key_matches_the_repository_however_it_is_written() {
             .assert_reports(1, &format!("has a key `{key}` that matches no package"));
     }
 }
+
+/// A crate's deploy kit, under `crates/<crate>/deploy/`, is checked as the root `deploy/` is: a
+/// kit that shellcheck passes passes, and each script it faults is reported at its path in the
+/// crate, whether it is known by its name or by its `#!` line.
+#[test]
+fn a_crate_s_deploy_kit_is_checked_like_the_root_one() {
+    let project = Project::new();
+    project.write(
+        "crates/demo/deploy/common.sh",
+        "#!/usr/bin/env bash\n# Shared settings.\nexport APP_DIR=/srv/app\n",
+    );
+    project.write(
+        "crates/demo/deploy/install.sh",
+        "#!/usr/bin/env bash\nset -euo pipefail\n# shellcheck source=common.sh\n\
+         . \"$(dirname \"$0\")/common.sh\"\nmkdir -p \"$APP_DIR\"\n",
+    );
+    project.write(
+        "crates/demo/deploy/demo.service",
+        "[Service]\nExecStart=/srv/app/demo\n",
+    );
+    project.check().assert_passes();
+    project.write(
+        "crates/demo/deploy/backup.sh",
+        "#!/usr/bin/env bash\nrm -rf $DATA_DIR/old\n",
+    );
+    project.write("crates/demo/deploy/restore", "#!/bin/sh\ncd $1\n");
+    project.write("crates/demo/scripts/loose.sh", "#!/bin/sh\ncd $1\n");
+    let run = project.check();
+    run.assert_reports(
+        1,
+        "error: [deploy_scripts] crates/demo/deploy/backup.sh: shellcheck reports, at \
+         line:column 2:8",
+    );
+    run.assert_reports(
+        1,
+        "error: [deploy_scripts] crates/demo/deploy/restore: shellcheck reports",
+    );
+    assert!(
+        !run.stdout.contains("loose.sh"),
+        "only the crate's deploy/ is checked: {run:#?}"
+    );
+}
+
+/// A crate kit's directives follow the root kit's rules, and a directive that hides more than its
+/// line fails there too.
+#[test]
+fn a_crate_kit_s_directives_are_checked() {
+    let project = Project::new();
+    project.write(
+        "crates/demo/deploy/backup.sh",
+        "#!/bin/sh\n# shellcheck disable=all\nrm -rf $1/old\n",
+    );
+    project.check().assert_reports(
+        1,
+        "error: [deploy_scripts] crates/demo/deploy/backup.sh: Line 2 disables `all`",
+    );
+    project.write(
+        "crates/demo/deploy/backup.sh",
+        "#!/bin/sh\n# shellcheck disable=SC2086 # Covers the script.\nrm -rf $1/old\nrm -rf $2/new\n",
+    );
+    project.check().assert_reports(
+        1,
+        "error: [deploy_scripts] crates/demo/deploy/backup.sh: A shellcheck directive hides \
+         SC2086 at line 4, but one right above line 4 would silence it there alone",
+    );
+    project.write(
+        "crates/demo/deploy/backup.sh",
+        "#!/bin/sh\nset -eu\n# shellcheck disable=SC2086 # One word by contract.\nrm -rf $1/old\n",
+    );
+    project.check().assert_passes();
+}
+
+/// A crate kit holds only its own files: a script that sources the crate's other files or the root
+/// kit's is faulted, since shellcheck can't read them, and a `source=` that points there fails.
+#[test]
+fn a_crate_kit_can_t_source_outside_itself() {
+    let project = Project::new();
+    project.write("crates/demo/scripts/setup.sh", "rm -rf $1\n");
+    project.write("deploy/common.sh", "#!/bin/sh\nexport APP_DIR=/srv/app\n");
+    for (target, directive) in [
+        ("../scripts/setup.sh", "source=../scripts/setup.sh"),
+        (
+            "../../../deploy/common.sh",
+            "source=../../../deploy/common.sh",
+        ),
+    ] {
+        project.write(
+            "crates/demo/deploy/run.sh",
+            &format!("#!/bin/sh\nset -eu\n. \"$(dirname \"$0\")/{target}\"\n"),
+        );
+        let run = project.check();
+        run.assert_reports(
+            1,
+            "error: [deploy_scripts] crates/demo/deploy/run.sh: shellcheck reports",
+        );
+        run.assert_reports(1, "[SC1091]");
+        project.write(
+            "crates/demo/deploy/run.sh",
+            &format!(
+                "#!/bin/sh\nset -eu\n# shellcheck {directive}\n. \"$(dirname \"$0\")/{target}\"\n"
+            ),
+        );
+        project.check().assert_reports(
+            1,
+            &format!(
+                "error: [deploy_scripts] crates/demo/deploy/run.sh: Line 3 points shellcheck at \
+                 `{}`, which isn't a file in `crates/demo/deploy/`",
+                directive.trim_start_matches("source=")
+            ),
+        );
+    }
+}
+
+/// A kit file a crate kit's script sources by its absolute path in the checkout fails, as in the
+/// root kit, and so does a symbolic link in a crate kit.
+#[cfg(unix)]
+#[test]
+fn a_crate_kit_s_checkout_paths_and_links_fail() {
+    let project = Project::new();
+    project.write(
+        "crates/demo/deploy/lib/common",
+        "clean() {\n  rm -rf \"$1\"\n}\n",
+    );
+    let library = project.path().join("crates/demo/deploy/lib/common");
+    project.write(
+        "crates/demo/deploy/run.sh",
+        &format!("#!/bin/sh\nset -eu\n. {}\nclean old\n", library.display()),
+    );
+    project.check().assert_reports(
+        1,
+        "error: [deploy_scripts] crates/demo/deploy/run.sh: This file sources a kit file by its \
+         absolute path in the checkout",
+    );
+    project.write("crates/demo/deploy/run.sh", "#!/bin/sh\necho run\n");
+    project.write("scripts/install.sh", "#!/bin/sh\necho installed\n");
+    symbolic_link(
+        "../../../scripts/install.sh",
+        &project.path().join("crates/demo/deploy/install.sh"),
+    );
+    project.check().assert_reports(
+        1,
+        "error: [deploy_scripts] crates/demo/deploy/install.sh: This is a symbolic link",
+    );
+}
+
+/// A project with a kit in both places checks each on its own: each one's findings are reported at
+/// its own files, a file of the same name in each is its own kit's, and each passes once fixed.
+#[test]
+fn a_project_with_both_kits_checks_each() {
+    let project = Project::new();
+    project.write("deploy/install.sh", "#!/bin/sh\ncd $1\n");
+    project.write("deploy/lib.sh", "#!/bin/sh\nexport APP_DIR=/srv/app\n");
+    project.write(
+        "crates/demo/deploy/install.sh",
+        "#!/bin/sh\nset -eu\n. \"$(dirname \"$0\")/lib.sh\"\necho \"$APP_DIR\"\n",
+    );
+    let run = project.check();
+    run.assert_reports(
+        1,
+        "error: [deploy_scripts] deploy/install.sh: shellcheck reports, at line:column 2:4",
+    );
+    run.assert_reports(
+        1,
+        "error: [deploy_scripts] crates/demo/deploy/install.sh: shellcheck reports, at \
+         line:column 3:3",
+    );
+    assert!(
+        !run.stdout
+            .contains("crates/demo/deploy/install.sh: shellcheck reports, at line:column 2:4"),
+        "the root kit's finding isn't the crate kit's: {run:#?}"
+    );
+    project.write("deploy/install.sh", "#!/bin/sh\ncd \"$1\" || exit 1\n");
+    project.write(
+        "crates/demo/deploy/lib.sh",
+        "#!/bin/sh\nexport APP_DIR=/srv/demo\n",
+    );
+    project.check().assert_passes();
+}

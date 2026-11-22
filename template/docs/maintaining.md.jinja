@@ -367,9 +367,50 @@ An update leaves them alone.
   image as the release does.
 {%- endif %}
 
-- **Deploy kit.** Keep the scripts and units that install and run it on a host in `deploy/`.
-  They are code, and `just policy` runs shellcheck on the scripts; "Send a change" in
-  [CONTRIBUTING.md](../CONTRIBUTING.md#send-a-change) says which files there stay rules.
+- **Deploy kit.** Keep the scripts and units that install and run it on a host in
+  `crates/{{ crate_name }}/deploy/`. release-plz counts only the commits that change a file in a
+  crate's directory, so a commit that changes only a kit there, such as
+  `fix(deploy): restart the service after an install`, gets a release of its own and a line in
+  its notes. The kit's files are code, and `just policy` runs shellcheck on its scripts; "Send a
+  change" in [CONTRIBUTING.md](../CONTRIBUTING.md#send-a-change) says which files there stay
+  rules. {{ 'The image' if kind == 'service' else 'A release archive' }} doesn't hold the kit.
+
+  `just policy` checks a kit in the root `deploy/` the same way, but release-plz ignores it: a
+  commit that changes only that kit releases nothing, and its fix ships with the next release of
+  the crate. Add the fix's line to that release's notes by hand, in `CHANGELOG.md` on the release
+  pull request's branch, as [Each release](#each-release) says. To move the kit into the crate,
+  open one pull request that moves it:
+
+  ```sh
+  git mv deploy crates/{{ crate_name }}/deploy
+  ```
+
+  `just rule-changes` leaves out the kit's code, the files that aren't rules by their names, when
+  each keeps its path in the kit, its bytes and its mode. The kit's rule files, such as an
+  `action.yml` or a `*.just` module, count as rules at both paths, as a workflow or justfile
+  outside the kit that names its path does when it changes, such as a workflow's
+  `uses: ./deploy` or a justfile's `import 'deploy/tasks.just'`. Change those paths in the same
+  pull request, in the kit's rule files too, and the pull request is a rules change. A code file added, removed or changed in it
+  makes it no longer a move, so the kit's code counts at both paths and mixes with its rules.
+
+  The kit sits two directories deeper after the move, so a code file that names the old place,
+  such as `deploy/install.sh` in a unit or a README, or that climbs out of the kit with `..`, such
+  as `cd "$(dirname "$0")/.."` or an `EnvironmentFile=` path through `deploy/../.env`, reaches
+  somewhere else with the same bytes. Fix those in a code pull request right after the move. Crate
+  code that reaches into the kit by a relative path, such as
+  `include_str!("../../../deploy/app.service")`, stops building at the move, so drop that path in
+  a code pull request before it. The move doesn't count either when:
+
+  - the root keeps a `deploy` entry, or the kit's code also lands in a second crate;
+  - the root or `crates/` holds an entry that a case-insensitive file system reads as the same
+    name, or the crate's name isn't plain ASCII;
+  - the crate already held a `deploy` entry before the move;
+  - the kit holds a symbolic link, a submodule or a `Cargo.toml`, or a member's `build` key names
+    a file in it;
+  - git checks its code out differently at the new place, or a `.gitattributes` anywhere is
+    spelled in other letters;
+  - in a run on the working tree, either place, or a `.gitattributes` anywhere, has an
+    uncommitted change.
 {%- endif %}
 
 ## Change an answer

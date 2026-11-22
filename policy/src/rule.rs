@@ -43,7 +43,8 @@ pub enum Rule {
     /// The main package's entry in `release-plz.toml` takes every other member into its
     /// changelog.
     ReleaseChangelog,
-    /// The shell scripts under `deploy/` pass shellcheck.
+    /// The shell scripts of a deploy kit, under the root `deploy/` or a crate's
+    /// `crates/<crate>/deploy/`, pass shellcheck.
     DeployScripts,
     /// Only the members `restricted_crates` allows reach a restricted package, directly or
     /// through others.

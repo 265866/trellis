@@ -1,5 +1,5 @@
-//! The shell scripts of a deploy kit, the files under `deploy/`, pass shellcheck, since they are
-//! code that no other check reads.
+//! The shell scripts of a deploy kit, the files under the root `deploy/` or a crate's
+//! `crates/<crate>/deploy/`, pass shellcheck, since they are code that no other check reads.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::{self, ErrorKind};
@@ -17,11 +17,11 @@ use crate::repository_files;
 use crate::violation::Violation;
 use crate::workspace::Workspace;
 
-/// The directory that holds a project's deploy kit, relative to the root. Its files are code to
-/// `trellis-policy rule-changes`, so a kit change lands with the code change it needs.
-pub(crate) const DEPLOY_DIRECTORY: &str = "deploy/";
+/// The name of a deploy kit's directory: `deploy` at the root, or in a crate's directory,
+/// `crates/<crate>/deploy`.
+pub(crate) const KIT_NAME: &str = "deploy";
 
-/// The extensions that make a file under [`DEPLOY_DIRECTORY`] a shell script, in any case.
+/// The extensions that make a kit file a shell script, in any case.
 const SCRIPT_EXTENSIONS: [&str; 5] = ["sh", "bash", "dash", "ksh", "bats"];
 
 /// The shells shellcheck reads, which a script's `#!` line can name.
@@ -36,41 +36,69 @@ const ALLOWED_DIRECTIVES: [&str; 4] = ["enable", "shell", "source", "source-path
 const INSTALL_REMEDY: &str = "Install the shellcheck version the Set up section of CONTRIBUTING.md \
                               names; CI installs it too.";
 
-/// Checks every shell script under `deploy/` with shellcheck, and reports each finding at its
-/// file. A script is a file whose name ends in `.sh`, `.bash`, `.dash`, `.ksh` or `.bats`, whose
-/// first line is a `#!` line that names `sh`, `bash`, `dash`, `ksh`, `ash` or `bats`, or that sets
-/// its shell with a `# shellcheck shell=<shell>` directive, as a library a script sources can.
-/// shellcheck runs on a copy of `deploy/` alone, with `--norc` and without `SHELLCHECK_OPTS`, so
-/// neither a `.shellcheckrc` nor the environment can turn a check off and a file outside the kit
-/// can't be sourced unseen, and with `--check-sourced`, so it reports the files a script sources
-/// too, looked up from the script's directory. A finding in a file outside the kit, such as an
-/// `/etc/os-release` a script sources from the host, isn't the kit's, so it isn't reported.
+/// The directory of the deploy kit that holds `path`, relative to the root with `/` separators,
+/// with its `/`: `deploy/` for a file under the root `deploy/`, `crates/<crate>/deploy/` for one
+/// under a crate's, or `None` for any other file. `<crate>` is a single directory, which
+/// `workspace_shape` makes a member's. A kit's files are code to `trellis-policy rule-changes`,
+/// apart from the ones that are rules by their names, so a kit change lands with the code change
+/// it needs.
+pub(crate) fn kit_of(path: &str) -> Option<&str> {
+    if let Some(kit) = kit_at(path, 0) {
+        return Some(kit);
+    }
+    let (krate, _) = path.strip_prefix("crates/")?.split_once('/')?;
+    if krate.is_empty() {
+        return None;
+    }
+    kit_at(path, "crates/".len() + krate.len() + 1)
+}
+
+/// The start of `path` up to a kit directory that begins at byte `start`, with its `/`, or `None`
+/// if no `deploy/` begins there.
+fn kit_at(path: &str, start: usize) -> Option<&str> {
+    let rest = path.get(start..)?.strip_prefix(KIT_NAME)?;
+    rest.starts_with('/')
+        .then(|| &path[..=start + KIT_NAME.len()])
+}
+
+/// Checks every shell script in a deploy kit, under the root `deploy/` or a crate's
+/// `crates/<crate>/deploy/`, with shellcheck, and reports each finding at its file. A script is a
+/// file whose name ends in `.sh`, `.bash`, `.dash`, `.ksh` or `.bats`, whose first line is a `#!`
+/// line that names `sh`, `bash`, `dash`, `ksh`, `ash` or `bats`, or that sets its shell with a
+/// `# shellcheck shell=<shell>` directive, as a library a script sources can. Each kit is checked
+/// on its own: shellcheck runs on a copy that holds that kit's files alone, each at its path, with
+/// `--norc` and without `SHELLCHECK_OPTS`, so neither a `.shellcheckrc` nor the environment can
+/// turn a check off and a file outside the kit, another kit's included, can't be sourced unseen,
+/// and with `--check-sourced`, so it reports the files a script sources too, looked up from the
+/// script's directory. A finding in a file outside the kit, such as an `/etc/os-release` a script
+/// sources from the host, isn't the kit's, so it isn't reported.
 ///
-/// A file under `deploy/` silences a finding with a `# shellcheck disable=SC<code> # <reason>`
-/// line above it, where review sees it. shellcheck applies a directive to the whole command below
-/// it, a function or a sourced file included, so the check measures what each directive hides: it
-/// runs shellcheck a second time with every `disable` taken out, and a finding that only that run
+/// A kit file silences a finding with a `# shellcheck disable=SC<code> # <reason>` line above it,
+/// where review sees it. shellcheck applies a directive to the whole command below it, a function
+/// or a sourced file included, so the check measures what each directive hides: it runs
+/// shellcheck a second time with every `disable` taken out, and a finding that only that run
 /// reports fails when a directive closer to it would silence it, as [`Kit::closer_directives`]
 /// finds by asking shellcheck. [`directive_problems`] says which other directives are violations.
-/// A symbolic link under `deploy/` is one too, since the kit's files are what review read, and so
-/// is a file that sources a kit file by its absolute path in the checkout, which shellcheck would
-/// read there instead of in the copy.
+/// A symbolic link in a kit is one too, since the kit's files are what review read, and so is a
+/// file that sources a kit file by its absolute path in the checkout, which shellcheck would read
+/// there instead of in the copy.
 ///
-/// A project without `deploy/` has no script, so the check runs nothing.
+/// A project without a kit has no script, so the check runs nothing.
 ///
 /// # Errors
 ///
-/// Fails if the repository's files or a file under `deploy/` can't be read or copied, or
-/// shellcheck doesn't run, such as when it isn't installed.
+/// Fails if the repository's files or a kit file can't be read or copied, or shellcheck doesn't
+/// run, such as when it isn't installed.
 pub(crate) fn check(workspace: &Workspace) -> Result<Vec<Violation>, PolicyError> {
     let root = workspace.root();
+    let width = thread::available_parallelism().map_or(1, NonZeroUsize::get);
     let mut violations = Vec::new();
-    let mut texts = BTreeMap::new();
-    let mut scripts = Vec::new();
+    let mut kits: BTreeMap<String, Kit> = BTreeMap::new();
     for file in repository_files::list(root)? {
-        if !file.starts_with(DEPLOY_DIRECTORY) {
+        let Some(directory) = kit_of(&file) else {
             continue;
-        }
+        };
+        let directory = directory.to_owned();
         let path = root.join(&file);
         let read_error = |source| PolicyError::Read {
             path: path.clone(),
@@ -90,47 +118,19 @@ pub(crate) fn check(workspace: &Workspace) -> Result<Vec<Violation>, PolicyError
         }
         let text = String::from_utf8_lossy(&fs::read(&path).map_err(read_error)?).into_owned();
         violations.extend(
-            directive_problems(&file, &text)
+            directive_problems(&directory, &file, &text)
                 .into_iter()
                 .map(|problem| Violation::new(file.clone(), problem)),
         );
+        let kit = kits.entry(directory).or_insert_with(|| Kit::new(width));
         if is_script(&path, &text) {
-            scripts.push(file.clone());
+            kit.scripts.push(file.clone());
         }
-        texts.insert(file, text);
+        kit.texts.insert(file, text);
     }
-    if scripts.is_empty() {
-        return Ok(violations);
+    for kit in kits.values() {
+        violations.extend(kit.check(root, width)?);
     }
-    violations.extend(
-        sourced_from_checkout(root, &texts, &scripts)
-            .into_iter()
-            .map(|file| {
-                Violation::new(
-            file,
-            "This file sources a kit file by its absolute path in the checkout. shellcheck reads \
-             that path in the checkout instead of the kit's copy, with its directives as they \
-             are, so source it relative to the script, such as \
-             `. \"$(dirname \"$0\")/lib/common\"`."
-                .to_owned(),
-        )
-            }),
-    );
-    let width = thread::available_parallelism().map_or(1, NonZeroUsize::get);
-    let kit = Kit {
-        texts,
-        scripts,
-        slots: Slots::new(width),
-    };
-    let reported = kit.shellcheck(|_, text| text.to_owned())?;
-    let disables = kit.texts.values().any(|text| text.contains("disable="));
-    let unsilenced = if disables {
-        kit.shellcheck(|_, text| without_disables(text))?
-    } else {
-        BTreeSet::new()
-    };
-    violations.extend(hidden_too_far(&kit, &reported, &unsilenced, width)?);
-    violations.extend(in_the_kit(&reported).map(Finding::violation));
     Ok(violations)
 }
 
@@ -145,7 +145,9 @@ fn hidden_too_far(
 ) -> Result<Vec<Violation>, PolicyError> {
     let mut violations = Vec::new();
     let mut groups: BTreeMap<(&str, u32), Vec<&Finding>> = BTreeMap::new();
-    let newly_reported = in_the_kit(unsilenced).filter(|finding| !reported.contains(finding));
+    let newly_reported = kit
+        .own(unsilenced)
+        .filter(|finding| !reported.contains(finding));
     for finding in newly_reported {
         groups
             .entry((finding.file.as_str(), finding.code))
@@ -181,19 +183,10 @@ fn hidden_too_far(
     Ok(violations)
 }
 
-/// The findings in `found` in files under `deploy/`, leaving out those in a host file a script
-/// sources by its absolute path, which aren't the kit's and which no directive in it could
-/// silence.
-fn in_the_kit(found: &BTreeSet<Finding>) -> impl Iterator<Item = &Finding> {
-    found
-        .iter()
-        .filter(|finding| finding.file.starts_with(DEPLOY_DIRECTORY))
-}
-
 /// The kit files among `texts` that shellcheck may read, the scripts and the files without an
-/// extension, with a line that sources a path under `deploy/` in the checkout at `root` by its
-/// absolute path: `. /path` or `source /path` where a command starts, with the path's `.` and `..`
-/// parts and its symbolic links resolved. shellcheck follows only such a literal path.
+/// extension, with a line that sources a path in any kit in the checkout at `root` by its absolute
+/// path: `. /path` or `source /path` where a command starts, with the path's `.` and `..` parts
+/// and its symbolic links resolved. shellcheck follows only such a literal path.
 fn sourced_from_checkout(
     root: &Path,
     texts: &BTreeMap<String, String>,
@@ -208,11 +201,7 @@ fn sourced_from_checkout(
             && normalized(path)
                 .and_then(|path| fs::canonicalize(format!("/{path}")).ok())
                 .and_then(|path| path.strip_prefix(&root).ok().map(Path::to_path_buf))
-                .is_some_and(|path| {
-                    path.to_string_lossy()
-                        .replace('\\', "/")
-                        .starts_with(DEPLOY_DIRECTORY)
-                })
+                .is_some_and(|path| kit_of(&path.to_string_lossy().replace('\\', "/")).is_some())
     };
     let read = |file: &str| {
         scripts.iter().any(|script| script == file) || Path::new(file).extension().is_none()
@@ -292,9 +281,9 @@ fn in_parallel<Item: Sync, Output: Send>(
     })
 }
 
-/// A deploy kit's files, which shellcheck reads in a copy of `deploy/` alone.
+/// A deploy kit's files, which shellcheck reads in a copy that holds them alone.
 struct Kit {
-    /// Each file under `deploy/`, relative to the root, mapped to its text.
+    /// Each file in the kit, relative to the root, mapped to its text.
     texts: BTreeMap<String, String>,
     /// The files that are scripts, which shellcheck runs on.
     scripts: Vec<String>,
@@ -334,9 +323,64 @@ impl Slots {
 }
 
 impl Kit {
-    /// The findings shellcheck reports for the kit's scripts in a copy of `deploy/`, made in a
-    /// temporary directory from each file's text as `edit`, given the file and its text, changes
-    /// it, in kit files and in the host files they source.
+    /// A kit with no files yet, whose shellcheck runs go up to `width` at once.
+    fn new(width: usize) -> Self {
+        Self {
+            texts: BTreeMap::new(),
+            scripts: Vec::new(),
+            slots: Slots::new(width),
+        }
+    }
+
+    /// The violations of the kit's scripts in the checkout at `root`: the files that source a kit
+    /// file by its absolute path there, the findings shellcheck reports in the kit's files, and
+    /// the findings a directive hides where a closer one would silence them alone. A kit without
+    /// a script has none.
+    fn check(&self, root: &Path, width: usize) -> Result<Vec<Violation>, PolicyError> {
+        if self.scripts.is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut violations: Vec<Violation> =
+            sourced_from_checkout(root, &self.texts, &self.scripts)
+                .into_iter()
+                .map(|file| {
+                    Violation::new(
+                        file,
+                        "This file sources a kit file by its absolute path in the checkout. \
+                         shellcheck reads that path in the checkout instead of the kit's copy, with \
+                         its directives as they are, so source it relative to the script, such as \
+                         `. \"$(dirname \"$0\")/lib/common\"`."
+                            .to_owned(),
+                    )
+                })
+                .collect();
+        let reported = self.shellcheck(|_, text| text.to_owned())?;
+        let disables = self.texts.values().any(|text| text.contains("disable="));
+        let unsilenced = if disables {
+            self.shellcheck(|_, text| without_disables(text))?
+        } else {
+            BTreeSet::new()
+        };
+        violations.extend(hidden_too_far(self, &reported, &unsilenced, width)?);
+        violations.extend(self.own(&reported).map(Finding::violation));
+        Ok(violations)
+    }
+
+    /// The findings in `found` in the kit's files, leaving out those in a host file a script
+    /// sources by its absolute path, which aren't the kit's and which no directive in it could
+    /// silence.
+    fn own<'found>(
+        &self,
+        found: &'found BTreeSet<Finding>,
+    ) -> impl Iterator<Item = &'found Finding> {
+        found
+            .iter()
+            .filter(|finding| self.texts.contains_key(&finding.file))
+    }
+
+    /// The findings shellcheck reports for the kit's scripts in a copy that holds the kit's files
+    /// alone, each at its path, made in a temporary directory from each file's text as `edit`,
+    /// given the file and its text, changes it, in kit files and in the host files they source.
     fn shellcheck(
         &self,
         edit: impl Fn(&str, &str) -> String,
@@ -567,21 +611,23 @@ fn is_comment(line: &&str) -> bool {
     line.is_empty() || line.starts_with('#')
 }
 
-/// What is wrong with the shellcheck directives in `text`, the text of `file`. shellcheck reads a
-/// directive in a comment after any run of spaces and tabs, at the start of a line or after code
-/// such as `f() {` or `then`. So each of these is a problem:
+/// What is wrong with the shellcheck directives in `text`, the text of `file` in the kit whose
+/// directory is `kit`, as [`kit_of`] names it. shellcheck reads a directive in a comment after any
+/// run of spaces and tabs, at the start of a line or after code such as `f() {` or `then`. So each
+/// of these is a problem:
 ///
 /// - a directive after code on its line, where review misses it;
 /// - a `disable` whose value isn't a list of codes, such as `all`, a range or a quoted value;
 /// - a `disable` without a reason after it, as a `#` comment;
 /// - `shell` in a file whose `#!` line names its shell already, which it would override;
-/// - `source` that names a file outside `deploy/` or an absolute path, such as `/dev/null`, which
-///   would keep shellcheck from reading what the script sources;
+/// - `source` that names a file outside the kit or an absolute path, such as `/dev/null`, which
+///   would keep shellcheck from reading what the script sources, and `source-path` that names a
+///   directory outside the kit;
 /// - any key but `disable`, `enable`, `shell`, `source` and `source-path`, which turns checks off
 ///   for the whole file.
 ///
 /// A line in a heredoc that looks like a directive is read as one too, which shellcheck doesn't.
-fn directive_problems(file: &str, text: &str) -> Vec<String> {
+fn directive_problems(kit: &str, file: &str, text: &str) -> Vec<String> {
     let text = text.strip_prefix('\u{feff}').unwrap_or(text);
     let has_shebang = text.starts_with("#!");
     let directory = file.rsplit_once('/').map_or("", |(directory, _)| directory);
@@ -630,16 +676,16 @@ fn directive_problems(file: &str, text: &str) -> Vec<String> {
                     "Line {number} sets the shell, which the file's `#!` line names already. \
                      Leave it to the `#!` line."
                 )),
-                "source-path" if !source_path_inside_deploy(directory, value) => {
+                "source-path" if !source_path_inside_kit(kit, directory, value) => {
                     problems.push(format!(
                         "Line {number} points shellcheck at `{value}` to look for sourced files, \
                          which isn't in the kit. Write `SCRIPTDIR`, a directory below it such as \
-                         `SCRIPTDIR/lib`, or a path from the root such as `deploy/lib`."
+                         `SCRIPTDIR/lib`, or a path from the root such as `{kit}lib`."
                     ));
                 }
-                "source" if !inside_deploy(directory, value) => problems.push(format!(
+                "source" if !inside_kit(kit, directory, value) => problems.push(format!(
                     "Line {number} points shellcheck at `{value}`, which isn't a file in \
-                     `deploy/`, so it can't read what the script sources. Point it at the file \
+                     `{kit}`, so it can't read what the script sources. Point it at the file \
                      in the kit, or silence SC1091 with a reason."
                 )),
                 "disable" | "shell" | "source" | "source-path" => {}
@@ -735,28 +781,30 @@ fn disables_a_parse_check(value: &str) -> bool {
         .any(|code| (1000..=1999).contains(&code) && !matches!(code, 1090 | 1091))
 }
 
-/// Whether `source`, a `source=` or `source-path=` value in a file in `directory`, names `deploy/`
-/// or a path under it: a relative path that stays inside the kit, read from the file's directory.
-fn inside_deploy(directory: &str, source: &str) -> bool {
+/// Whether `source`, a `source=` or `source-path=` value in a file in `directory`, names `kit`, the
+/// kit's directory, or a path under it: a relative path that stays inside the kit, read from the
+/// file's directory. A path into another kit, or into the crate around a crate's kit, leaves it.
+fn inside_kit(kit: &str, directory: &str, source: &str) -> bool {
     if source.starts_with('/') || source.contains('\\') {
         return false;
     }
     normalized(&format!("{directory}/{source}")).is_some_and(|path| {
-        path.strip_prefix(DEPLOY_DIRECTORY.trim_end_matches('/'))
+        path.strip_prefix(kit.trim_end_matches('/'))
             .is_some_and(|rest| rest.is_empty() || rest.starts_with('/'))
     })
 }
 
-/// Whether `value`, a `source-path=` value in a file in `directory`, names `deploy/` or a
-/// directory under it. shellcheck reads `SCRIPTDIR` as the file's directory and any other
-/// relative path from the directory it runs in, the copy's root.
-fn source_path_inside_deploy(directory: &str, value: &str) -> bool {
+/// Whether `value`, a `source-path=` value in a file in `directory`, names `kit`, the kit's
+/// directory, or a directory under it. shellcheck reads `SCRIPTDIR` as the file's directory and
+/// any other relative path from the directory it runs in, the copy's root, which holds the kit's
+/// files alone.
+fn source_path_inside_kit(kit: &str, directory: &str, value: &str) -> bool {
     match value.strip_prefix("SCRIPTDIR") {
         Some("") => true,
         Some(rest) => rest
             .strip_prefix('/')
-            .is_some_and(|rest| inside_deploy(directory, rest)),
-        None => normalized(value).is_some_and(|path| path.is_empty()) || inside_deploy("", value),
+            .is_some_and(|rest| inside_kit(kit, directory, rest)),
+        None => normalized(value).is_some_and(|path| path.is_empty()) || inside_kit(kit, "", value),
     }
 }
 
@@ -852,7 +900,7 @@ fn names_a_shell(start: &[u8]) -> bool {
 /// One finding shellcheck reports.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 struct Finding {
-    /// The file, relative to the root, `deploy/` included.
+    /// The file, relative to the root, its kit's directory included.
     file: String,
     /// The line.
     line: usize,
@@ -1021,12 +1069,12 @@ mod tests {
                       rm $FILES\n#\tshellcheck source=lib/common.sh enable=require-variable-braces\n\
                       . ./lib/common.sh\n";
         assert_eq!(
-            directive_problems("deploy/install.sh", script),
+            directive_problems("deploy/", "deploy/install.sh", script),
             Vec::<String>::new()
         );
         let library = "# shellcheck shell=bash source=../install.sh\nVALUE=1\n";
         assert_eq!(
-            directive_problems("deploy/lib/common", library),
+            directive_problems("deploy/", "deploy/lib/common", library),
             Vec::<String>::new()
         );
     }
@@ -1096,7 +1144,7 @@ mod tests {
             ),
         ];
         for (script, expected) in cases {
-            let problems = directive_problems("deploy/install.sh", script);
+            let problems = directive_problems("deploy/", "deploy/install.sh", script);
             assert!(
                 problems.iter().any(|problem| problem.contains(expected)),
                 "{script:?} should report {expected:?}: {problems:#?}"
@@ -1108,16 +1156,17 @@ mod tests {
     fn a_comment_that_sets_nothing_and_a_path_to_the_kit_are_no_problem() {
         let unit = "[Unit]\n# shellcheck is run in CI\n## shellcheck and the kit\n";
         assert_eq!(
-            directive_problems("deploy/app.service", unit),
+            directive_problems("deploy/", "deploy/app.service", unit),
             Vec::<String>::new()
         );
         let script = "set -eu\n# shellcheck source-path=.\n# shellcheck source-path=deploy/lib\n\
                       # shellcheck source-path=SCRIPTDIR/lib\n. ./lib.sh\n";
         assert_eq!(
-            directive_problems("deploy/run.sh", script),
+            directive_problems("deploy/", "deploy/run.sh", script),
             Vec::<String>::new()
         );
-        let outside = directive_problems("deploy/run.sh", "# shellcheck source-path=..\n");
+        let outside =
+            directive_problems("deploy/", "deploy/run.sh", "# shellcheck source-path=..\n");
         assert!(
             outside
                 .iter()
@@ -1126,6 +1175,7 @@ mod tests {
         );
         for value in ["lib", "SCRIPTDIR/../..", "../deploy"] {
             let problems = directive_problems(
+                "deploy/",
                 "deploy/a/run.sh",
                 &format!("# shellcheck source-path={value}\n"),
             );
@@ -1136,6 +1186,87 @@ mod tests {
                 "{value}: {problems:#?}"
             );
         }
+    }
+
+    #[test]
+    fn a_kit_is_the_root_deploy_directory_or_a_crate_s() {
+        for (path, kit) in [
+            ("deploy/install.sh", "deploy/"),
+            ("deploy/lib/common", "deploy/"),
+            ("crates/demo/deploy/install.sh", "crates/demo/deploy/"),
+            (
+                "crates/demo_core/deploy/systemd/app.service",
+                "crates/demo_core/deploy/",
+            ),
+        ] {
+            assert_eq!(kit_of(path), Some(kit), "{path}");
+        }
+        for path in [
+            "deployment/install.sh",
+            "Deploy/install.sh",
+            "deploy",
+            "crates/demo/deploy",
+            "crates/demo/src/deploy/install.sh",
+            "crates/demo/deployment/install.sh",
+            "crates//deploy/install.sh",
+            "crates/deploy/install.sh",
+            "tools/deploy/install.sh",
+        ] {
+            assert_eq!(kit_of(path), None, "{path}");
+        }
+    }
+
+    #[test]
+    fn a_crate_kit_s_directives_stay_inside_it() {
+        let kit = "crates/demo/deploy/";
+        let inside = "set -eu\n# shellcheck source-path=SCRIPTDIR/lib\n\
+                      # shellcheck source-path=crates/demo/deploy/lib source=lib/common.sh\n\
+                      # shellcheck source-path=.\n. ./lib/common.sh\n";
+        assert_eq!(
+            directive_problems(kit, "crates/demo/deploy/run.sh", inside),
+            Vec::<String>::new()
+        );
+        for (directive, expected) in [
+            (
+                "source=../src/setup.sh",
+                "points shellcheck at `../src/setup.sh`, which isn't a file in \
+                 `crates/demo/deploy/`",
+            ),
+            (
+                "source=../../../deploy/common.sh",
+                "isn't a file in `crates/demo/deploy/`",
+            ),
+            (
+                "source=../../demo_core/deploy/common.sh",
+                "isn't a file in `crates/demo/deploy/`",
+            ),
+            (
+                "source-path=deploy",
+                "a path from the root such as `crates/demo/deploy/lib`",
+            ),
+            ("source-path=SCRIPTDIR/..", "to look for sourced files"),
+            ("source-path=crates/demo", "to look for sourced files"),
+        ] {
+            let problems = directive_problems(
+                kit,
+                "crates/demo/deploy/run.sh",
+                &format!("set -eu\n# shellcheck {directive}\n. ./x\n"),
+            );
+            assert!(
+                problems.iter().any(|problem| problem.contains(expected)),
+                "{directive} should report {expected:?}: {problems:#?}"
+            );
+        }
+        let root = directive_problems(
+            "deploy/",
+            "deploy/run.sh",
+            "# shellcheck source=../crates/demo/deploy/common.sh\n",
+        );
+        assert!(
+            root.iter()
+                .any(|problem| problem.contains("isn't a file in `deploy/`")),
+            "{root:#?}"
+        );
     }
 
     #[test]
