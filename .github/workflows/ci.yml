@@ -105,6 +105,12 @@ jobs:
             kind: binary
             recipes: ci
             tools: just@1.59.0,cargo-deny@0.20.2,cargo-shear@1.14.0,typos@1.51.1,taplo@0.10.0,shellcheck@0.11.0,zizmor@1.31.1,lychee@0.24.2,cargo-nextest@0.9.150,cargo-dylint@6.4.0,dylint-link@6.4.0,uv@0.13.8,cargo-about@0.9.3
+          - name: binary with a web UI
+            os: ubuntu-24.04
+            kind: binary
+            web: "true"
+            recipes: ci
+            tools: just@1.59.0,cargo-deny@0.20.2,cargo-shear@1.14.0,typos@1.51.1,taplo@0.10.0,shellcheck@0.11.0,zizmor@1.31.1,lychee@0.24.2,cargo-nextest@0.9.150,cargo-dylint@6.4.0,dylint-link@6.4.0,uv@0.13.8,cargo-about@0.9.3
           - name: service
             os: ubuntu-24.04
             kind: service
@@ -157,6 +163,14 @@ jobs:
             recipes: lint dylint test docs build-release notices
             tools: just@1.59.0,cargo-nextest@0.9.150,cargo-dylint@6.4.0,dylint-link@6.4.0,uv@0.13.8,cargo-about@0.9.3
             checker: "true"
+          # A binary with a web UI builds it and writes its notices on its Windows release runners
+          # too, through the PowerShell recipes.
+          - name: binary with a web UI on Windows
+            os: windows-2025
+            kind: binary
+            web: "true"
+            recipes: web-check web-build notices
+            tools: just@1.59.0,uv@0.13.8,cargo-about@0.9.3
           # The published library's `package` recipe has a PowerShell variant only Windows runs.
           - name: published library on Windows
             os: windows-2025

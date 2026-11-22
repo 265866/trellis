@@ -226,9 +226,15 @@ run *args:{{ ' web-build' if web_ui else '' }}
     cargo run --locked --package {{ crate_name }} -- {% raw %}{{ args }}{% endraw %}
 {%- endif %}
 {%- if web_ui %}
+{%- if kind == 'service' %}
 
 # Where the service finds the web UI's build, which `just run` builds first. The image sets it to
 # where it puts the build.
+{%- else %}
+
+# Where the program finds the web UI's build, which `just run` builds first. A release archive
+# carries the build as `web/` beside the program.
+{%- endif %}
 export {{ crate_name | upper }}_WEB_DIR := justfile_directory() / "crates" / "{{ crate_name }}" / "web" / "dist"
 
 # `bun install --frozen-lockfile` passes with no lockfile and then picks the versions itself, so

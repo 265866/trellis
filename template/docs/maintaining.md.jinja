@@ -162,10 +162,14 @@ change nothing inside it, and fix the `path` of each dependency on it. `just rul
 the moved files as neither rules nor code, so this is a code pull request. Outside `crates/`, only
 the crate's row under Layout in `CONTRIBUTING.md` names its directory. Fix that row in a rules
 pull request after the move.
-{%- if web_ui %} Moving `crates/{{ crate_name }}`, which holds the web UI, also changes the root
+{%- if web_ui and kind == 'service' %} Moving `crates/{{ crate_name }}`, which holds the web UI, also changes the root
 files that name `crates/{{ crate_name }}/web`: `justfile`, `Containerfile`, `.gitignore` and
 `.dockerignore`. They are rules, so that move is a rules pull request, and the Layout rows can go
 in it.
+{%- elif web_ui %} Moving `crates/{{ crate_name }}`, which holds the web UI, also changes the
+files that name `crates/{{ crate_name }}/web`: `justfile`, `.gitignore` and
+`.github/workflows/build-release.yml`. They are rules, so that move is a rules pull request, and
+the Layout rows can go in it.
 {%- endif %}
 
 GitHub's merge doesn't follow a moved directory, though git's does. When the move and another
@@ -393,7 +397,7 @@ hold need more than the update, and two can't change this way at all:
 {%- endif %}
   A crate's license line is a rule setting, so the pull request stays a rule change.
 {%- endif %}
-{%- if kind == 'service' %}
+{%- if kind != 'library' %}
 {%- if web_ui %}
 - **Web UI.** Turning `web_ui` off leaves `crates/{{ crate_name }}/web` in place, and
   `.gitignore` no longer ignores its `node_modules/` and `dist/`. Delete those two directories

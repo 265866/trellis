@@ -85,7 +85,7 @@ your option.
 {%- endif %}
 {%- if kind == 'binary' %}
 Each release archive holds `THIRD-PARTY-LICENSES.html`, the licenses of the crates it is built
-with.
+with{% if web_ui %}, and `THIRD-PARTY-LICENSES-WEB.txt`, those of the web UI's packages{% endif %}.
 {%- elif kind == 'service' %}
 The image holds the licenses of the crates it is built with in
 `/usr/share/doc/{{ project_name }}/THIRD-PARTY-LICENSES.html`.

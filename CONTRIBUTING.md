@@ -4,8 +4,8 @@
 
 Install [rustup](https://rustup.rs/), [cargo-binstall](https://github.com/cargo-bins/cargo-binstall),
 [uv](https://docs.astral.sh/uv/), [Go](https://go.dev/dl/) for actionlint,
-[shellcheck](https://www.shellcheck.net/), Docker, [Bun](https://bun.com/) for the web UI
-template, and just (`cargo binstall just@1.59.0`). Then install the check tools with the commands
+[shellcheck](https://www.shellcheck.net/), [jq](https://jqlang.org/), Docker,
+[Bun](https://bun.com/) for the web UI template, and just (`cargo binstall just@1.59.0`). Then install the check tools with the commands
 of the `install-tools` recipe in [template/justfile.jinja](template/justfile.jinja), cargo-about
 included, and run `just install-nightly-rustfmt`.
 
@@ -14,7 +14,8 @@ included, and run `just install-nightly-rustfmt`.
 `just ci` runs the checks CI runs, except the ones that need GitHub or another target: `PR title`,
 and the template entries CI runs for a generated binary's other targets and on Windows,
 `binary for Linux on x86-64` (musl), `binary on Linux on ARM64`, `binary on macOS`,
-`binary on Windows`, `binary on Windows on ARM64` and `published library on Windows`. To run one
+`binary on Windows`, `binary on Windows on ARM64`, `binary with a web UI on Windows` and
+`published library on Windows`. To run one
 of them where its runner's system matches yours, pass its target to `just template`, such as
 `just template binary "test build-release" false false x86_64-unknown-linux-musl`. Nor does it
 run the `C code for musl` jobs, `Service image for ARM64` or `Run the service image on ARM64`. The
@@ -26,7 +27,7 @@ has, it runs:
 | --- | --- |
 | `just pins` | The template pins the same toolchains as this repository and `lints/`. The config files, workflows and `[workspace.lints]` tables both keep agree, apart from what only some answers get. The template's two lists of accepted licenses agree. The versions `template/dylint.toml.jinja` says trellis read each trusted macro crate at are the ones `tests/dependencies/setup.sh` pins. Every tool and runner image has one version wherever it's pinned in a form the recipe reads, such as `name@version`, in every file git has or would add, binary ones included, apart from `CHANGELOG.md`, `policy/` and the web starter's lockfile, and a conflict names the file and line of each version. A value it can't find or read fails. |
 | `just lints-lint`, `just lints-comments`, `just lints-test` | clippy, `code_comment` and the UI tests for the custom lints. The lints' own code has no code comments either; the UI fixtures in `lints/ui/` keep theirs, since their test directives are comments. |
-| `just template <kind> [recipes] [publish] [web] [target]` | Generates a `binary`, `service` or `library` project from the working tree and runs its `just ci`, or the recipes you name. `true` as `publish` makes a library a published one, `true` as `web` gives a service a web UI, whose build and notices must reach its image. A service's image must give its user read access to its license files, even under umask 077. A `target` runs `test` and `build-release` for that target. |
+| `just template <kind> [recipes] [publish] [web] [target]` | Generates a `binary`, `service` or `library` project from the working tree and runs its `just ci`, or the recipes you name. `true` as `publish` makes a library a published one, `true` as `web` gives a binary or service a web UI, whose build and notices must reach its image or, for a binary, the archive its release build's steps write for this machine's target. A service's image must give its user read access to its license files, even under umask 077. A `target` runs `test` and `build-release` for that target. |
 | `just shapes` | Generates the project a user gets, with the lints from GitHub, for each set of answers the `shape` recipe lists, and runs the checks that don't fetch them. It also checks the next steps Copier prints, what `just setup-github --dry-run` would set, and what `just check-github` reports for the fixtures in `tests/check-github/`. |
 | `just dependencies` | Generates a binary that uses the crates most projects use, as `tests/dependencies/setup.sh` adds them, runs its checks, then checks that the lints reject each way past them in `tests/dependencies/violations.sh`. |
 | `just update` | Generates a project from one scratch trellis version, edits it as an owner would, updates it to a second, and checks the rules moved, the owner's code didn't, and the owner's lines in trellis's files merged without conflicts. Then it switches the project to private and back, and publishes its crate under each license, which must deliver that license's files to the crate. |
