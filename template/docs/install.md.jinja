@@ -30,7 +30,8 @@ installed. They don't run on Alpine or another musl distribution.
 2. Check the download as [Verify a release](verifying-releases.md) shows.
 {%- if release.files %}
 3. Install it. Run an installer. Keep a bare program, or the one an archive holds once you unpack
-   it, where you keep programs, such as a directory on your `PATH` for a command-line one.
+   it, where you keep programs, such as a directory on your `PATH` for a command-line one. On Linux
+   or macOS, make a bare program executable first, with `chmod +x`.
 {%- else %}
 3. Unpack the archive and move `{{ project_name }}` to where you keep programs, such as a directory
    on your `PATH`.
