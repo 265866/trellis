@@ -456,7 +456,7 @@ lints-test:
     cargo test --locked
 
 # Runs `template` for each kind, then `shapes`, `dependencies`, `update` and the extras checks.
-templates: (template "binary") (template "service") (template "service" "ci" "false" "true") (template "library") shapes dependencies update build-extras image-extras
+templates: (template "binary") (template "binary" "ci" "false" "true") (template "service") (template "service" "ci" "false" "true") (template "library") shapes dependencies update build-extras image-extras
 
 # Copies the working tree into a scratch repository as two tagged trellis versions, generates a
 # library from the first, and edits it the way an owner would: its code and changelog, and a new
@@ -692,14 +692,16 @@ update:
 
 # Generates a project of one kind, `binary`, `service` or `library`, from the working tree, with
 # the lints and checker from this checkout, and runs `recipes` in it, `ci` by default. `true` as
-# `publish` makes a library a published one, and `true` as `web` gives a service a web UI. After
-# `ci`, a service also builds and runs its image when Docker is installed, under umask 077 with its
-# license files 0600, and the image's user must be able to read them. A web UI's build and license
-# notices must be in it too, and its install must refuse a missing bun.lock and a package that
-# provides a `bun` command, and read the app's bunfig.toml. After `ci`, an about.toml entry for a
-# crate the graph doesn't hold must pass `just notices` and fail `just stale-licenses`. A `target`
-# runs `test` and `build-release` for that target, as a project's CI does for the target a release
-# ships.
+# `publish` makes a library a published one, and `true` as `web` gives a binary or service a web UI.
+# After `ci`, a binary on Linux runs its release build's steps for this machine's target, whose
+# archive must hold the program, its license files and notices, and a web UI's build and notices
+# only when it has one. After `ci`, a service also builds and runs its image when Docker is
+# installed, under umask 077 with its license files 0600, and the image's user must be able to read
+# them. A web UI's build and license notices must be in it too, and its install must refuse a
+# missing bun.lock and a package that provides a `bun` command, and read the app's bunfig.toml.
+# After `ci`, an about.toml entry for a crate the graph doesn't hold must pass `just notices` and
+# fail `just stale-licenses`. A `target` runs `test` and `build-release` for that target, as a
+# project's CI does for the target a release ships.
 #
 # Generates a project of one kind and runs its checks.
 template kind recipes="ci" publish="false" web="false" target="":
@@ -762,6 +764,30 @@ template kind recipes="ci" publish="false" web="false" target="":
       cp "$out/about.toml" about.toml
       if [ "$(uname -s)" = Linux ]; then just stale-licenses; fi
       echo "just notices passed an about.toml entry ahead of its crate, and just stale-licenses named it."
+    fi
+    if [ "{{ recipes }}" = ci ] && [ "{{ kind }}" = binary ] && [ "$(uname -s)" = Linux ]; then
+      # The release build's own steps, run for this machine's target, must archive the program, its
+      # license files and notices, and a web UI's build and notices only when it has one.
+      "$trellis/tests/release-build/run.sh" "$project" > "$out/dist.txt"
+      [ "$(wc -l < "$out/dist.txt")" -eq 1 ] || { echo "error: the release build left other than one archive:" >&2; cat "$out/dist.txt" >&2; exit 1; }
+      tar --list --gzip --file "$(cat "$out/dist.txt")" | sed 's|^[^/]*/||' | sort > "$out/archive.txt"
+      expected="demo-binary README.md THIRD-PARTY-LICENSES.html LICENSE"
+      if [ "{{ web }}" = true ]; then expected="$expected THIRD-PARTY-LICENSES-WEB.txt web/index.html"; fi
+      for file in $expected; do
+        grep --quiet --line-regexp --fixed-strings "$file" "$out/archive.txt" \
+          || { echo "error: the release archive lacks $file:" >&2; cat "$out/archive.txt" >&2; exit 1; }
+      done
+      if [ "{{ web }}" != true ] && grep --quiet '^web/' "$out/archive.txt"; then
+        echo "error: the release archive of a binary without a web UI has web/" >&2; exit 1
+      fi
+      if [ "{{ web }}" = true ]; then
+        mkdir "$out/archive"
+        tar --extract --gzip --file "$(cat "$out/dist.txt")" --directory "$out/archive" --strip-components 1
+        grep --quiet 'src="./index-[a-z0-9]*\.js"' "$out/archive/web/index.html" \
+          || { echo "error: the release archive's web UI isn't the build" >&2; exit 1; }
+        grep --quiet typescript "$out/archive/THIRD-PARTY-LICENSES-WEB.txt" \
+          || { echo "error: the release archive's web notices don't list typescript" >&2; exit 1; }
+      fi
     fi
     if [ "{{ recipes }}" = ci ] && [ "{{ kind }}" = service ] && command -v docker > /dev/null; then
       # A checkout or a `just notices` under umask 077 leaves the license files 0600, which the

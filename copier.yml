@@ -137,9 +137,9 @@ web_ui:
   type: bool
   help: >-
     Serve a web UI: a Bun app in `crates/<name>/web` that `just ci` checks and builds, and whose
-    build the container image ships. Most services don't need one.
+    build the container image, or a binary's release archives, ship. Most projects don't need one.
   default: false
-  when: "{{ kind == 'service' }}"
+  when: "{{ kind != 'library' }}"
 
 build:
   type: yaml

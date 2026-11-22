@@ -46,9 +46,9 @@ uvx copier@9.19.1 copy https://github.com/265866/trellis.git my-project
 
 It asks for a name, a description, what the project ships (a binary, a container service or a
 library), whether the repository is public or private, the platforms and processors, whether a
-service has a web UI built with Bun, what a binary's builds need, what a service's image adds,
-and a license, then prints the next steps. Commit the project, install the tools that the
-generated `CONTRIBUTING.md` lists, and run every check:
+binary or service has a web UI built with Bun, what a binary's builds need, what a service's
+image adds, and a license, then prints the next steps. Commit the project, install the tools that
+the generated `CONTRIBUTING.md` lists, and run every check:
 
 ```sh
 cd my-project

@@ -29,6 +29,9 @@ installed. They don't run on Alpine or another musl distribution.
 2. Check the download as [Verify a release](verifying-releases.md) shows.
 3. Unpack the archive and move `{{ project_name }}` to where you keep programs, such as a directory
    on your `PATH`.
+{%- if web_ui %} The archive's `web` directory holds the web UI. Keep it beside the program, or
+   set `{{ crate_name | upper }}_WEB_DIR` to where you keep it.
+{%- endif %}
 
 To update, install the new release the same way.
 
@@ -50,6 +53,12 @@ cargo install --locked --git https://github.com/{{ github_owner }}/{{ project_na
 {%- if visibility == 'private' %}
 
 The repository is private, so Cargo fetches it with your Git credentials.
+{%- endif %}
+{%- if web_ui %}
+
+That builds the program without its web UI. To have the UI too, clone the repository, install
+[Bun](https://bun.com/) and [just](https://just.systems/), run `just web-build`, and set
+`{{ crate_name | upper }}_WEB_DIR` to the `crates/{{ crate_name }}/web/dist` directory it writes.
 {%- endif %}
 {%- else %}
 Read this page to run {{ project_name }} on your server. It shows how to run the container image
