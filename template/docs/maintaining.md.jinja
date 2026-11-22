@@ -323,10 +323,11 @@ An update leaves them alone.
   with the rest. [Install](install.md), [Verify a release](verifying-releases.md) and
   [Stability](stability.md) then list those names, so changing one breaks your users as
   "Keep releases verifiable" says. `checksums` names the checksums file, `name` starts the
-  release's title, and `env` sets environment variables, each a quoted string that may hold a
-  `{% raw %}${{ }}{% endraw %}` expression, for the release's `cargo build` only, such as
-  `{% raw %}APP_RELEASE: "${{ inputs.ref && '1' || '' }}"{% endraw %}`, which is set only when the release workflow,
-  not a pull request, runs the build. The script runs with bash from the repository's root on
+  release's title, and `env` sets environment variables for the release's `cargo build` only. Each
+  value is a string, quoted if YAML would read it as a number or a boolean, such as `"1"`, and may
+  hold a `{% raw %}${{ }}{% endraw %}` expression, such as
+  `{% raw %}APP_RELEASE: "${{ inputs.ref && '1' || '' }}"{% endraw %}`, which is set only when the release
+  workflow, not a pull request, runs the build. The script runs with bash from the repository's root on
   each target's runner{% if 'windows' in platforms %}, Git Bash on Windows{% endif %}, after the build, with these variables:
 
   | Variable | Holds |
@@ -368,19 +369,19 @@ An update leaves them alone.
 {%- if kind == 'service' %}
 
 - **What the image adds.** The `image` answer, a YAML mapping, adds to the image without an edit
-  to `Containerfile`: `env` sets environment defaults, each a quoted string, `workdir` the
-  directory the service starts in, `expose` the ports it listens on, and `files: true` copies
-  `crates/{{ crate_name }}/image/` onto the image's root, such as data files at
-  `crates/{{ crate_name }}/image/app/profiles/` or extra notices at
-  `crates/{{ crate_name }}/image/usr/share/doc/{{ project_name }}/`. The image stays distroless
-  and runs as its `nonroot` user. Its files and working directory belong to root, readable by all
-  and executable by none, so a directory the service writes needs a mount. They are data: none
-  may be a link or an ELF program or library, and they go under `/usr/share` or a directory of
-  their own, such as `/app`, never in one the base image keeps, such as `/usr/lib`, `/etc` or
-  `/tmp`. The binary and trellis's license files win over a file at the same path. Those files
-  are code, apart from ones that are rules by their names, such as a `.gitignore`. Land them in a
-  code pull request first, since the image's build fails without them, then set the answer in a
-  rules pull request:
+  to `Containerfile`: `env` sets environment defaults, `workdir` the directory the service starts
+  in, `expose` the ports it listens on, and `files: true` copies `crates/{{ crate_name }}/image/`
+  onto the image's root, such as data files at `crates/{{ crate_name }}/image/app/profiles/` or
+  extra notices at `crates/{{ crate_name }}/image/usr/share/doc/{{ project_name }}/`. Each `env`
+  value is a string: quote one that YAML would read as a number or a boolean, such as `"8080"`,
+  while `0.0.0.0` reads as a string as written. The image stays distroless and runs as its `nonroot`
+  user. Its files and working directory belong to root, readable by all and executable by none, so a
+  directory the service writes needs a mount. They are data: none may be a link or an ELF program or
+  library, and they go under `/usr/share` or a directory of their own, such as `/app`, never in one
+  the base image keeps, such as `/usr/lib`, `/etc` or `/tmp`. The binary and trellis's license files
+  win over a file at the same path. Those files are code, apart from ones that are rules by their
+  names, such as a `.gitignore`. Land them in a code pull request first, since the image's build
+  fails without them, then set the answer in a rules pull request:
 
   ```sh
   uvx copier update --defaults --vcs-ref=:current: \

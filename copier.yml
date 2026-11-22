@@ -181,11 +181,12 @@ image:
   type: yaml
   help: >-
     What the service's image adds to its binary and license files, as a YAML mapping, or {} for
-    nothing. `env` maps variable names to default values, quoted, `workdir` is the directory the
-    service starts in, `expose` lists the ports it listens on, and `files: true` copies the tree in
-    `crates/<crate>/image/`, where `<crate>` is the name with `_` for `-`, onto the image's root,
-    such as a notice at `crates/<crate>/image/usr/share/doc/<name>/NOTICE`. Most services need
-    nothing. Example: `{env: {PORT: "8080"}, workdir: /app, expose: [8080]}`.
+    nothing. `env` maps variable names to default values, each a string, quoted if YAML would read
+    it as a number or a boolean, `workdir` is the directory the service starts in, `expose` lists
+    the ports it listens on, and `files: true` copies the tree in `crates/<crate>/image/`, where
+    `<crate>` is the name with `_` for `-`, onto the image's root, such as a notice at
+    `crates/<crate>/image/usr/share/doc/<name>/NOTICE`. Most services need nothing.
+    Example: `{env: {PORT: "8080"}, workdir: /app, expose: [8080]}`.
   default: {}
   when: "{{ kind == 'service' }}"
   # Every value lands in a Containerfile instruction, so each is held to a form that instruction
@@ -335,8 +336,9 @@ release:
     `{version}` for the version, such as `{<target triple>: ["app-{version}.tar.gz"]}`, with an
     entry for each target the project releases for.
     `checksums` names the checksums file, `SHA256SUMS` by default, `name` is the name the
-    release's title starts with, and `env` sets environment variables, each a quoted string, for
-    the release's build only. Most binaries need nothing.
+    release's title starts with, and `env` sets environment variables for the release's build
+    only, each a string, quoted if YAML would read it as a number or a boolean. Most binaries need
+    nothing.
   default: {}
   when: "{{ kind == 'binary' }}"
   # Each value lands in a workflow or a docs page, so each is held to a form both read one way:
