@@ -222,9 +222,10 @@ Each crate has one job. `just policy` checks every crate against the rules
 one:
 
 - **Place and manifest.** Put it in `crates/<name>`. Its `[lints]` table is exactly
-  `workspace = true`, and it inherits `edition`, `rust-version`
-{%- if license != 'none' %}, `publish` and `license`{% else %} and `publish`{% endif %} from the
-  workspace.
+  `workspace = true`. It inherits `version`, `edition`, `rust-version`
+{%- if license != 'none' %}, `publish` and `license`{% else %} and `publish`{% endif %}
+  from the workspace. The crates share one version, which release-plz bumps in the root
+  `Cargo.toml` alone; trellis doesn't support a crate versioned apart from the others.
 - **Settings.** Give it an entry in `internal_dependencies` in `[workspace.metadata.policy]`,
   which lists the workspace crates it may depend on directly, and list it in `changelog_include`
   in `release-plz.toml`, so its commits reach the release notes. A build script needs the crate in

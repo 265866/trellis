@@ -45,7 +45,14 @@ const PACKAGE_KEYS: [&str; 16] = [
 ];
 
 /// The `[package]` keys a member must inherit from `[workspace.package]`, each with why it must.
-const INHERITED_PACKAGE_KEYS: [(&str, &str); 3] = [
+const INHERITED_PACKAGE_KEYS: [(&str, &str); 4] = [
+    (
+        "version",
+        "the project shares one version, which release-plz bumps in the root Cargo.toml, a rule; it \
+         would also rewrite a crate's own `version` in the crate's Cargo.toml, which is code, so \
+         the release pull request would fail \"Rule changes stand alone\". trellis doesn't support \
+         crates versioned apart from the workspace. Inheriting it is a code change",
+    ),
     (
         "edition",
         "the edition decides the language and its lints, so every crate is built and linted with \
@@ -79,8 +86,13 @@ const PLATFORM_KEYS: [&str; 3] = ["dependencies", "dev-dependencies", "build-dep
 /// setting turns off a crate's tests or doctests (`test = false`, `doctest = false`,
 /// `harness = false` outside a bench, `autotests = false`), builds code the checks don't see
 /// (`required-features`, `proc-macro`), or reads sources from outside the crate's directory. The
-/// crate's edition, `rust-version` and `publish` come from `[workspace.package]`, and so does its
-/// license when `[workspace.package]` has one. Every target's `path` stays inside the crate's
+/// crate's version, edition, `rust-version` and `publish` come from `[workspace.package]`, and so
+/// does its license when `[workspace.package]` has one.
+///
+/// A trellis project shares one version: release-plz bumps it in the root `Cargo.toml`, a rule,
+/// and a crate with a `version` of its own would get it rewritten in its `Cargo.toml`, which is
+/// code, so the release pull request would fail "Rule changes stand alone". Crates versioned apart
+/// from the workspace are outside what trellis supports. Every target's `path` stays inside the crate's
 /// directory.
 #[must_use]
 pub fn check(workspace: &Workspace) -> Vec<Violation> {
@@ -204,8 +216,9 @@ fn unknown(key: &str) -> String {
 mod tests {
     use super::*;
 
-    const PACKAGE: &str = "[package]\nname = \"app\"\nedition.workspace = true\n\
-                           rust-version.workspace = true\npublish.workspace = true\n";
+    const PACKAGE: &str = "[package]\nname = \"app\"\nversion.workspace = true\n\
+                           edition.workspace = true\nrust-version.workspace = true\n\
+                           publish.workspace = true\n";
 
     fn problems_in(text: &str) -> Vec<String> {
         problems(&toml_file::parse(text).unwrap(), None)
@@ -214,7 +227,7 @@ mod tests {
     #[test]
     fn the_usual_manifest_passes() {
         let text = format!(
-            "{PACKAGE}version.workspace = true\ndescription = \"An app\"\n\
+            "{PACKAGE}description = \"An app\"\n\
              repository.workspace = true\n\
              [features]\nx = []\n[dependencies]\na.workspace = true\n\
              [target.'cfg(unix)'.dependencies]\nb = \"1\"\n[dev-dependencies]\nc = \"1\"\n\
@@ -345,28 +358,41 @@ mod tests {
 
     #[test]
     fn a_package_key_of_its_own_instead_of_the_workspace_one_fails() {
+        let version = "version.workspace = true\n";
         let edition = "edition.workspace = true\n";
         let rust_version = "rust-version.workspace = true\n";
         let publish = "publish.workspace = true\n";
         for (keys, key) in [
             (
-                format!("edition = \"2015\"\n{rust_version}{publish}"),
+                format!("version = \"0.1.0\"\n{edition}{rust_version}{publish}"),
+                "`[package] version` is \"0.1.0\", but it must be `version.workspace = true`",
+            ),
+            (
+                format!("version = {{ workspace = false }}\n{edition}{rust_version}{publish}"),
+                "`[package] version` is { workspace = false }",
+            ),
+            (
+                format!("{edition}{rust_version}{publish}"),
+                "`[package] version` is missing",
+            ),
+            (
+                format!("{version}edition = \"2015\"\n{rust_version}{publish}"),
                 "`[package] edition`",
             ),
             (
-                format!("{edition}rust-version = \"1.0\"\n{publish}"),
+                format!("{version}{edition}rust-version = \"1.0\"\n{publish}"),
                 "`[package] rust-version`",
             ),
             (
-                format!("{edition}{rust_version}publish = true\n"),
+                format!("{version}{edition}{rust_version}publish = true\n"),
                 "`[package] publish`",
             ),
             (
-                format!("{rust_version}{publish}"),
+                format!("{version}{rust_version}{publish}"),
                 "`[package] edition` is missing",
             ),
             (
-                format!("{edition}{rust_version}"),
+                format!("{version}{edition}{rust_version}"),
                 "`[package] publish` is missing",
             ),
         ] {

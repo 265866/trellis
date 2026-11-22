@@ -22,7 +22,8 @@ pub enum Rule {
     ConfigFiles,
     /// The workspace keeps its exclusions, members, custom lints and release profile.
     WorkspaceShape,
-    /// Every member's `Cargo.toml` holds only the settings the workspace allows.
+    /// Every member's `Cargo.toml` holds only the settings the workspace allows, and takes its
+    /// version from the workspace.
     MemberManifests,
     /// Every member reads its sources only from its own directory.
     MemberSources,
@@ -44,7 +45,7 @@ pub enum Rule {
     /// page in `docs/` opens with its title and a paragraph.
     DocsLayout,
     /// The main package's entry in `release-plz.toml` takes every other member into its
-    /// changelog.
+    /// changelog, and release-plz writes no changelog to a file that is code.
     ReleaseChangelog,
     /// The shell scripts of a deploy kit, under the root `deploy/` or a crate's
     /// `crates/<crate>/deploy/`, pass shellcheck.
