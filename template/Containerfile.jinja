@@ -39,11 +39,16 @@ RUN install -D --mode=644 --target-directory=/licenses target/THIRD-PARTY-LICENS
 {%- if web_ui %}
 
 # The web UI builds with the Bun version the workflows and CONTRIBUTING.md pin, from its lockfile.
+# Its whole directory goes in before the install, so the install reads the same bunfig.toml and
+# .npmrc as `just web-install`. As there, it fails if a package provides a `bun` or `bunx` command,
+# which `bun run build` would run instead of this image's Bun.
 FROM --platform=$BUILDPLATFORM docker.io/oven/bun:1.4.4-slim@sha256:1846adf22496bd711036aae8be147e57bdebbaea2e5264e3e0b5af1db187d9a4 AS web
 WORKDIR /web
-COPY crates/{{ crate_name }}/web/package.json crates/{{ crate_name }}/web/bun.lock ./
-RUN bun install --frozen-lockfile
 COPY crates/{{ crate_name }}/web/ ./
+RUN bun install --frozen-lockfile \
+      && if [ -e node_modules/.bin/bun ] || [ -e node_modules/.bin/bunx ]; then \
+           echo "error: node_modules/.bin holds a bun or bunx command, so the build would run on that Bun and not this image's; see CONTRIBUTING.md" >&2; exit 1; \
+         fi
 RUN bun run build
 {%- endif %}
 

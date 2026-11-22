@@ -694,7 +694,8 @@ update:
 # `publish` makes a library a published one, and `true` as `web` gives a service a web UI. After
 # `ci`, a service also builds and runs its image when Docker is installed, under umask 077 with its
 # license files 0600, and the image's user must be able to read them. A web UI's build and license
-# notices must be in it too. A `target` runs `test` and `build-release` for that target, as a
+# notices must be in it too, and its install must refuse a package that provides a `bun` command
+# and read the app's bunfig.toml. A `target` runs `test` and `build-release` for that target, as a
 # project's CI does for the target a release ships.
 #
 # Generates a project of one kind and runs its checks.
@@ -759,6 +760,27 @@ template kind recipes="ci" publish="false" web="false" target="":
         docker image inspect --format '{{{{ json .Config.Env }}' demo-service:dev \
           | grep --quiet '"DEMO_SERVICE_WEB_DIR=/usr/share/demo-service/web"' \
           || { echo "error: the image doesn't name its web UI's directory in DEMO_SERVICE_WEB_DIR" >&2; exit 1; }
+        # A package that provides a `bun` command would run the web UI's scripts on that Bun, so
+        # the install fails, in the recipe and in the image. The image's install reads the app's
+        # bunfig.toml, which here leaves that package out, so the same lockfile then builds.
+        web=crates/demo_service/web
+        (cd "$web" && bun add --dev "bun@$(bun --version)") > "$out/bun-add.txt" 2>&1 \
+          || { cat "$out/bun-add.txt" >&2; exit 1; }
+        refused="holds a bun or bunx command"
+        if just web-install > "$out/web-install.txt" 2>&1 || ! grep --quiet "^error: .*$refused" "$out/web-install.txt"; then
+          echo "error: web-install took a package that provides a bun command" >&2; exit 1
+        fi
+        # The plain log also prints the command, which holds the message, so match only its output.
+        if docker build --progress plain --target web --file Containerfile . > "$out/web-image.txt" 2>&1 \
+          || ! grep --quiet --extended-regexp "^#[0-9]+ [0-9.]+ error: .*$refused" "$out/web-image.txt"; then
+          echo "error: the image's install took a package that provides a bun command" >&2; exit 1
+        fi
+        printf '[install]\ndev = false\n' > "$web/bunfig.toml"
+        # Bun keeps a package it installed earlier, whatever the settings say now.
+        rm -rf "$web/node_modules"
+        just web-install
+        docker build --target web --file Containerfile . > "$out/web-image.txt" 2>&1 \
+          || { echo "error: the image's install didn't read the web UI's bunfig.toml" >&2; cat "$out/web-image.txt" >&2; exit 1; }
       fi
     fi
 
