@@ -1157,6 +1157,29 @@ release-extras:
       || fail "a glibc release doesn't name the glibc target's files"
     grep --quiet --fixed-strings 'Linux on x86-64: `demo-binary-<version>-linux`' "$out/glibc/docs/install.md" \
       || fail "a glibc release's docs/install.md doesn't list its files"
+    # docs/maintaining.md's example release answer names files for exactly the project's targets,
+    # so it works as written, and mentions Git Bash only when Windows is a platform.
+    example() { awk '/--data .release=\{checksums/,/\}\}.$/' "$1/docs/maintaining.md" | sed -e "s/^.*--data 'release=//" -e "s/'$//"; }
+    for platforms in '[linux]' '[linux, macos, windows]'; do
+      generate "$out/docs" --data "platforms=$platforms" --data 'architectures=[x86_64, aarch64]'
+      answer=$(example "$out/docs")
+      [ -n "$answer" ] || fail "docs/maintaining.md has no example release answer for $platforms"
+      generate "$out/example" --data "platforms=$platforms" --data 'architectures=[x86_64, aarch64]' --data "release=$answer"
+      workflow="$out/example/.github/workflows/build-release.yml"
+      targets=$(sed -n 's/^            target: //p' "$workflow")
+      [ "$(sed -n 's/^            files: .*/x/p' "$workflow" | wc -l)" = "$(wc -l <<< "$targets")" ] \
+        || fail "the docs' example release answer for $platforms leaves a target without files: $answer"
+      [ "$(grep -o '^ *[a-z0-9_-]*:' <<< "$answer" | tr -d ' :' | sort)" = "$(sort <<< "$targets")" ] \
+        || fail "the docs' example release answer for $platforms names other targets than the project's: $answer"
+      bullet=$(awk '/^- \*\*Release files\.\*\*/ { on = 1; print; next } on && /^(- \*\*|## )/ { exit } on' "$out/docs/docs/maintaining.md")
+      if [[ "$platforms" = *windows* ]]; then
+        grep --quiet 'Git Bash on Windows' <<< "$bullet" || fail "the docs don't say the release script runs with Git Bash on Windows"
+        grep --quiet 'cygpath -w' <<< "$bullet" || fail "the docs don't say how to call a Windows program from Git Bash"
+      elif grep --quiet 'Git Bash\|iscc\|cygpath' <<< "$bullet"; then
+        fail "the docs give Windows release advice to a project without Windows: $bullet"
+      fi
+      rm -rf "$out/docs" "$out/example"
+    done
     project="$out/demo-binary"
     generate "$project" --data 'release={name: Demo Binary, checksums: SHA256SUMS.txt, files: {x86_64-unknown-linux-musl: ["demo-binary-{version}-linux.tar.gz", "demo-binary-{version}-linux"]}, env: {DEMO_RELEASE: "${{{{ inputs.ref && '"'1'"' || '"''"' }}", QUOTED: "a \"b\" \\ c"}}'
     cd "$project"
