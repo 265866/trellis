@@ -182,10 +182,11 @@ image:
   help: >-
     What the service's image adds to its binary and license files, as a YAML mapping, or {} for
     nothing. `env` maps variable names to default values, each a string, quoted if YAML would read
-    it as a number or a boolean, `workdir` is the directory the service starts in, `expose` lists
-    the ports it listens on, and `files: true` copies the tree in `crates/<crate>/image/`, where
-    `<crate>` is the name with `_` for `-`, onto the image's root, such as a notice at
-    `crates/<crate>/image/usr/share/doc/<name>/NOTICE`. Most services need nothing.
+    it as a number, a boolean, a date or null, `workdir` is the directory the service starts in,
+    `expose` lists the ports it listens on, and `files: true` copies the tree in
+    `crates/<crate>/image/`, where `<crate>` is the name with `_` for `-`, onto the image's root,
+    such as a notice at `crates/<crate>/image/usr/share/doc/<name>/NOTICE`. Most services need
+    nothing.
     Example: `{env: {PORT: "8080"}, workdir: /app, expose: [8080]}`.
   default: {}
   when: "{{ kind == 'service' }}"
@@ -335,9 +336,9 @@ release:
     each target triple to the names of the files `release/package.sh` writes for it, quoted, with
     `{version}` for the version, such as `{<target triple>: ["app-{version}.tar.gz"]}`, with an
     entry for each target the project releases for.
-    `checksums` names the checksums file, `SHA256SUMS` by default, `name` is the name the
-    release's title starts with, and `env` sets environment variables for the release's build
-    only, each a string, quoted if YAML would read it as a number or a boolean. Most binaries need
+    `checksums` names the checksums file, `SHA256SUMS` by default, `name` is the name the release's
+    title starts with, and `env` sets environment variables for the release's build only, each a
+    string, quoted if YAML would read it as a number, a boolean, a date or null. Most binaries need
     nothing.
   default: {}
   when: "{{ kind == 'binary' }}"

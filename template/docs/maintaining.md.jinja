@@ -150,11 +150,13 @@ the minor version and a `fix` the patch version. To ship:
    `git log --format=%s -- crates deploy ':!crates/{{ crate_name }}'`. Every type is left out, not
    only `feat` and `fix`. Put each under `### Added` for a `feat`, `### Fixed` for a `fix`, and
    `### Other` for any other type, such as a `test` or a `refactor`, and write it as release-plz
-   writes the others: `feat(core): parse dates (#12)` becomes `- *(core)* parse dates (#12)`.
-   Later releases list the crates' commits without the edit, but never the root kit's; add those
-   to each release's notes by hand. The first release after you add a crate comes out as a patch
-   when only that crate changed, and its notes can repeat older entries; delete those. Renaming
-   the main crate stops the release workflow with an error that says what to do by hand.
+   writes the others: `feat(core): parse dates (#12)` becomes `- *(core)* parse dates (#12)`. Later
+   releases list the crates' commits without the edit, but never the root kit's: add those to the
+   release's section of `CHANGELOG.md` on each release pull request's branch by hand, from
+   `git log --format=%s <previous release tag>..HEAD -- deploy`. The first release after you add a
+   crate comes out as a patch when only that crate changed, and its notes can repeat older entries;
+   delete those. Renaming the main crate stops the release workflow with an error that says what to
+   do by hand.
 {%- endif %}
 2. Under each breaking change, from a commit marked `!` or with a `BREAKING CHANGE:` footer, write
    what users must do before they upgrade. Edit `CHANGELOG.md` on the release pull request's
@@ -339,11 +341,11 @@ An update leaves them alone.
   release build replaces trellis's archive with them, and the release {{ 'attests and publishes them' if visibility == 'public' else 'publishes them, unattested,' }}
   with the rest. [Install](install.md), [Verify a release](verifying-releases.md) and
   [Stability](stability.md) then list those names, so changing one breaks your users as
-  "Keep releases verifiable" says. `checksums` names the checksums file, `name` starts the
-  release's title, and `env` sets environment variables for the release's `cargo build` only. Each
-  value is a string, quoted if YAML would read it as a number or a boolean, such as `"1"`, and may
-  hold a `{% raw %}${{ }}{% endraw %}` expression, such as `{% raw %}APP_RELEASE: "${{ inputs.ref && '1' || '' }}"{% endraw %}`, which is set
-  only when the release workflow, not a pull request, runs the build.
+  "Keep releases verifiable" says. `checksums` names the checksums file, `name` starts the release's
+  title, and `env` sets environment variables for the release's `cargo build` only. Each value is a
+  string, quoted if YAML would read it as a number, a boolean, a date or null, such as `"1"`, and
+  may hold a `{% raw %}${{ }}{% endraw %}` expression, such as `{% raw %}APP_RELEASE: "${{ inputs.ref && '1' || '' }}"{% endraw %}`, which is
+  set only when the release workflow, not a pull request, runs the build.
 {%- if 'windows' in platforms %} The script runs with bash,
   Git Bash on Windows, from the repository's root on each target's runner, after the build, with
   these variables:
@@ -398,15 +400,15 @@ An update leaves them alone.
   in, `expose` the ports it listens on, and `files: true` copies `crates/{{ crate_name }}/image/`
   onto the image's root, such as data files at `crates/{{ crate_name }}/image/app/profiles/` or
   extra notices at `crates/{{ crate_name }}/image/usr/share/doc/{{ project_name }}/`. Each `env`
-  value is a string: quote one that YAML would read as a number or a boolean, such as `"8080"`,
-  while `0.0.0.0` reads as a string as written. The image stays distroless and runs as its `nonroot`
-  user. Its files and working directory belong to root, readable by all and executable by none, so a
-  directory the service writes needs a mount. They are data: none may be a link or an ELF program or
-  library, and they go under `/usr/share` or a directory of their own, such as `/app`, never in one
-  the base image keeps, such as `/usr/lib`, `/etc` or `/tmp`. The binary and trellis's license files
-  win over a file at the same path. Those files are code, apart from ones that are rules by their
-  names, such as a `.gitignore`. Land them in a code pull request first, since the image's build
-  fails without them, then set the answer in a rules pull request:
+  value is a string: quote one that YAML would read as a number, a boolean, a date or null, such as
+  `"8080"`, while `0.0.0.0` reads as a string as written. The image stays distroless and runs as its
+  `nonroot` user. Its files and working directory belong to root, readable by all and executable by
+  none, so a directory the service writes needs a mount. They are data: none may be a link or an ELF
+  program or library, and they go under `/usr/share` or a directory of their own, such as `/app`,
+  never in one the base image keeps, such as `/usr/lib`, `/etc` or `/tmp`. The binary and trellis's
+  license files win over a file at the same path. Those files are code, apart from ones that are
+  rules by their names, such as a `.gitignore`. Land them in a code pull request first, since the
+  image's build fails without them, then set the answer in a rules pull request:
 
   ```sh
   uvx copier update --defaults --vcs-ref=:current: \

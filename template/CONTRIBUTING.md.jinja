@@ -21,8 +21,6 @@ need admin rights on the repository or the release token, so `just ci` leaves th
 | `crates/{{ crate_name }}` | The {{ 'service' if kind == 'service' else 'program' }}: `main.rs` starts it and wires the parts together. No logic that a test would want to call.
 {%- if kind == 'service' %} `{{ project_name }} --version` prints the version line and exits 0 without starting the service, since CI's `Container image` job runs the image that way.
 {%- else %} `{{ project_name }} --version` prints the version line and exits 0.
-{%- if 'windows' in platforms %} A build with `#![windows_subsystem = "windows"]`, as a Windows GUI app has, gets no console, so on Windows its `--version` prints only into a pipe or a file, such as `{{ project_name }} --version > version.txt`. The test of it passes either way, since it reads through a pipe.
-{%- endif %}
 {%- endif %} `tests/command_line.rs` runs the built binary and checks it. |
 | `crates/{{ crate_name }}_core` | The logic. A crate of its own keeps the binary's command-line and runtime dependencies out of it, lets `just docs` check the doc comments of both crates, and gives `internal_dependencies` its first edge: the binary depends on the logic, never the reverse. |
 {%- endif %}
@@ -34,6 +32,13 @@ need admin rights on the repository or the release token, so `just ci` leaves th
 {%- endif %}
 {%- if web_ui %}
 | `crates/{{ crate_name }}/web` | The web UI, a Bun app. trellis needs only its `check` and `build` scripts, and `build` to write the UI to `dist/`. {% if kind == 'service' %}The image puts that build in `/usr/share/{{ project_name }}/web`, and `just run` builds it into `dist/`; both name the directory in `{{ crate_name | upper }}_WEB_DIR`, for the service to read when it serves the UI.{% elif release.files %}`release/package.sh` gets that build in `WEB` for the release files, and `just run` builds it into `dist/` and names that directory in `{{ crate_name | upper }}_WEB_DIR`, for the program to read when it serves the UI.{% else %}Each release archive carries that build as `web/` beside the program, and `just run` builds it into `dist/` and names that directory in `{{ crate_name | upper }}_WEB_DIR`, for the program to read when it serves the UI. When the variable is unset, the program looks for `web/` beside its own executable, `std::env::current_exe()`, as the archive lays it out; [Install](docs/install.md) tells users either works.{% endif %} |
+{%- endif %}
+{%- if kind == 'binary' and 'windows' in platforms %}
+
+A build with `#![windows_subsystem = "windows"]`, as a Windows GUI app has, gets no console, so on
+Windows its `--version` prints only into a pipe or a file, such as
+`{{ project_name }} --version > version.txt`. The test of it passes either way, since it reads
+through a pipe.
 {%- endif %}
 
 Add a row for each crate you add, in the same pull request as the rule change that allows it.
@@ -385,15 +390,15 @@ gone, the weekly `just stale-licenses` fails until a rules pull request removes 
 {% if kind == 'library' and publish_crate -%}
 A deploy kit, the scripts, container files and systemd units in the root `deploy/` that install and
 run the project on a host, is code too, like `crates/`. Keep it there, not in
-`crates/{{ crate_name }}/deploy/`, since a member `Cargo.toml` can't leave a file out of its crate's
-package, so a kit in the crate's directory would ship in the package on crates.io. `just policy`
-checks a kit in a crate's directory the same way.
+`crates/{{ crate_name }}/deploy/`, since a member `Cargo.toml` can't leave a file out of its
+crate's package, so a kit in the crate's directory would ship in the package on crates.io.
+`just policy` checks a kit in a crate's directory the same way.
 {%- elif kind == 'library' -%}
 A deploy kit, the scripts, container files and systemd units in the root `deploy/` that install and
 run the project on a host, is code too, like `crates/`. Keep it there, not in
-`crates/{{ crate_name }}/deploy/`, since a member `Cargo.toml` can't leave a file out of its crate's
-package, so a kit in the crate's directory would ship in the package if the crate is ever published.
-`just policy` checks a kit in a crate's directory the same way.
+`crates/{{ crate_name }}/deploy/`, since a member `Cargo.toml` can't leave a file out of its
+crate's package, so a kit in the crate's directory would ship in the package if the crate is ever
+published. `just policy` checks a kit in a crate's directory the same way.
 {%- else -%}
 A deploy kit, the scripts, container files and systemd units in `crates/{{ crate_name }}/deploy/`
 that install and run the project on a host, is code too, like the rest of `crates/`, and so is a kit

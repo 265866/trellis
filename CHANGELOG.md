@@ -194,9 +194,10 @@ has the versioning rule.
   `/usr/share` or a directory of their own, such as `/app`, never in one the base image keeps. Then
   run the update with the answer set, such as
   `uvx copier update --defaults --data 'image={env: {HOST: 0.0.0.0, PORT: "8740"}, workdir: /app, expose: [8740], files: true}'`,
-  quoting each env value that YAML would read as a number or a boolean, and resolve `Containerfile`
-  to trellis's version, keeping none of your own lines. A service that didn't edit its
-  `Containerfile` needs nothing: the answer defaults to `{}`, which changes nothing in the image.
+  quoting each env value that YAML would read as a number, a boolean, a date or null, and resolve
+  `Containerfile` to trellis's version, keeping none of your own lines. A service that didn't edit
+  its `Containerfile` needs nothing: the answer defaults to `{}`, which changes nothing in the
+  image.
 - **In a binary whose release workflows you edited to name its own release files, build an
   installer, change the checksums file's name or set build variables, move those edits to the new
   `release` answer.** Write `release/package.sh`, which gets `TARGET`, `VERSION`, `BINARY`,

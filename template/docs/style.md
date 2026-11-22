@@ -168,10 +168,10 @@ Beyond the Google guide, the workspace also turns on:
   `changelog_include` in `release-plz.toml`; that no crate but the ones `restricted_crates` lists
   for a package reaches it, directly or through other packages, when that setting is there, and that
   each of its keys that lists crates matches a package; that every shell script in a deploy kit,
-  under `crates/<crate>/deploy/` or the root `deploy/`, passes shellcheck,
-  with no `.shellcheckrc` or `SHELLCHECK_OPTS` read, the files they source included, and that each
-  shellcheck directive there silences named codes, with a reason, as close above its finding as
-  shellcheck takes one, since a deploy kit is code no other check reads; and that the docs keep the layout under
+  under `crates/<crate>/deploy/` or the root `deploy/`, passes shellcheck, with no `.shellcheckrc`
+  or `SHELLCHECK_OPTS` read, the files they source included, and that each shellcheck directive
+  there silences named codes, with a reason, as close above its finding as shellcheck takes one,
+  since a deploy kit is code no other check reads; and that the docs keep the layout under
   [Documentation](#documentation).
 - `overflow-checks` and `panic = "abort"` in release builds: an overflow stops the program rather
   than wrapping, and nothing catches a panic. `trellis-policy` fails a change that turns either
