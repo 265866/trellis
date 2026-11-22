@@ -113,6 +113,9 @@ fn main() {
     );
     let _ = (only_empty(IntErrorKind::Zero), nested(None), passed_on(None));
     let _ = nested_wildcards(None, Err(()));
+    let _ = tuple_structs(Wrapper(1), Ok(std::num::Wrapping(2)), None);
+    let _ = unit_and_braced_structs(Err(TooDeep), Span { start: 1 }, 0..1);
+    let _ = struct_constructors_outside_match(None, std::marker::PhantomPinned, Err(()));
 }
 
 // Not reported: flagged, but an item-level `expect` in the documented form takes it.
@@ -127,5 +130,70 @@ fn excused(kind: IntErrorKind) -> bool {
     match kind {
         IntErrorKind::Empty => true,
         _ => false,
+    }
+}
+
+struct Wrapper(u8);
+
+struct TooDeep;
+
+struct Span {
+    start: u8,
+}
+
+fn unit_and_braced_structs(
+    text: Result<u8, TooDeep>,
+    span: Span,
+    range: std::ops::Range<u8>,
+) -> u8 {
+    // Not flagged: a unit struct's and a braced struct's patterns, local or another crate's, name
+    // no variant.
+    let length = match text {
+        Ok(length) => length,
+        Err(TooDeep) => 0,
+    };
+    let start = match span {
+        Span { start } => start,
+    };
+    match range {
+        std::ops::Range { start: first, .. } => length + start + first,
+    }
+}
+
+fn tuple_structs(
+    local: Wrapper,
+    foreign: Result<std::num::Wrapping<u8>, IntErrorKind>,
+    reversed: Option<std::cmp::Reverse<IntErrorKind>>,
+) -> u8 {
+    // Not flagged: a tuple struct's constructor, local or another crate's, isn't a variant.
+    let first = match local {
+        Wrapper(value) => value,
+    };
+    let second = match foreign {
+        Ok(std::num::Wrapping(value)) => value,
+        Err(_) => first,
+    };
+    // Flagged: the struct around the enum doesn't hide that a wildcard catches its variants.
+    match reversed {
+        Some(std::cmp::Reverse(IntErrorKind::Empty)) => second,
+        _ => 0,
+    }
+}
+
+fn struct_constructors_outside_match(
+    wrapped: Option<std::num::Wrapping<u8>>,
+    pinned: std::marker::PhantomPinned,
+    reversed: Result<std::cmp::Reverse<IntErrorKind>, ()>,
+) -> u8 {
+    // Not flagged: only a `match` is checked, and a struct's constructor isn't a variant.
+    let Some(std::num::Wrapping(value)) = wrapped else {
+        return 0;
+    };
+    let std::marker::PhantomPinned = pinned;
+    if let Ok(std::cmp::Reverse(IntErrorKind::Empty)) = reversed {
+        return value;
+    }
+    match pinned {
+        std::marker::PhantomPinned => value,
     }
 }

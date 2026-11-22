@@ -55,5 +55,13 @@ LL |         Ok(..) => 2,
    |
    = help: name `IntErrorKind::Empty | IntErrorKind::PosOverflow | IntErrorKind::NegOverflow | IntErrorKind::Zero` in an arm, or as alternatives next to the wildcard, as the Google Rust Style Guide's "Don't omit patterns on `non_exhaustive` enums when matching" asks
 
-warning: 7 warnings emitted
+warning: wildcard hides 4 variants of non-exhaustive `IntErrorKind`
+  --> $DIR/non_exhaustive_wildcard.rs:179:9
+   |
+LL |         _ => 0,
+   |         ^
+   |
+   = help: name `IntErrorKind::InvalidDigit | IntErrorKind::PosOverflow | IntErrorKind::NegOverflow | IntErrorKind::Zero` in an arm, or as alternatives next to the wildcard, as the Google Rust Style Guide's "Don't omit patterns on `non_exhaustive` enums when matching" asks
+
+warning: 8 warnings emitted
 
