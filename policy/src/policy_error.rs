@@ -45,6 +45,13 @@ pub enum PolicyError {
     },
     /// The `[workspace.metadata.policy]` table of the root `Cargo.toml` is malformed.
     Config(String),
+    /// A tool a check runs, other than git, such as shellcheck, failed or isn't installed.
+    Tool {
+        /// The command, as the tool and its arguments.
+        command: String,
+        /// What went wrong.
+        message: String,
+    },
     /// A `git` command failed.
     Git {
         /// The command, as `git` and its arguments.
@@ -72,7 +79,9 @@ impl Display for PolicyError {
                 formatter,
                 "the [workspace.metadata.policy] table of Cargo.toml is malformed: {message}"
             ),
-            Self::Git { command, message } => write!(formatter, "`{command}` failed: {message}"),
+            Self::Tool { command, message } | Self::Git { command, message } => {
+                write!(formatter, "`{command}` failed: {message}")
+            }
         }
     }
 }
@@ -84,7 +93,7 @@ impl Error for PolicyError {
             Self::Read { source, .. } => Some(source),
             Self::Parse { source, .. } => Some(source),
             Self::Json { source, .. } => Some(source),
-            Self::Malformed { .. } | Self::Config(_) | Self::Git { .. } => None,
+            Self::Malformed { .. } | Self::Config(_) | Self::Tool { .. } | Self::Git { .. } => None,
         }
     }
 }

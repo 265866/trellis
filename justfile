@@ -710,8 +710,10 @@ update:
 # missing bun.lock and a package that provides a `bun` command, and read the app's bunfig.toml. A
 # library's `just dylint` must delete a lint library built from another trellis commit and keep one
 # built from this one. After `ci`, an about.toml entry for a crate the graph doesn't hold must pass
-# `just notices` and fail `just stale-licenses`. A `target` runs `test` and `build-release` for
-# that target, as a project's CI does for the target a release ships.
+# `just notices` and fail `just stale-licenses`, and a deploy kit in `deploy/` must pass
+# `just policy` and `just rule-changes` beside a code change, while a script shellcheck faults
+# fails `just policy`. A `target` runs `test` and `build-release` for that target, as a project's
+# CI does for the target a release ships.
 #
 # Generates a project of one kind and runs its checks.
 template kind recipes="ci" publish="false" web="false" target="":
@@ -752,6 +754,20 @@ template kind recipes="ci" publish="false" web="false" target="":
       # one, the checks must have left no change behind.
       git update-ref refs/remotes/origin/main HEAD
       just rule-changes
+      # A deploy kit is code that `just policy` shellchecks: a kit change passes beside a code
+      # change, and a script shellcheck faults fails.
+      mkdir deploy
+      printf '#!/usr/bin/env bash\nset -euo pipefail\nmkdir -p "$HOME/.local/share/demo"\n' > deploy/install.sh
+      printf '[Unit]\nDescription=demo\n' > deploy/demo.service
+      echo "// A code change beside the kit." >> "$(git ls-files 'crates/*/src/*.rs' | head -n 1)"
+      just policy rule-changes
+      printf '#!/bin/sh\nrm -rf $1/old\n' > deploy/backup
+      if just policy > "$out/policy.txt" 2>&1 || ! grep --quiet 'deploy/backup: shellcheck reports' "$out/policy.txt"; then
+        cat "$out/policy.txt" >&2
+        echo "error: just policy passed a deploy script that shellcheck faults" >&2
+        exit 1
+      fi
+      git checkout --quiet -- crates && rm -r deploy
     fi
     if [ "{{ kind }}" = library ] && [[ " {{ recipes }} " = *" dylint "* || "{{ recipes }}" = ci ]]; then
       # A lint library built from another trellis commit is deleted before `just dylint` runs, as

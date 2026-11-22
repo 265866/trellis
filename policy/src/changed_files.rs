@@ -7,6 +7,7 @@ use std::{fs, iter};
 
 use toml::{Table, Value};
 
+use crate::deploy_scripts::DEPLOY_DIRECTORY;
 use crate::head::Head;
 use crate::policy_error::PolicyError;
 use crate::tool_config::ToolConfig;
@@ -30,6 +31,19 @@ const RULE_NAMES: [&str; 6] = [
     "bunfig.toml",
     ".npmrc",
 ];
+
+/// The names of the files in a deploy kit that are rules all the same, since a tool reads them as
+/// configuration: a composite action's definition, which a workflow can run with
+/// `uses: ./deploy`, and a justfile module, which a justfile loads with `mod` or `import`.
+fn is_deploy_rule(path: &str) -> bool {
+    let name = path.rsplit('/').next().unwrap_or(path);
+    ["action.yml", "action.yaml"]
+        .iter()
+        .any(|rule| case_insensitive::eq(name, rule))
+        || Path::new(name)
+            .extension()
+            .is_some_and(|extension| extension.eq_ignore_ascii_case("just"))
+}
 
 /// The extensions of the images that the pages under `docs/` show, which are neither rules nor
 /// code, like the pages.
@@ -69,10 +83,11 @@ const OTHER_FILES: [&str; 5] = [
 /// every agent instruction file, the root `Cargo.toml` outside its dependency tables, the part of
 /// a member `Cargo.toml` that holds the build script's settings and the license, every submodule
 /// or other git repository inside this one, whose files no check sees, and any file the lists
-/// here don't know, which the listing marks when it is only untracked; the code is every
-/// other change under `crates/` and every Rust file elsewhere, except a Rust file whose change
-/// only adds, removes, moves or changes lint expectations, which is neither, and every file of a
-/// crate whose directory moved whole, which is neither too. A pull request changes one or the
+/// here don't know, which the listing marks when it is only untracked. The code is every other
+/// change under `crates/`, every other change under `deploy/`, a deploy kit that ships with the
+/// code it deploys and that `deploy_scripts` shellchecks, and every Rust file elsewhere. A Rust
+/// file whose change only adds, removes, moves or changes lint expectations is neither, and so is
+/// every file of a crate whose directory moved whole. A pull request changes one or the
 /// other, so review sees every loosened rule apart from the code that might have needed it.
 #[derive(Debug, Default)]
 pub struct ChangedFiles {
@@ -350,7 +365,7 @@ enum Role {
     /// A file none of the lists know, which is a rule, so a new tool's configuration file can't
     /// land beside code.
     Unlisted,
-    /// Code that the rules check.
+    /// Code that the rules check: a crate's files, a deploy kit's and every Rust file.
     Code,
     /// The root `Cargo.toml`, which holds rules and the workspace's dependency versions.
     RootManifest,
@@ -381,7 +396,9 @@ fn role(path: &str) -> Role {
     if name == "Cargo.toml" && path.starts_with("crates/") {
         return Role::MemberManifest;
     }
+    let is_deploy_file = path.starts_with(DEPLOY_DIRECTORY);
     let is_rule = ToolConfig::of(path).is_some()
+        || (is_deploy_file && is_deploy_rule(path))
         || agent_files::is_agent_file(path)
         || is_build_script(path)
         || RULE_NAMES
@@ -411,7 +428,7 @@ fn role(path: &str) -> Role {
         Role::Rule
     } else if is_crate_license {
         Role::Other
-    } else if path.starts_with("crates/") || source_path::is_rust(path) {
+    } else if path.starts_with("crates/") || is_deploy_file || source_path::is_rust(path) {
         Role::Code
     } else if is_other {
         Role::Other
@@ -1167,6 +1184,11 @@ mod tests {
             "crates/app/web/mytsconfig.json",
             "crates/app/web/tsconfig.jsonc",
             "crates/app/web/tsconfig",
+            "deploy/install.sh",
+            "deploy/common.sh",
+            "deploy/app.container",
+            "deploy/systemd/app-backup.timer",
+            "deploy/README.md",
             "docs/notes.rs",
             "src/main.rs",
             "tools/x/y.rs",
@@ -1356,6 +1378,30 @@ mod tests {
     }
 
     #[test]
+    fn rule_files_in_a_deploy_kit_stay_rules() {
+        for path in [
+            "deploy/justfile",
+            "deploy/.gitignore",
+            "deploy/build.rs",
+            "deploy/AGENTS.md",
+            "deploy/clippy.toml",
+            "deploy/.gitattributes",
+            "deploy/.cargo/config.toml",
+            "deploy/tsconfig.json",
+            "deploy/bunfig.toml",
+            "deploy/.npmrc",
+            "deploy/action.yml",
+            "deploy/host/Action.YAML",
+            "deploy/tasks.just",
+        ] {
+            assert_eq!(role(path), Role::Rule, "{path} should stay a rule");
+        }
+        for path in ["deploy/install.sh.", "deploy/INSTAL~1.SH", "deploy/a:b.sh"] {
+            assert_eq!(role(path), Role::Unlisted, "{path:?} should be a rule");
+        }
+    }
+
+    #[test]
     fn files_no_list_knows_are_unlisted_rules() {
         for path in [
             ".pre-commit-config.yaml",
@@ -1365,6 +1411,8 @@ mod tests {
             "arch.png",
             "img/arch.svg",
             "tools/check.sh",
+            "Deploy/install.sh",
+            "deployment/install.sh",
             "lints/Cargo.toml",
             "readme.md",
             "notes.md",

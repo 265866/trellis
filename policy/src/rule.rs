@@ -4,9 +4,9 @@ use crate::policy_error::PolicyError;
 use crate::violation::Violation;
 use crate::workspace::Workspace;
 use crate::{
-    agent_files, build_scripts, config_files, docs_index, docs_layout, internal_dependencies,
-    lints_tables, member_manifests, member_sources, proc_macros, release_changelog,
-    workspace_shape,
+    agent_files, build_scripts, config_files, deploy_scripts, docs_index, docs_layout,
+    internal_dependencies, lints_tables, member_manifests, member_sources, proc_macros,
+    release_changelog, workspace_shape,
 };
 
 /// A structure rule of the workspace, which one check enforces.
@@ -43,11 +43,13 @@ pub enum Rule {
     /// The main package's entry in `release-plz.toml` takes every other member into its
     /// changelog.
     ReleaseChangelog,
+    /// The shell scripts under `deploy/` pass shellcheck.
+    DeployScripts,
 }
 
 impl Rule {
     /// Every rule, in the order `trellis-policy check` runs them.
-    pub const ALL: [Self; 12] = [
+    pub const ALL: [Self; 13] = [
         Self::WorkspaceShape,
         Self::LintsTables,
         Self::MemberManifests,
@@ -60,6 +62,7 @@ impl Rule {
         Self::DocsIndex,
         Self::DocsLayout,
         Self::ReleaseChangelog,
+        Self::DeployScripts,
     ];
 
     /// The rule's name, as `trellis-policy check` prints it: the name of its module.
@@ -78,6 +81,7 @@ impl Rule {
             Self::DocsIndex => "docs_index",
             Self::DocsLayout => "docs_layout",
             Self::ReleaseChangelog => "release_changelog",
+            Self::DeployScripts => "deploy_scripts",
         }
     }
 
@@ -100,6 +104,7 @@ impl Rule {
             Self::DocsIndex => docs_index::check(workspace),
             Self::DocsLayout => docs_layout::check(workspace),
             Self::ReleaseChangelog => release_changelog::check(workspace),
+            Self::DeployScripts => deploy_scripts::check(workspace),
         }
     }
 }

@@ -2092,3 +2092,39 @@ fn a_git_that_cant_read_attributes_from_a_revision_moves_nothing() {
         "the moved build script is a rule again: {stdout}"
     );
 }
+
+/// A deploy kit ships with the code it deploys, so a change to its scripts and units lands with a
+/// code change. A file that is a rule by its name stays a rule there.
+#[test]
+fn a_deploy_kit_change_is_code() {
+    let repository = Repository::new();
+    repository.write("deploy/install.sh", "#!/bin/sh\necho install\n");
+    repository.write("deploy/app.container", "[Container]\nImage=app\n");
+    repository.commit("add the deploy kit");
+    repository.git(&["branch", "--force", "base"]);
+    repository.write("deploy/install.sh", "#!/bin/sh\necho install v2\n");
+    repository.write("deploy/backup.sh", "#!/bin/sh\necho backup\n");
+    repository.write("crates/app/src/lib.rs", "//! The app, with backups.\n");
+    repository.commit("back up the data");
+
+    let changed = repository.changed_files();
+    assert!(
+        changed.rules().is_empty(),
+        "a kit change isn't a rule change: {:?}",
+        changed.rules()
+    );
+    assert_eq!(changed.code().len(), 3, "{:?}", changed.code());
+    assert!(
+        !changed.mixes_rules_and_code(),
+        "a kit change with code passes"
+    );
+
+    repository.write("deploy/.gitignore", "*.bak\n");
+    repository.commit("ignore the kit's backups");
+    let changed = repository.changed_files();
+    assert_eq!(changed.rules(), ["deploy/.gitignore".to_owned()]);
+    assert!(
+        changed.mixes_rules_and_code(),
+        "a rule file in the kit is still a rule"
+    );
+}
