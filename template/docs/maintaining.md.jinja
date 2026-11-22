@@ -306,9 +306,21 @@ it.
 
 ## Add a crate to a published library
 
-Every crate you add is published too, and crates.io takes a new crate only by hand. Publish its
-first version with `cargo publish --package <crate>`, then add this repository's `release.yml` as
-a trusted publisher in its settings on crates.io. Later releases publish it through `release.yml`.
+Every crate you add is published too. Give it the manifest "New crates" in
+{% if license == 'MIT' -%}
+[CONTRIBUTING.md](../CONTRIBUTING.md#new-crates) lists, with a `description`, and copy `LICENSE`
+from the root into its directory, as the generated crate has it, since a crate's package holds
+only the files under its directory. `just policy` fails until it's there.
+{%- else -%}
+[CONTRIBUTING.md](../CONTRIBUTING.md#new-crates) lists, with a `description`, and copy
+`LICENSE-MIT` and `LICENSE-APACHE` from the root into its directory, as the generated crate has
+them, since a crate's package holds only the files under its directory. `just policy` fails until
+they're there.
+{%- endif %}
+
+crates.io takes a new crate only by hand. Publish its first version with
+`cargo publish --package <crate>`, then add this repository's `release.yml` as a trusted
+publisher in its settings on crates.io. Later releases publish it through `release.yml`.
 {%- endif %}
 {%- if kind != 'library' %}
 
@@ -629,10 +641,13 @@ what GitHub needs:
 {%- endif %}
 {%- if kind == 'library' and visibility == 'public' and not publish_crate %}
 - **Publishing.** After turning on `publish_crate`, publish the first version as the updated
-  page's "At the first release" says.
-{%- if license == 'none' %} crates.io needs a license, so the update refuses
-  `--data publish_crate=true` until you also pass one, such as `--data license=MIT`, and each
-  crate then needs the license line the next list describes.
+  page's "At the first release" says. The update gives the crate trellis generated its license
+  files; copy them from the root into every crate you added, in the update's pull request, since
+  `just policy` fails on a published crate without them.
+{%- if license == 'none' %}
+  crates.io needs a license, so the update refuses `--data publish_crate=true` until you also pass
+  one, such as `--data license=MIT`, and each crate then needs the license line the next list
+  describes.
 {%- endif %}
 {%- endif %}
 
@@ -653,13 +668,16 @@ hold need more than the update, and two can't change this way at all:
   `description` in its `Cargo.toml` and its `//!` crate docs keep the old sentence; change them
   in a code pull request.
 {%- endif %}
-- **License.** Between `MIT` and `MIT OR Apache-2.0`, the update is all it takes.
-{%- if published %}
+- **License.** Between `MIT` and `MIT OR Apache-2.0`, the update is all it takes
+{%- if published %} for the crate
+  trellis generated, whose license files it replaces. Every crate you added keeps its own copies,
+  so replace them with the root's in the update's pull request; `just policy` fails on a crate
+  without the new license's files.
   A published crate needs a license, so the update refuses `license=none` unless you also pass
   `--data publish_crate=false`. Then also remove `license.workspace = true` from every crate's
   `Cargo.toml`, in the update's pull request; Cargo can't load the workspace until each crate's
   line is gone. A crate's license line is a rule setting, so the pull request stays a rule change.
-{%- else %}
+{%- else %}.
 {%- if license == 'none' %} To license
   the project, also add `license.workspace = true` to `[package]` in every crate's `Cargo.toml`,
   in the update's pull request; `just policy` fails until each crate has it.

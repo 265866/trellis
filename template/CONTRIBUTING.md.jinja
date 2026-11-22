@@ -141,7 +141,7 @@ nightly rustfmt, and stable rustfmt ignores them with a warning. For rust-analyz
 | `just image` | The container image, for this machine's architecture. `just ci` leaves it out; [The container image](#the-container-image) says why. |
 {%- endif %}
 {%- if kind == 'library' and publish_crate %}
-| `just package` | The crate's package holds the README and its license files. |
+| `just package` | Every crate's package holds the README and the license files. |
 {%- endif %}
 | `just rule-changes [base]` | Rules and code change in separate pull requests. |
 
@@ -222,10 +222,13 @@ Each crate has one job. `just policy` checks every crate against the rules
 one:
 
 - **Place and manifest.** Put it in `crates/<name>`. Its `[lints]` table is exactly
-  `workspace = true`. It inherits `version`, `edition`, `rust-version`
-{%- if license != 'none' %}, `publish` and `license`{% else %} and `publish`{% endif %}
-  from the workspace. The crates share one version, which release-plz bumps in the root
-  `Cargo.toml` alone; trellis doesn't support a crate versioned apart from the others.
+  `workspace = true`. Its `[package]` gives a `description` and inherits `version`, `edition`,
+  `rust-version`, `repository`
+{%- if kind == 'library' %}, `readme`{% endif %}
+{%- if license != 'none' %}, `license`{% endif %} and `publish` from the workspace, each as
+  `<key>.workspace = true`, as the generated crate's `Cargo.toml` does. The crates share one
+  version, which release-plz bumps in the root `Cargo.toml` alone; trellis doesn't support a crate
+  versioned apart from the others.
 - **Settings.** Give it an entry in `internal_dependencies` in `[workspace.metadata.policy]`,
   which lists the workspace crates it may depend on directly, and list it in `changelog_include`
   in `release-plz.toml`, so its commits reach the release notes. A build script needs the crate in
@@ -254,8 +257,23 @@ one:
   `version`, and `just policy` fails until you remove it.
 {%- endif %}
 {%- if kind == 'library' and publish_crate %}
-- **Publishing.** Every crate is published to crates.io. A new crate needs a first manual publish
-  and a trusted publisher on crates.io before the next release, which only the owner can set up;
+{%- if license == 'MIT' %}
+- **Publishing.** Every crate is published to crates.io, which refuses one without a
+  `description` and a license. A crate's package holds only the files under its directory, so
+  copy `LICENSE` from the root into the new crate's directory, as the generated crate has it;
+  without it the crate would reach crates.io without its license text. `just policy` fails until
+  the crate has it, and `just package` checks every crate's package. A new crate needs a first
+  manual publish and a trusted publisher on crates.io before the next release, which only the
+  owner can set up;
+{%- else %}
+- **Publishing.** Every crate is published to crates.io, which refuses one without a
+  `description` and a license. A crate's package holds only the files under its directory, so
+  copy `LICENSE-MIT` and `LICENSE-APACHE` from the root into the new crate's directory, as the
+  generated crate has them; without them the crate would reach crates.io without its license
+  text. `just policy` fails until the crate has them, and `just package` checks every crate's
+  package. A new crate needs a first manual publish and a trusted publisher on crates.io before
+  the next release, which only the owner can set up;
+{%- endif %}
   [docs/maintaining.md](docs/maintaining.md#add-a-crate-to-a-published-library) has the steps.
 {%- endif %}
 
