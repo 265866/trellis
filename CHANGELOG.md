@@ -6,6 +6,33 @@ part lists what a project's owner must do around the update: a rule that can fla
 a setting to change, or a step to do by hand. [CONTRIBUTING.md](CONTRIBUTING.md#release-trellis)
 has the versioning rule.
 
+## v0.19.0
+
+### Action required in projects
+
+- **A published library with more than one crate copies its license files into each crate.**
+  `just policy` now fails a published crate whose directory lacks the license files its `license`
+  names: `LICENSE` under `MIT`, and `LICENSE-MIT` and `LICENSE-APACHE` under `MIT OR Apache-2.0`.
+  A crate's package holds only the files under its directory, so a crate added beside the one
+  trellis generated reached crates.io without its license text. The generated crate already has
+  its files, and a binary, a service or an unpublished library publishes nothing, so none of them
+  is affected; `just policy` on the update's branch says so in one line. Copy the files the report
+  names from the root into each crate it names, before or with the update; a crate's license file
+  is neither rule nor code to `just rule-changes`. Each crate's next release then carries its
+  license text.
+
+### Fixed
+
+- `just package` checks the package of every crate under `crates/`, not only the first, and names
+  the crate a file is missing from. A one-crate library passes and fails as before.
+- The generated new-crate steps in `CONTRIBUTING.md` and `docs/maintaining.md` list the whole
+  manifest an added crate inherits, `version`, `edition`, `rust-version`, `repository`, `readme`,
+  `license` and `publish`, and the `description` crates.io requires, and, in a published library,
+  say to copy the license files into the crate.
+- With a `release` answer that names its own files, `docs/install.md` says to run a release file
+  that is an installer, and gives `chmod +x` only when the project builds for Linux or macOS.
+- A public project's release publishing job explains its 20-minute limit in its own terms.
+
 ## v0.18.0
 
 ### Action required in projects
