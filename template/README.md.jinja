@@ -80,7 +80,10 @@
 > **To write:** the shortest path from nothing to {{ 'a program that uses it' if primary == 'library' else 'it working' }}, as numbered steps with
 > commands to copy. Start with what the reader needs, and end at something they can see work.
 > Depth, such as every option or platform, goes on a page under `docs/`, with an entry under
-> Documentation. For this {{ label[primary] }}, cover:
+> Documentation. When what the reader needs, or where its files live and how to remove it, runs
+> past a few lines, give it a section of its own between Quick start and Documentation, such as
+> `## Requirements`, and add it to `readme_sections` in `Cargo.toml`. For this
+> {{ label[primary] }}, cover:
 >
 {%- if primary == 'web' %}
 > - where it listens, and how a stranger reaches the UI: the bind address, a proxy or tunnel, and
