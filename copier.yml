@@ -392,7 +392,7 @@ targets:
     {%- for arch in ['x86_64', 'aarch64'] if arch in architectures -%}
     {%- set ns.targets = ns.targets + [{'os': 'linux', 'arch': arch,
       'name': 'Linux on ' ~ names[arch],
-      'runner': 'ubuntu-24.04' if arch == 'x86_64' else 'ubuntu-24.04-arm',
+      'runner': 'ubuntu-26.04' if arch == 'x86_64' else 'ubuntu-26.04-arm',
       'triple': arch ~ '-unknown-linux-' ~ libc}] -%}
     {%- endfor -%}
     {%- endif -%}

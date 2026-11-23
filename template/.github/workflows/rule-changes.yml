@@ -46,7 +46,7 @@ env:
 jobs:
   pending:
     name: Mark the rule-change status pending
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     permissions:
       statuses: write
@@ -65,7 +65,7 @@ jobs:
 
   check:
     name: Check that rules and code change separately
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 30
     permissions:
       contents: read
@@ -119,7 +119,7 @@ jobs:
     name: Report the rule-change status
     needs: [pending, check]
     if: ${{ !cancelled() }}
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     permissions:
       statuses: write
