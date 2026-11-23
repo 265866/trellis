@@ -433,6 +433,12 @@ text in code, in HTML or in an HTML comment is neither a heading nor a link.
   comment, a tag or a quoted attribute value open, and every HTML element opened in a section
   closes in the same section, so nothing that follows is hidden or rendered inside it. Comments
   may come before the title and in the index.
+- These checks read the `.md` pages under `docs/`, and fail a file there with another Markdown
+  extension, such as `.markdown`. They read no other file there. To `just rule-changes`, the pages
+  other than this one and the `.png`, `.svg`, `.jpg`, `.jpeg`, `.gif` and `.webp` images under
+  `docs/` are neither rule nor code, a `.rs` file other than a `build.rs` is code, and any other
+  file, such as `docs/schema.sql`, is a rule, as is an agent instruction file such as
+  `docs/AGENTS.md`.
 
 ### Docs review checklist
 

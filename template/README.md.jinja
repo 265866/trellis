@@ -13,7 +13,8 @@
 {{ description | wordwrap(100, break_long_words=False, break_on_hyphens=False) }}
 
 > **To write:** the opening, in a paragraph or two that start from the sentence above. A stranger
-> reads it to decide whether this is for them, so say, with every claim checked against the code:
+> reads it to decide whether this is for them, so say, with every claim checked against the code
+> and every value, such as an interval, a port or a path, copied from it rather than from memory:
 >
 {%- if primary == 'library' %}
 > - the problem it solves, and for whom;
@@ -21,13 +22,19 @@
 >   vouch for the comparison;
 > - its limits: what it leaves to the caller, and what it never does.
 {%- else %}
+> - if it's mainly one owner's configuration that a program acts on, say so, since its honest Quick
+>   start is then how a change is made here;
 > - who it's for, and what it does for them, in their words rather than the code's;
 > - how it differs from what they'd use instead, named, or by kind when you can't vouch for the
 >   comparison;
 {%- if primary == 'terminal' or primary == 'desktop' %}
-> - whether it runs beside something else, such as a game or an editor;
+> - whether it runs beside something else, such as a game or an editor, and whether it reads or
+>   changes another program;
 {%- endif %}
-> - its limits: what it doesn't do, and what it never sends, stores or {{ 'logs' if primary == 'service' else 'shows' }}.
+> - its limits: what it doesn't do, and what it never sends, stores or {{ 'logs' if primary == 'service' else 'shows' }};
+> - if it spends money, such as on paid API calls, say what on, and whether the Quick start can
+>   spend it by accident;
+> - what it contacts, and what it does, with no key, credentials or login.
 {%- endif %}
 
 > **To write:** the features, as a list: a bullet for each thing a person can do with it, most
@@ -77,12 +84,22 @@
 
 ## Quick start
 
+{% if primary == 'library' -%}
 > **To write:** the shortest path from nothing to something the reader can see work, as numbered
 > steps with commands to copy, starting with what the reader needs. Depth, such as every option or
 > platform, goes on a page under `docs/`, with an entry under Documentation. When what the reader
 > needs, or where its files live and how to remove it, runs past a few lines, give it a section of
 > its own between Quick start and Documentation, such as `## Requirements`, and add it to
 > `readme_sections` in `Cargo.toml`.
+{%- else -%}
+> **To write:** the shortest path from nothing to something the reader can see work, as numbered
+> steps with commands to copy, starting with what the reader needs, every tool the commands call
+> included, such as curl or jq. Say how to remove it, after the last step or in its own section.
+> Depth, such as every option or platform, goes on a page under `docs/`, with an entry under
+> Documentation. When what the reader needs, or where its files live and how to remove it, runs past
+> a few lines, give it a section of its own between Quick start and Documentation, such as
+> `## Requirements`, and add it to `readme_sections` in `Cargo.toml`.
+{%- endif %}
 > For this {{ label[primary] }}, cover:
 >
 {%- if primary == 'web' %}
@@ -90,13 +107,16 @@
 >   any feature that needs HTTPS;
 > - how the first account is made, if it has accounts;
 > - the outside systems its pages need;
+> - if it has a deploy kit, whether it suits any host, or holds steps that only fit the owner's;
 {%- elif primary == 'desktop' %}
-> - the supported OS versions, and the install form: an installer, a zip or a dmg;
-> - whether it's signed, and the warning a user sees if not, such as SmartScreen or Gatekeeper;
-> - first-run steps, such as permissions and sign-ins;
-> - where it keeps settings and data, and what uninstalling leaves;
-> - whether it updates itself, and how a user learns it did;
-> - tray or background behaviour, and the shortcuts that matter;
+> - the supported OS versions, and what each needs before it runs, such as a system webview, GTK
+>   and WebKitGTK, or a keychain service;
+> - the install form, such as an installer, a portable zip or a dmg, and whether it installs per
+>   user or needs an administrator;
+> - whether it's signed, and if not, the warning the OS shows, such as SmartScreen or Gatekeeper,
+>   in the words on the screen;
+> - where its files live on each OS, and what uninstalling leaves;
+> - how it updates, and how it proves an update genuine;
 {%- elif primary == 'terminal' %}
 > - the system and the shell the commands are for;
 > - the minimum terminal size, and the terminals it's tested in;
@@ -112,9 +132,15 @@
 > - whether it's signed, and the warning a user sees if not;
 > - output for scripts, such as exit codes or JSON, if a page doesn't cover it;
 {%- elif primary == 'service' %}
-> - how it's reached: its port, its authentication, and any proxy in front;
-> - the configuration that matters: the environment variables, and where its data persists;
-> - what it needs to run, such as memory, disk or outside services;
+> - how it's reached, and how a reader consumes what it produces: its port, its authentication
+>   and the credentials each install path has, and any proxy in front;
+> - the configuration that matters: the environment variables, where its data persists, and how
+>   much that grows per day;
+> - the long-running install, such as a deploy kit or a systemd unit, if it isn't the Quick start,
+>   and what that host needs, such as memory and disk;
+> - the outside services it calls: their keys and quotas, and the load it puts on them;
+> - what a restart or a reboot does, what it misses while it's down, and how it relates to other
+>   copies of it, such as a secondary;
 {%- else %}
 > - the dependency, which trellis filled in below: keep it as the first step;
 > - the minimum Rust version, which `rust-version` in `Cargo.toml` sets, and any `no_std` or
@@ -122,9 +148,23 @@
 > - a whole program that calls it, if the example above isn't one;
 {%- endif %}
 {%- for other in others %}
-> - its {{ label[other] }}: {{ {'web': 'where its UI listens, how to reach it, and the page the reader sees first;', 'desktop': 'how to start it, and its first window;', 'terminal': 'how to start it, and its first screen;', 'cli': 'the command a person runs first, and what it prints;', 'service': 'how to start it in the background, and how to check that it runs;'}[other] }}
+> - its {{ label[other] }}: {{ {'web': 'where its UI listens, how to reach it, and the page the reader sees first;', 'desktop': 'how to start it, and its first window;', 'terminal': 'how to start it, and its first screen;', 'cli': 'the command a person runs first, and what it prints, as a step;', 'service': 'how to start it in the background, and how to check that it runs;'}[other] }}
 {%- endfor %}
-> - the last step: {{ {'web': 'open the page, and what the reader sees there.', 'desktop': 'the first window, and what the reader sees in it.', 'terminal': 'the first screen, and what the reader sees on it.', 'cli': 'the first command, and what it prints.', 'service': 'a health check, or a request and its response.', 'library': 'run the program, and what it prints.'}[primary] }}
+{%- if primary in ['web', 'service'] %}
+> - how a new user gets a database or other state the program won't create itself, with any
+>   container image named in full, such as `docker.io/library/postgres`, which stock Podman needs;
+{%- elif primary != 'library' %}
+> - how a new user gets a database or other state the program won't create itself;
+{%- endif %}
+{%- if primary != 'library' and visibility == 'private' %}
+> - if a step clones the repository, the credentials that needs while it's private;
+{%- endif %}
+{%- if primary == 'desktop' %}
+> - the last step: the first window, and what the reader sees in it, with and without a
+>   connection, and any permissions or sign-ins it asks for.
+{%- else %}
+> - the last step: {{ {'web': 'open the page, and what the reader sees there.', 'terminal': 'the first screen, and what the reader sees on it.', 'cli': 'the first command, and what it prints.', 'service': 'a health check, or a request and its response.', 'library': 'run the program, and what it prints.'}[primary] }}
+{%- endif %}
 {%- if kind == 'binary' %}
 >
 > [Install](docs/install.md) lists each release's files and how to build from source, and
