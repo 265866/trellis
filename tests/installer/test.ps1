@@ -1,7 +1,8 @@
 # Tests the installers run.sh built: a silent per-user install, an upgrade, an upgrade while the
-# helper runs with a window and then without one, with and without CloseApplications=force, an
-# upgrade from an Inno Setup 6 build, and a silent uninstall. It prints each result and what an Inno Setup 6 install's uninstall entry and
-# files show differently from an Inno Setup 7 one, and exits with 1 when a check fails.
+# helper runs with a window, with a hidden window and without one, with and without
+# CloseApplications "force", an upgrade from an Inno Setup 6 build, and a silent uninstall. It
+# prints each result and what an Inno Setup 6 install's uninstall entry and files show differently
+# from an Inno Setup 7 one, and exits with 1 when a check fails.
 param(
     [Parameter(Mandatory)] [string] $V1,
     [Parameter(Mandatory)] [string] $V1Inno6,
@@ -128,6 +129,18 @@ Start-Sleep -Seconds 3
 $code = Setup $V2 'upgrade-hidden.log'
 Check 'an upgrade with a windowless process running exits with 5 and keeps 0.1.0' (($code -eq 5) -and -not $process.HasExited -and ((Hash $Helper) -eq $helper1) -and ((DisplayVersion) -eq '0.1.0')) "exit $code, helper running=$(-not $process.HasExited), kept=$((Hash $Helper) -eq $helper1), version $(DisplayVersion)"
 StopHelpers
+
+# The same with a hidden top-level window that ends the helper on WM_ENDSESSION, the fix the docs
+# give for a process without a window: Restart Manager closes it, and the upgrade goes through.
+$process = Start-Process -FilePath $Helper -ArgumentList 'hidden-window' -PassThru
+Start-Sleep -Seconds 3
+Check 'the hidden-window helper runs' (-not $process.HasExited)
+$code = Setup $V2 'upgrade-hidden-window.log'
+Start-Sleep -Seconds 1
+Check 'an upgrade ends the helper by its hidden window and replaces it' (($code -eq 0) -and $process.HasExited -and ((Hash $Helper) -eq $helper2) -and ((DisplayVersion) -eq '0.2.0-beta.1')) "exit $code, helper exited=$($process.HasExited), replaced=$((Hash $Helper) -eq $helper2)"
+StopHelpers
+$code = Setup $V1 'reinstall-force.log'
+Check 'back to 0.1.0 before the force case' (($code -eq 0) -and ((Hash $Helper) -eq $helper1)) "exit $code"
 
 # The same with CloseApplications=force in the custom file, which kills the windowless helper.
 $process = Start-Process -FilePath $Helper -ArgumentList 'hidden' -PassThru

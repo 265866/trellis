@@ -1,10 +1,16 @@
 //! Holds its own file open until something closes it: with `window`, a top-level window that ends
-//! the program when it is closed, and with `hidden`, no window at all. `HELPER_BUILD`, set at build
-//! time, goes in the window's title, so two builds differ.
+//! the program when it is closed; with `hidden-window`, a top-level window that is never shown and
+//! ends the program on `WM_ENDSESSION`; and with `hidden`, no window at all. `HELPER_BUILD`, set at
+//! build time, goes in the window's title, so two builds differ.
 #![windows_subsystem = "windows"]
 
 use std::ffi::c_void;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::{ptr, thread, time};
+
+/// Whether the window ends the program on `WM_ENDSESSION`, as only the hidden one does; the shown
+/// one waits for `WM_CLOSE`, as a program that handles neither does.
+static ENDS_WITH_SESSION: AtomicBool = AtomicBool::new(false);
 
 /// A window handle.
 type Hwnd = *mut c_void;
@@ -91,8 +97,14 @@ unsafe extern "system" {
 /// `WM_DESTROY`.
 const WM_DESTROY: u32 = 0x0002;
 
-/// `WS_OVERLAPPEDWINDOW | WS_VISIBLE`.
-const VISIBLE_WINDOW: u32 = 0x00cf_0000 | 0x1000_0000;
+/// `WM_ENDSESSION`.
+const WM_ENDSESSION: u32 = 0x0016;
+
+/// `WS_OVERLAPPEDWINDOW`.
+const OVERLAPPED_WINDOW: u32 = 0x00cf_0000;
+
+/// `WS_VISIBLE`.
+const VISIBLE: u32 = 0x1000_0000;
 
 /// `CW_USEDEFAULT`.
 const DEFAULT_POSITION: i32 = i32::MIN;
@@ -102,13 +114,18 @@ fn wide(text: &str) -> Vec<u16> {
     text.encode_utf16().chain([0]).collect()
 }
 
-/// Ends the message loop when the window is destroyed, which closing it does.
+/// Ends the message loop when the window is destroyed, which closing it does, and, for the hidden
+/// window, ends the program when Windows says its session ends, with a nonzero `wparam`, as
+/// Restart Manager does.
 unsafe extern "system" fn procedure(
     window: Hwnd,
     message: u32,
     wparam: usize,
     lparam: isize,
 ) -> isize {
+    if message == WM_ENDSESSION && wparam != 0 && ENDS_WITH_SESSION.load(Ordering::Relaxed) {
+        std::process::exit(0);
+    }
     if message == WM_DESTROY {
         // SAFETY: PostQuitMessage takes any exit code.
         unsafe { PostQuitMessage(0) };
@@ -118,8 +135,10 @@ unsafe extern "system" fn procedure(
     unsafe { DefWindowProcW(window, message, wparam, lparam) }
 }
 
-/// Shows a window and runs its message loop until it is closed.
-fn window() {
+/// Creates a top-level window, shown when `visible`, and runs its message loop until the program
+/// ends.
+fn window(visible: bool) {
+    ENDS_WITH_SESSION.store(!visible, Ordering::Relaxed);
     let class_name = wide("InstallerHelper");
     let title = wide(&format!("installer helper {BUILD}"));
     // SAFETY: a null name asks for the running program's module.
@@ -146,7 +165,11 @@ fn window() {
             0,
             class_name.as_ptr(),
             title.as_ptr(),
-            VISIBLE_WINDOW,
+            if visible {
+                OVERLAPPED_WINDOW | VISIBLE
+            } else {
+                OVERLAPPED_WINDOW
+            },
             DEFAULT_POSITION,
             DEFAULT_POSITION,
             400,
@@ -181,7 +204,8 @@ fn window() {
 
 fn main() {
     match std::env::args().nth(1).as_deref() {
-        Some("window") => window(),
+        Some("window") => window(true),
+        Some("hidden-window") => window(false),
         Some("hidden") => loop {
             thread::sleep(time::Duration::from_secs(1));
         },

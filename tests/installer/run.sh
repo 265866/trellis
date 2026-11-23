@@ -6,8 +6,8 @@
 # twice, `Install Inno Setup` and `Package`, for version 0.1.0 and then 0.2.0-beta.1, with a
 # release/package.sh that stages the program, its notices and tests/installer/app as window.exe,
 # and writes the portable program as the target's other file. It builds 0.1.0 a second time with
-# the Inno Setup 6 release pinned here, and 0.2.0-beta.1 a second time with CloseApplications "force"
-# defined in release/installer-custom.iss, then runs test.ps1 on the four installers.
+# the Inno Setup 6 release pinned here, and 0.2.0-beta.1 a second time with CloseApplications
+# "force" defined in release/installer-custom.iss, then runs test.ps1 on the four installers.
 set -euo pipefail
 project=$1 target=$2
 here=$(cd "$(dirname "$0")" && pwd)
