@@ -6,6 +6,29 @@ part lists what a project's owner must do around the update: a rule that can fla
 a setting to change, or a step to do by hand. [CONTRIBUTING.md](CONTRIBUTING.md#release-trellis)
 has the versioning rule.
 
+## Unreleased
+
+### Added
+
+- **A Windows installer.** The `release` answer's new `installer` key gives a Windows target a
+  per-user Inno Setup installer, which the release builds and publishes as one of the target's
+  files: `{x86_64-pc-windows-msvc: {app_id: <GUID>, file: "app-{version}-x64-setup.exe"}}`, with an
+  optional `name`. The AppId is a GUID the owner generates once; `copier update` refuses an answer,
+  passed or typed, that changes it. trellis writes `release/installer.iss`, which every update
+  rewrites, and `release/installer-custom.iss` once, for the project's own `[Code]`,
+  `[InstallDelete]`, icon and `[Run]` entries. The release build installs Inno Setup 7.1.1, pinned
+  by its SHA-256, for each run, and `release/package.sh` stages the files to install in the new
+  `STAGING` directory. The installer is unsigned. The "Windows installer" part of
+  `docs/maintaining.md` has the details, and a project without the key gets no new file. Every
+  Windows target shares one AppId.
+- `docs/stability.md` in a public binary says what `attestation.json` holds: one Sigstore bundle
+  whose statement names each release file by its name and SHA-256, which a program that updates
+  itself can rely on, beside the `vX.Y.Z` tag it already named. trellis's CI now fails a change
+  to either.
+- Docs only, for projects that don't use the installer: the update adds the "Windows installer"
+  part to a binary's `docs/maintaining.md` when Windows is one of its platforms, and the
+  `attestation.json` item to a public binary's `docs/stability.md`. Nothing else changes for them.
+
 ## v0.19.1
 
 ### Fixed

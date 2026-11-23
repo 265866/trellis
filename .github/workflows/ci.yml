@@ -171,6 +171,23 @@ jobs:
             web: "true"
             recipes: web-check web-build notices
             tools: just@1.59.0,uv@0.13.8,cargo-about@0.9.3
+          # A binary whose release answer gives the target an Inno Setup installer: its release
+          # build's own steps build it, and tests/installer/run.sh installs, upgrades and
+          # uninstalls it.
+          - name: binary with an installer on Windows
+            os: windows-2025
+            kind: binary
+            target: x86_64-pc-windows-msvc
+            installer: "true"
+            recipes: notices
+            tools: just@1.59.0,uv@0.13.8,cargo-about@0.9.3
+          - name: binary with an installer on Windows on ARM64
+            os: windows-11-arm
+            kind: binary
+            target: aarch64-pc-windows-msvc
+            installer: "true"
+            recipes: notices
+            tools: just@1.59.0,uv@0.13.8,cargo-about@0.9.3
           # The published library's `package` recipe has a PowerShell variant only Windows runs.
           - name: published library on Windows
             os: windows-2025
@@ -213,7 +230,16 @@ jobs:
           PUBLISH: ${{ matrix.publish || 'false' }}
           WEB: ${{ matrix.web || 'false' }}
           TARGET: ${{ matrix.target }}
-        run: just template "$KIND" "$RECIPES" "$PUBLISH" "$WEB" "$TARGET"
+          INSTALLER: ${{ matrix.installer || 'false' }}
+        run: just template "$KIND" "$RECIPES" "$PUBLISH" "$WEB" "$TARGET" "$INSTALLER"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always() && matrix.installer == 'true'
+        with:
+          name: installer-logs-${{ matrix.target }}
+          path: ${{ runner.temp }}/installer-test/logs
+          retention-days: 7
+          if-no-files-found: warn
 
       # `Policy and custom lints` tests the checker on Linux on x86-64. These entries run its tests
       # on every other system and processor CI has, since file systems differ in what the checker
