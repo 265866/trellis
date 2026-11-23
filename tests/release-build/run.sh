@@ -4,7 +4,8 @@
 # It deletes what an earlier build left, builds the workspace for the host's own triple, writes
 # the notices, then runs the job's own steps that build the web UI and write the release files,
 # `Build the web UI` when the project has a web UI, and `Archive`, or the `Package` step that
-# replaces it, with the caller's FILES. It runs only on Linux, whose runner the steps assume.
+# replaces it, with the caller's FILES. GitHub names the repository the project's answers name,
+# whatever the caller's environment says. It runs only on Linux, whose runner the steps assume.
 set -euo pipefail
 project=$1
 here=$(cd "$(dirname "$0")" && pwd)
@@ -12,6 +13,9 @@ fail() { echo "error: release build: $1" >&2; exit 1; }
 [ "$(uname -s)" = Linux ] || fail "this runs only on Linux"
 cd "$project"
 target=$(rustc -vV | sed -n 's/^host: //p')
+answer() { sed -n "s/^$1: '\{0,1\}\([^']*\)'\{0,1\}$/\1/p" .copier-answers.yml; }
+repository="$(answer github_owner)/$(answer project_name)"
+case $repository in /* | */) fail ".copier-answers.yml names no github_owner or project_name" ;; esac
 # Prints the script of the build job's step named $1; exits with 2 when the job has no such step.
 step() {
   uv run --quiet --no-project --with pyyaml==6.0.3 python -I "$here/step.py" \
@@ -34,7 +38,8 @@ for name in "Build the web UI" Archive Package; do
   fi
   [ "$status" -eq 0 ] || exit "$status"
   if [ "$name" != "Build the web UI" ]; then packaged=yes; fi
-  TARGET=$target RUNNER_OS=Linux GITHUB_OUTPUT=/dev/null bash -euo pipefail -c "$script" >&2
+  TARGET=$target RUNNER_OS=Linux GITHUB_OUTPUT=/dev/null GITHUB_SERVER_URL=https://github.com \
+    GITHUB_REPOSITORY=$repository bash -euo pipefail -c "$script" >&2
 done
 [ "$packaged" = yes ] || fail "the release build has no Archive or Package step"
 find dist -type f | sort

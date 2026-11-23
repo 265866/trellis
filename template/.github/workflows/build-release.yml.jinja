@@ -289,7 +289,21 @@ jobs:
           stem="$NAME-$version-$TARGET"
           mkdir -p "dist/$stem"
 {%- endraw %}
-          cp {{ {'MIT': 'LICENSE ', 'MIT OR Apache-2.0': 'LICENSE-MIT LICENSE-APACHE '}.get(license, '') }}README.md target/THIRD-PARTY-LICENSES.html{{ ' target/THIRD-PARTY-LICENSES-WEB.txt' if web_ui else '' }} "dist/$stem/"
+          cp {{ {'MIT': 'LICENSE ', 'MIT OR Apache-2.0': 'LICENSE-MIT LICENSE-APACHE '}.get(license, '') }}target/THIRD-PARTY-LICENSES.html{{ ' target/THIRD-PARTY-LICENSES-WEB.txt' if web_ui else '' }} "dist/$stem/"
+{%- raw %}
+          # The README's relative links and images lead nowhere in the archive, so its copy opens
+          # with a line that says where they work and a blank line, then holds the README's bytes as
+          # they are, without a leading byte order mark, which would land before the line.
+          note="> This file's links and images are relative to $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/tree/v$version."
+          {
+            printf '%s\n\n' "$note"
+            if [ "$(head -c 3 README.md | od -An -tx1 | tr -d ' \n')" = efbbbf ]; then
+              tail -c +4 README.md
+            else
+              cat README.md
+            fi
+          } > "dist/$stem/README.md"
+{%- endraw %}
 {%- if web_ui %}
           cp -R crates/{{ crate_name }}/web/dist "dist/$stem/web"
 {%- endif %}
