@@ -1,7 +1,8 @@
+{% if kind == 'binary' -%}
 # Install {{ project_name }}
-{% if kind == 'binary' %}
-Read this page to run {{ project_name }} on your machine. It shows how to install a release or
-build from source, and how to update.
+
+Read this page for the files each release has, and how to install one by hand, build from source
+and update. The [README](../README.md)'s Quick start is how {{ project_name }} runs.
 
 Each [release](https://github.com/{{ github_owner }}/{{ project_name }}/releases) has {% if release.files %}these files for
 each platform:{% else %}one archive per
@@ -74,9 +75,12 @@ That builds the program without its web UI. To have the UI too, clone the reposi
 [Bun](https://bun.com/) and [just](https://just.systems/), run `just web-build`, and set
 `{{ crate_name | upper }}_WEB_DIR` to the `crates/{{ crate_name }}/web/dist` directory it writes.
 {%- endif %}
-{%- else %}
-Read this page to run {{ project_name }} on your server. It shows how to run the container image
-and how to update it.
+{%- else -%}
+# Container image
+
+Read this page for {{ project_name }}'s container image: its name and tags, its digest, and a
+plain `docker run` to start from. The [README](../README.md)'s Quick start is how
+{{ project_name }} runs.
 
 The image is `ghcr.io/{{ github_owner | lower }}/{{ project_name }}`, for {{ targets | map(attribute='name') | join(' and ') }}.
 {%- if targets | length > 1 %}
