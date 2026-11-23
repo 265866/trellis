@@ -22,8 +22,8 @@
 >   vouch for the comparison;
 > - its limits: what it leaves to the caller, and what it never does.
 {%- else %}
-> - whether it's mainly a program others install, or one owner's configuration that a program
->   acts on, whose honest Quick start is how a change is made here;
+> - if it's mainly one owner's configuration that a program acts on, say so, since its honest Quick
+>   start is then how a change is made here;
 > - who it's for, and what it does for them, in their words rather than the code's;
 > - how it differs from what they'd use instead, named, or by kind when you can't vouch for the
 >   comparison;
@@ -32,7 +32,8 @@
 >   changes another program;
 {%- endif %}
 > - its limits: what it doesn't do, and what it never sends, stores or {{ 'logs' if primary == 'service' else 'shows' }};
-> - what it spends, such as paid API calls, and whether the Quick start can spend by accident;
+> - if it spends money, such as on paid API calls, say what on, and whether the Quick start can
+>   spend it by accident;
 > - what it contacts, and what it does, with no key, credentials or login.
 {%- endif %}
 
@@ -83,17 +84,22 @@
 
 ## Quick start
 
+{% if primary == 'library' -%}
 > **To write:** the shortest path from nothing to something the reader can see work, as numbered
-{%- if primary == 'library' %}
-> steps with commands to copy, starting with what the reader needs.
-{%- else %}
+> steps with commands to copy, starting with what the reader needs. Depth, such as every option or
+> platform, goes on a page under `docs/`, with an entry under Documentation. When what the reader
+> needs, or where its files live and how to remove it, runs past a few lines, give it a section of
+> its own between Quick start and Documentation, such as `## Requirements`, and add it to
+> `readme_sections` in `Cargo.toml`.
+{%- else -%}
+> **To write:** the shortest path from nothing to something the reader can see work, as numbered
 > steps with commands to copy, starting with what the reader needs, every tool the commands call
-> included, such as curl or jq, and ending with how to remove it.
-{%- endif %}
+> included, such as curl or jq. Say how to remove it, after the last step or in its own section.
 > Depth, such as every option or platform, goes on a page under `docs/`, with an entry under
-> Documentation. When what the reader needs, or where its files live and how to remove it, runs
-> past a few lines, give it a section of its own between Quick start and Documentation, such as
+> Documentation. When what the reader needs, or where its files live and how to remove it, runs past
+> a few lines, give it a section of its own between Quick start and Documentation, such as
 > `## Requirements`, and add it to `readme_sections` in `Cargo.toml`.
+{%- endif %}
 > For this {{ label[primary] }}, cover:
 >
 {%- if primary == 'web' %}
@@ -101,7 +107,7 @@
 >   any feature that needs HTTPS;
 > - how the first account is made, if it has accounts;
 > - the outside systems its pages need;
-> - whether its deploy kit suits any host, or holds steps that only fit the owner's;
+> - if it has a deploy kit, whether it suits any host, or holds steps that only fit the owner's;
 {%- elif primary == 'desktop' %}
 > - the supported OS versions, and what each needs before it runs, such as a system webview, GTK
 >   and WebKitGTK, or a keychain service;
@@ -110,8 +116,6 @@
 > - whether it's signed, and if not, the warning the OS shows, such as SmartScreen or Gatekeeper,
 >   in the words on the screen;
 > - where its files live on each OS, and what uninstalling leaves;
-> - what the window shows at first start, with and without a connection, and any permissions or
->   sign-ins it asks for;
 > - how it updates, and how it proves an update genuine;
 {%- elif primary == 'terminal' %}
 > - the system and the shell the commands are for;
@@ -146,14 +150,21 @@
 {%- for other in others %}
 > - its {{ label[other] }}: {{ {'web': 'where its UI listens, how to reach it, and the page the reader sees first;', 'desktop': 'how to start it, and its first window;', 'terminal': 'how to start it, and its first screen;', 'cli': 'the command a person runs first, and what it prints, as a step;', 'service': 'how to start it in the background, and how to check that it runs;'}[other] }}
 {%- endfor %}
-{%- if primary != 'library' %}
+{%- if primary in ['web', 'service'] %}
 > - how a new user gets a database or other state the program won't create itself, with any
 >   container image named in full, such as `docker.io/library/postgres`, which stock Podman needs;
-{%- if visibility == 'private' %}
-> - the credentials each step needs while the repository is private, such as to clone it;
+{%- elif primary != 'library' %}
+> - how a new user gets a database or other state the program won't create itself;
 {%- endif %}
+{%- if primary != 'library' and visibility == 'private' %}
+> - if a step clones the repository, the credentials that needs while it's private;
 {%- endif %}
-> - the last step: {{ {'web': 'open the page, and what the reader sees there.', 'desktop': 'the first window, and what the reader sees in it.', 'terminal': 'the first screen, and what the reader sees on it.', 'cli': 'the first command, and what it prints.', 'service': 'a health check, or a request and its response.', 'library': 'run the program, and what it prints.'}[primary] }}
+{%- if primary == 'desktop' %}
+> - the last step: the first window, and what the reader sees in it, with and without a
+>   connection, and any permissions or sign-ins it asks for.
+{%- else %}
+> - the last step: {{ {'web': 'open the page, and what the reader sees there.', 'terminal': 'the first screen, and what the reader sees on it.', 'cli': 'the first command, and what it prints.', 'service': 'a health check, or a request and its response.', 'library': 'run the program, and what it prints.'}[primary] }}
+{%- endif %}
 {%- if kind == 'binary' %}
 >
 > [Install](docs/install.md) lists each release's files and how to build from source, and

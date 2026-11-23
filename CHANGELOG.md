@@ -69,26 +69,40 @@ has the versioning rule.
   a phone width, a terminal screen as an SVG, PNG files without metadata, where capture code may
   live, and a privacy check before an image is committed. Its pull request template asks whether
   the privacy check ran on changed images.
-- The outline's prompts carry what eight projects needed when they wrote their READMEs. The
-  opening asks whether the repository is a program others install or one owner's configuration,
-  whose Quick start is how a change is made there, what the program spends and what it contacts
-  with no key or login, and for values such as intervals, ports and paths copied from the code.
-  The Quick start asks for every tool the commands call, how to remove the program, how a new user
-  gets state it won't create, container images by their full names, and in a private repository
-  the credentials each step needs. A service's adds outside services' quotas and the load on them,
-  restarts, growth per day, the long-running install and other copies; a desktop app's, what each
-  OS needs first, the install form, the OS's warning in its own words, where files live, the first
-  window with and without a connection, and how an update proves genuine; a web app's, whether its
-  deploy kit suits any host. `docs/usage.md` asks for demo history that looks live in the past too,
-  jobs a capture waits on, identifiers that belong to no one, stand-ins for images from other
-  hosts, and a "Not shown" line for a window that needs a live session.
-- The Screenshots rules say that a fixture recorded from real use is real data until every value
-  in it is replaced, and suggest a demo mode for a program that shows only data it gathers itself.
-  With a `desktop` interface they add: turn off blur and transparency, point the program at a test
-  data folder, capture with `PrintWindow` on Windows without taking focus, run OCR at 2× as the
-  privacy check, and expect the capture tooling to live outside the repository.
-- `CONTRIBUTING.md` and `docs/style.md` say that a file under `docs/` other than a `.md` page or an
-  image, such as `docs/schema.sql`, is a rule to `just rule-changes`, though no docs check reads it.
+- The outline's prompts carry what eight projects needed when they wrote their READMEs. For every
+  interface but a library, the opening asks the owner to say when the repository is mainly one
+  owner's configuration, whose Quick start is then how a change is made there, and what the program
+  spends, if anything, and whether the Quick start can spend it by accident, and asks what it
+  contacts and does with no key or login. Every opening asks for values such as intervals, ports and
+  paths copied from the code. A desktop or terminal app's opening asks whether it reads or changes
+  another program. Again for every interface but a library, the Quick start asks for every tool the
+  commands call, how to remove the program, after the last step or in a section of its own, and how
+  a new user gets state it won't create, with container images named in full for a web app or a
+  service, and, in a private repository, the credentials cloning it needs.
+- A service's Quick start adds how a reader consumes what it produces, with the credentials each
+  install path has, growth per day, the long-running install, outside services' quotas and the load
+  on them, restarts, and other copies. A desktop app's asks what each OS needs first, the install
+  form, the OS's warning in its own words, where its files live, how an update proves genuine, and
+  ends at the first window with and without a connection; its tray and shortcut points move to
+  `docs/usage.md`, which already asked for them. A web app's asks whether a deploy kit suits any
+  host. A command-line tool beside another interface may show its first command as a step.
+- `docs/usage.md` asks a web app for demo history that looks live in the past too, jobs a capture
+  waits on, identifiers that belong to no one, and stand-ins for images from other hosts. It asks a
+  desktop app what it does on its own while open and never does, its frame and theme, its behaviour
+  across monitors and where it reopens, and gives a window that needs a live session a "Not shown"
+  line.
+- The Screenshots rules say that a fixture recorded from real use is real data until every value in
+  it is replaced, suggest a demo mode for a program that shows only data it gathers itself, and say
+  to read a PNG by eye or with OCR, since it holds no text to search. With a `desktop` interface
+  they add: turn off blur and transparency, point the program at a test data folder through its own
+  setting or a demo mode rather than `APPDATA`, which crates such as `dirs` don't read, capture on
+  Windows with posted messages and `PrintWindow`, which take no focus, run OCR on the capture scaled
+  up 2×, and expect the capture tooling to live outside the repository.
+- `CONTRIBUTING.md` and `docs/style.md` say what each file under `docs/` is to `just rule-changes`:
+  the `.md` pages and their images are neither rule nor code, a `.rs` file is code, and any other
+  file, such as `docs/schema.sql`, is a rule, as is an agent instruction file such as
+  `docs/AGENTS.md`. The docs checks read only the pages, and fail a file with another Markdown
+  extension, such as `.markdown`.
 - A service's `docs/install.md` is titled "Container image".
 - `docs/style.md` replaces "a short README" with what a README opens with, and in what order, and
   adds what the checks catch first in test-only code. `docs/maintaining.md` lists `README.md`, and
