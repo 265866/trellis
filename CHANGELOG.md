@@ -61,9 +61,9 @@ has the versioning rule.
   a phone width, a terminal screen as an SVG, PNG files without metadata, where capture code may
   live, and a privacy check before an image is committed. Its pull request template asks whether
   the privacy check ran on changed images.
-- `docs/install.md` no longer claims to be how the project runs: it points to the README's Quick
-  start. A service's is titled "Container image": the image's name, tags and digest, and a plain
-  `docker run` to start from.
+- A service's `docs/install.md` is titled "Container image", and its run command says it is a
+  reference for the image's name and tags, with no data folder, ports, devices or settings, and
+  that the README's Quick start says what a working run needs.
 - `docs/style.md` replaces "a short README" with what a README opens with, and in what order, and
   adds what the checks catch first in test-only code. `docs/maintaining.md` lists `README.md`, and
   `docs/usage.md` where a project has one, among the files an update never touches, says to edit

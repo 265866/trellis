@@ -174,7 +174,7 @@ git-fetch-with-cli = true
 {%- if kind == 'binary' %}
 - [Install](docs/install.md): each release's files, and installing one or building from source.
 {%- elif kind == 'service' %}
-- [Container image](docs/install.md): the image's tags and digest, and running it with Docker.
+- [Container image](docs/install.md): the image's tags and digest, and a reference `docker run`.
 {%- endif %}
 {%- if kind != 'library' %}
 {%- if visibility == 'public' %}

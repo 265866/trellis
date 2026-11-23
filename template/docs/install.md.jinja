@@ -1,8 +1,7 @@
-{% if kind == 'binary' -%}
-# Install {{ project_name }}
-
-Read this page for the files each release has, and how to install one by hand, build from source
-and update. The [README](../README.md)'s Quick start is how to run it.
+# {{ 'Install ' ~ project_name if kind == 'binary' else 'Container image' }}
+{% if kind == 'binary' %}
+Read this page to run {{ project_name }} on your machine. It shows how to install a release or
+build from source, and how to update.
 
 Each [release](https://github.com/{{ github_owner }}/{{ project_name }}/releases) has {% if release.files %}these files for
 each platform:{% else %}one archive per
@@ -75,11 +74,9 @@ That builds the program without its web UI. To have the UI too, clone the reposi
 [Bun](https://bun.com/) and [just](https://just.systems/), run `just web-build`, and set
 `{{ crate_name | upper }}_WEB_DIR` to the `crates/{{ crate_name }}/web/dist` directory it writes.
 {%- endif %}
-{%- else -%}
-# Container image
-
-Read this page for the container image: its name and tags, its digest, and a plain `docker run`
-to start from. The [README](../README.md)'s Quick start is how to run it.
+{%- else %}
+Read this page to run {{ project_name }} on your server. It shows how to run the container image
+and how to update it.
 
 The image is `ghcr.io/{{ github_owner | lower }}/{{ project_name }}`, for {{ targets | map(attribute='name') | join(' and ') }}.
 {%- if targets | length > 1 %}
@@ -108,6 +105,10 @@ Paste the token, press Enter, then press Ctrl-D. Podman takes the same arguments
 {%- endif %}
 
 ## Run the image
+
+This runs the image and nothing else: no data folder, published ports, devices or settings. It is
+a reference for the image's name and tags, not a working setup; the [README](../README.md)'s
+Quick start says what running {{ project_name }} needs.
 
 ```sh
 docker run -d --name {{ project_name }} --restart unless-stopped \
