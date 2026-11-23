@@ -6,6 +6,16 @@ part lists what a project's owner must do around the update: a rule that can fla
 a setting to change, or a step to do by hand. [CONTRIBUTING.md](CONTRIBUTING.md#release-trellis)
 has the versioning rule.
 
+## Unreleased
+
+### Changed
+
+- The generated `CONTRIBUTING.md`'s Test data rule adds that a value that isn't personal, such as
+  a store's address, ZIP code or number, or a search's coordinates, can still locate its owner,
+  and that a "mock" name or a "made up" comment proves nothing. Its Screenshots rule says to close
+  off the program itself, not only the capture browser: a network namespace with only loopback,
+  or a recorded list of the connections it opens.
+
 ## v0.20.0
 
 ### Action required in projects
