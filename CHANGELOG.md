@@ -49,6 +49,34 @@ has the versioning rule.
   left open and for a byte order mark. The update adds a `## Documentation` section of trellis's
   own near the end of `CONTRIBUTING.md`, and every such section counts, so one of yours stays a
   second index; rewrite yours as entries, merge it into trellis's, or rename it.
+- **Write the README, and a UI's screenshots, until `just policy-release` passes.** The next
+  release fails until then: the release pull request's CI and the release workflow run
+  `just policy-release`, which fails on a `**To write:**` prompt left in the README or a page, on a
+  README without an opening paragraph and, when `interface` is `web`, `desktop` or `terminal`, on a
+  README without its picture, an image linked to a page in `docs/`. `just ci` stays green
+  meanwhile and prints each of those as a notice. What is wrong at any age fails `just policy` at
+  once, as the `readme` rule under Added lists.
+
+### Added
+
+- **The `readme` structure rule**, trellis-policy's 17th, checks the README and the pages in
+  `docs/`, with `interfaces`, `readme_sections` and the workspace's `license`. It checks that each
+  part is there, never its wording. `just policy` fails on a missing `interfaces`, a
+  `readme_sections` without `Quick start`, `Documentation` and `License` in that order (no
+  `License` for a library without a license), a `## License` section that doesn't link each license
+  file with a relative link, a local image that doesn't exist, a PNG under `docs/` with a chunk
+  other than the ones that draw the image, such as `tEXt`, `eXIf` or `tIME`, or with data after its
+  `IEND` chunk, where a cropping tool can leave the uncropped image, a file there named `.png` that
+  isn't a PNG, an image above the README's first `##` that links a page in `docs/` without alt
+  text, and a gallery, a page titled `# Screenshots` or with a `## Screenshots` section, that the
+  README's index doesn't link. A Git LFS pointer named `.png` only gets a notice. The prompts, the
+  opening paragraph and a UI's picture are notices there, and fail only
+  `trellis-policy check --release`. `docs/style.md` lists every clause.
+- **`just policy-release`** runs `trellis-policy check --release`. CI runs it on a pull request
+  from a `release-plz-` branch, the release pull request or one made by hand, and the release
+  workflow runs it before release-plz tags or publishes anything, when the push merged such a pull
+  request or, for a binary or service, the commit already has a `v*` tag, such as one pushed by
+  hand.
 
 ### Changed
 

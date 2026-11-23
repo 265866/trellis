@@ -405,8 +405,9 @@ has, where the depth goes, and the License section closes it.
 
 ### Docs checked by `just policy`
 
-`trellis-policy`'s `docs_index` and `docs_layout` rules check these, with `docs_files` and
-`readme_sections` in `[workspace.metadata.policy]`. They read Markdown as GitHub renders it:
+`trellis-policy`'s `docs_index`, `docs_layout` and `readme` rules check these, with the settings
+in `[workspace.metadata.policy]`. The first two check the layout, with `docs_files` and
+`readme_sections`. They read Markdown as GitHub renders it:
 text in code, in HTML or in an HTML comment is neither a heading nor a link.
 
 - Every file `docs_files` lists exists: `README.md`, `AGENTS.md`, `CONTRIBUTING.md`,
@@ -439,6 +440,39 @@ text in code, in HTML or in an HTML comment is neither a heading nor a link.
   `docs/` are neither rule nor code, a `.rs` file other than a `build.rs` is code, and any other
   file, such as `docs/schema.sql`, is a rule, as is an agent instruction file such as
   `docs/AGENTS.md`.
+
+The `readme` rule checks what the README and the pages hold, with `interfaces`, `readme_sections`
+and the workspace's `license`. It checks that each part is there, never its wording or layout.
+These fail `just policy`:
+
+- `interfaces` is set, and `readme_sections` holds `Quick start`, `Documentation` and `License`,
+  in that order, with any other sections between them. A library without a license has no
+  `License`.
+- The `## License` section links each license file `license` names with a relative link:
+  `LICENSE`, or `LICENSE-MIT` and `LICENSE-APACHE`.
+- Every local image the README or a page shows exists, as a Markdown image or an HTML
+  `<img src>`, with its path relative to the file that shows it.
+- Every PNG under `docs/` carries only the chunks that draw the image, its colours and its
+  animation, and nothing after its `IEND` chunk, where a cropping tool can leave the uncropped
+  image. Any other chunk, such as `tEXt`, `eXIf`, `tIME` or a private one, fails, and so does a
+  file there named `.png` that isn't a PNG. `oxipng --strip safe <file>` strips them. A Git LFS
+  pointer gets a notice instead, since CI's checkout doesn't fetch Git LFS files.
+- Every image before the README's first `##` that links a page in `docs/` has alt text. A
+  decorative image may have `alt=""`, and a badge an empty one.
+- Every gallery, a page titled `# Screenshots` or with a `## Screenshots` section, in any case and
+  after any emoji, is linked from the README's `## Documentation` section.
+
+These only print a notice in `just policy`, since a new project's README is an outline until
+someone writes it. `just policy-release`, which the release pull request and the release workflow
+run, fails on them:
+
+- No `**To write:**` prompt of the outline is left in the README or a page.
+- Before its first `##`, the README has an opening paragraph with words outside badges, images and
+  links.
+- When the first entry of `interfaces` is `web`, `desktop` or `terminal`, the README has a
+  picture before its first `##`: an image linked to a page in `docs/`, either to a heading it has,
+  such as `docs/usage.md#screenshots`, or without an anchor to a gallery. The check doesn't tell
+  a badge from a picture, so a badge linked there passes too; review judges the picture.
 
 ### Docs review checklist
 

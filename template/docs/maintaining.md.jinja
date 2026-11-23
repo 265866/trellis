@@ -163,9 +163,26 @@ a change that ships joins it. To ship:
 2. Under each breaking change, from a commit marked `!` or with a `BREAKING CHANGE:` footer, write
    what users must do before they upgrade. Edit `CHANGELOG.md` on the release pull request's
    branch, as in step 1. [Stability](stability.md) promises users this note.
-3. Merge the release pull request once its checks pass. Merge no other pull request until the
-   release workflow's **{{ 'Release' if kind == 'library' else 'Tag' }}** job finishes. A pull request merged before then can get no release
-   pull request until the next push to `main`.
+3. Merge the release pull request once its checks pass. Its CI runs `just policy-release`, which
+   fails on what `just policy` only notes: a `**To write:**` prompt left in the README or a page,
+{%- if interfaces[0] in ['web', 'desktop', 'terminal'] %}
+   a README without an opening paragraph, or one without its picture: an image before its first
+   `##` linked to a heading of a page in `docs/`, or to a gallery page.
+{%- else %}
+   or a README without an opening paragraph.
+{%- endif %}
+   So the first release fails until the README is written. Run `just policy-release` to see
+   what is left. The release workflow runs it again before it tags or publishes anything. If it
+   fails there, after the merge, nothing is released: write what it names on a branch whose name
+   starts with `release-plz-`, such as `release-plz-readme`, and merge its pull request, which
+   releases the version the release pull request set. The check runs on the pushes release-plz
+   releases as `release-plz.toml` sets it up: from a pull request whose branch starts with
+   release-plz's default `pr_branch_prefix`, `release-plz-`, with `release_always = false`.
+   Changing either there is a rule change that must change the condition in
+   `.github/workflows/ci.yml` and `.github/workflows/release.yml` with it. Merge no other pull
+   request until the release workflow's **{{ 'Release' if kind == 'library' else 'Tag' }}** job
+   finishes. A pull request merged before then can get no release pull request until the next
+   push to `main`.
 {%- if kind != 'library' %}
 4. If a later job fails, re-run the failed jobs. They pick up from the same tag.
 
@@ -741,11 +758,11 @@ hold need more than the update, and two can't change this way at all:
   in its `Cargo.toml` and its `//!` crate docs keep the old sentence; change the README in any
   pull request, and the crates in a code pull request.
 {%- endif %}
-- **License.** Between `MIT` and `MIT OR Apache-2.0`, the update is all it takes
-{%- if published %} for the crate
-  trellis generated, whose license files it replaces. Every crate you added keeps its own copies,
-  so replace them with the root's in the update's pull request; `just policy` fails until each
-  crate has the new license's files.
+- **License.** Between `MIT` and `MIT OR Apache-2.0`, the update replaces the root's license
+  files
+{%- if published %} and those of the crate trellis generated. Every crate you added keeps its own
+  copies, so replace them with the root's in the update's pull request; `just policy` fails until
+  each crate has the new license's files.
   A published crate needs a license, so the update refuses `license=none` unless you also pass
   `--data publish_crate=false`. Then also remove `license.workspace = true` from every crate's
   `Cargo.toml`, in the update's pull request; Cargo can't load the workspace until each crate's
@@ -760,6 +777,8 @@ hold need more than the update, and two can't change this way at all:
 {%- endif %}
   A crate's license line is a rule setting, so the pull request stays a rule change.
 {%- endif %}
+  It leaves `README.md` alone, so link the new license files from its `## License` section, with
+  relative links, in the update's pull request; `just policy` fails until it does.
 {%- if kind != 'library' %}
 {%- if web_ui %}
 - **Web UI.** Turning `web_ui` off leaves `crates/{{ crate_name }}/web` in place, and
