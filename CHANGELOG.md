@@ -69,6 +69,26 @@ has the versioning rule.
   a phone width, a terminal screen as an SVG, PNG files without metadata, where capture code may
   live, and a privacy check before an image is committed. Its pull request template asks whether
   the privacy check ran on changed images.
+- The outline's prompts carry what eight projects needed when they wrote their READMEs. The
+  opening asks whether the repository is a program others install or one owner's configuration,
+  whose Quick start is how a change is made there, what the program spends and what it contacts
+  with no key or login, and for values such as intervals, ports and paths copied from the code.
+  The Quick start asks for every tool the commands call, how to remove the program, how a new user
+  gets state it won't create, container images by their full names, and in a private repository
+  the credentials each step needs. A service's adds outside services' quotas and the load on them,
+  restarts, growth per day, the long-running install and other copies; a desktop app's, what each
+  OS needs first, the install form, the OS's warning in its own words, where files live, the first
+  window with and without a connection, and how an update proves genuine; a web app's, whether its
+  deploy kit suits any host. `docs/usage.md` asks for demo history that looks live in the past too,
+  jobs a capture waits on, identifiers that belong to no one, stand-ins for images from other
+  hosts, and a "Not shown" line for a window that needs a live session.
+- The Screenshots rules say that a fixture recorded from real use is real data until every value
+  in it is replaced, and suggest a demo mode for a program that shows only data it gathers itself.
+  With a `desktop` interface they add: turn off blur and transparency, point the program at a test
+  data folder, capture with `PrintWindow` on Windows without taking focus, run OCR at 2× as the
+  privacy check, and expect the capture tooling to live outside the repository.
+- `CONTRIBUTING.md` and `docs/style.md` say that a file under `docs/` other than a `.md` page or an
+  image, such as `docs/schema.sql`, is a rule to `just rule-changes`, though no docs check reads it.
 - A service's `docs/install.md` is titled "Container image".
 - `docs/style.md` replaces "a short README" with what a README opens with, and in what order, and
   adds what the checks catch first in test-only code. `docs/maintaining.md` lists `README.md`, and

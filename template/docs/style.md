@@ -433,6 +433,9 @@ text in code, in HTML or in an HTML comment is neither a heading nor a link.
   comment, a tag or a quoted attribute value open, and every HTML element opened in a section
   closes in the same section, so nothing that follows is hidden or rendered inside it. Comments
   may come before the title and in the index.
+- Any other file under `docs/`, such as `docs/schema.sql`, is outside these checks, and
+  `just rule-changes` counts it as a rule, unless it's a `.png`, `.svg`, `.jpg`, `.jpeg`, `.gif`
+  or `.webp` image, which is neither rule nor code, like the pages.
 
 ### Docs review checklist
 

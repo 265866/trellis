@@ -312,7 +312,9 @@ these rules:
 - **Where.** Images live in `docs/screenshots/`. The README's picture links to the screenshots
   page, and so does a sentence below it.
 - **Data.** Invented data only, never a real person, account, address, number or message. The
-  screenshots page says the data is invented.
+  screenshots page says the data is invented. A stand-in or fixture recorded from real use is real
+  data until every value in it has been replaced. A program that shows only data it gathers
+  itself, such as from your own machines, is easiest to capture from a demo mode that invents it.
 - **Closed off.** Capture from a build or instance that can't reach the network, or reaches only
   stand-ins on loopback, and make the capture fail if the program opens a connection off
   loopback. Settings alone don't prove it: a build that can't read its settings falls back to
@@ -323,7 +325,10 @@ these rules:
   390×844 CSS pixels at 2×, which gives a 780×1688 image.
 {%- endif %}
 {%- if 'desktop' in interfaces %}
-- **Windows.** Each window at its default size.
+- **Windows.** Each window at its default size, with any blur or transparency that would show the
+  desktop behind it turned off, and the program pointed at a test data folder, on Windows through
+  `APPDATA` and `LOCALAPPDATA`. On Windows, `PrintWindow` with `PW_RENDERFULLCONTENT` on the
+  app's own window handle, driven by posted window messages, captures it without taking focus.
 {%- endif %}
 {%- if 'terminal' in interfaces %}
 - **Terminal captures.** An SVG with one cell per character, shapes for the borders, and the
@@ -333,10 +338,15 @@ these rules:
 - **Metadata.** A PNG carries no metadata: no text, EXIF or time chunks.
 - **Privacy check.** Before you commit an image, look at it, and search an SVG's text, for any
   real name, account, address, number or key, and any value this project's domain keeps private.
+{%- if 'desktop' in interfaces %}
+  A window's capture holds no text to search, so run OCR on it at 2×, since OCR at 1× misses
+  small text.
+{%- endif %}
 - **Capture tooling.** It lives in the repository only when it is small, runs in `just ci`, and
   builds on a demo mode the program already has. Then it is test-only code in the crate: a
   `#[cfg(test)]` module, which can reach screens the crate keeps private. Otherwise it lives
-  outside the repository.
+  outside the repository{% if 'desktop' in interfaces %}, as a desktop app's usually does, since it
+  needs an interactive desktop, which `just ci` doesn't have{% endif %}.
 - **Review.** The pull request that adds or changes images says that the privacy check ran and
   that someone looked at each image.
 {%- endif %}
@@ -400,25 +410,27 @@ or `fix(config)!: reject unknown keys`. A `!` marks a breaking change.
 A pull request changes either the rules or the code, never both. Roughly, code is what's under
 `crates/` and every `.rs` file; the README, changelog, licenses, `Cargo.lock`, the root `Cargo.toml`
 dependency tables, and pages in `docs/` other than `docs/style.md` with their images are neither;
-and anything else is a rule. Every `build.rs` is a rule too, except one below a crate's `src/`,
-`tests/`, `benches/` or `examples/` when the crate's directory holds no other `Cargo.toml`, in any
-letter case, before or after the change. The file a crate's `build` key names is a rule as well, as
-is every `.gitignore`, `.ignore`, `bunfig.toml`, `.npmrc`, TypeScript settings file (a `.json` file
-whose name starts with `tsconfig`) and git submodule, wherever it sits, and every path Windows reads
-as another path: one with a part that ends in a dot or a space, that holds a `:` or a `\`, or that
-has the form of a short name. `just policy` fails a TypeScript settings file whose `extends` or
-`references` names anything but another one in the repository, by a path that starts with `./` or
-`../`, so every file a `tsconfig.json` reaches is a rule. It also fails one that TypeScript could
-read another way than `just policy` does, such as one with a lone carriage return. The root
-`.gitattributes` may set only `text`, `-text`, `text=auto` and `eol=lf`, with no attribute macro, so
-a checkout holds the bytes the diff showed, apart from line endings; `just policy` fails any other
-attribute, such as `working-tree-encoding`, `ident`, `filter` or `binary`. A crate whose directory
-moves whole, renamed with no file in it changed, is neither rule nor code, so a crate's directory
-can move in one pull request beside the `path` of each dependency on it. A file in the crate that
-reads its own location, such as a build script that reads `CARGO_MANIFEST_DIR`, can then do
-something else, as a code change can change what a listed build script emits. An untracked file that
-fits none of these, such as an `.envrc`, counts as a rule in `just rule-changes`: commit it in a
-rules pull request, or list it in `.git/info/exclude`.
+and anything else is a rule. Under `docs/`, only `.md` pages and `.png`, `.svg`, `.jpg`, `.jpeg`,
+`.gif` and `.webp` images are neither, so any other file there, such as `docs/schema.sql`, is a
+rule, though no docs check reads it. Every `build.rs` is a rule too, except one below a crate's
+`src/`, `tests/`, `benches/` or `examples/` when the crate's directory holds no other `Cargo.toml`,
+in any letter case, before or after the change. The file a crate's `build` key names is a rule as
+well, as is every `.gitignore`, `.ignore`, `bunfig.toml`, `.npmrc`, TypeScript settings file (a
+`.json` file whose name starts with `tsconfig`) and git submodule, wherever it sits, and every path
+Windows reads as another path: one with a part that ends in a dot or a space, that holds a `:` or a
+`\`, or that has the form of a short name. `just policy` fails a TypeScript settings file whose
+`extends` or `references` names anything but another one in the repository, by a path that starts
+with `./` or `../`, so every file a `tsconfig.json` reaches is a rule. It also fails one that
+TypeScript could read another way than `just policy` does, such as one with a lone carriage return.
+The root `.gitattributes` may set only `text`, `-text`, `text=auto` and `eol=lf`, with no attribute
+macro, so a checkout holds the bytes the diff showed, apart from line endings; `just policy` fails
+any other attribute, such as `working-tree-encoding`, `ident`, `filter` or `binary`. A crate whose
+directory moves whole, renamed with no file in it changed, is neither rule nor code, so a crate's
+directory can move in one pull request beside the `path` of each dependency on it. A file in the
+crate that reads its own location, such as a build script that reads `CARGO_MANIFEST_DIR`, can then
+do something else, as a code change can change what a listed build script emits. An untracked file
+that fits none of these, such as an `.envrc`, counts as a rule in `just rule-changes`: commit it in
+a rules pull request, or list it in `.git/info/exclude`.
 {%- if kind != 'library' %}
 
 A root deploy kit that moves into `crates/{{ crate_name }}/deploy/` with every code file unchanged

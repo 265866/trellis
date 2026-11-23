@@ -11,13 +11,17 @@ Read this page once the [README](../README.md)'s Quick start has it running. It 
 >
 > - which pages need an outside system, and what a page shows while it's unreachable;
 > - how a demo stands in for those systems without product code, and what makes its data look
->   live, such as times relative to now;
+>   live, now and in the past: times relative to now, history spread over weeks, and which stored
+>   times the demo moves;
+> - what it does after startup that a page depends on, such as jobs that start after a delay;
 > - which pages can't be captured honestly, and what the Screenshots section says instead.
 {%- elif interface == 'desktop' %}
 > **To write:** a section for each part of the desktop app a person uses, such as its windows and
 > what each does, its settings, and its shortcuts. Also say:
 >
-> - what it does in the tray or the background, and how to quit it;
+> - what it does on its own while open, in the tray or the background, what it never does, and
+>   how to quit it;
+> - its window frame and theme, what it does across monitors, and where it reopens;
 > - how it updates, and where it keeps settings and data.
 {%- elif interface == 'terminal' %}
 > **To write:** a section for each part of the terminal app a person uses, such as a `## Keys`
@@ -38,13 +42,16 @@ Read this page once the [README](../README.md)'s Quick start has it running. It 
 > for the desktop and `width="160"` for the phone. Capture the desktop at a width such as 1440×900
 > and the phone at a phone width, such as 390×844 CSS pixels at 2×.
 > [Screenshots](../CONTRIBUTING.md#screenshots) in CONTRIBUTING.md says how to capture them, and
-> the privacy check each one needs before it's committed.
+> the privacy check each one needs before it's committed. If the app shows other people's data,
+> use identifiers that provably belong to no one, and say the rule that chose them. If it loads
+> images from other hosts, capture it with a stand-in image, and say the art isn't the app's.
 {%- elif interface == 'desktop' %}
 > **To write:** the desktop app's screenshots. Start with a line that says the data is invented.
 > Then a table with one row per window or state: a bold name and what it shows, then the image
 > linked to itself, such as
 > `[<img src="screenshots/<window>.png" width="480" alt="...">](screenshots/<window>.png)`.
-> Capture each window at its default size.
+> Capture each window at its default size. A window that needs a live session with another
+> service gets a "Not shown" line that says why, not a capture.
 > [Screenshots](../CONTRIBUTING.md#screenshots) in CONTRIBUTING.md says how to capture them, and
 > the privacy check each one needs before it's committed.
 {%- elif interface == 'terminal' %}
