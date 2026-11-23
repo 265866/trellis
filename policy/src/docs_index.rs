@@ -33,9 +33,9 @@ pub(crate) const INDEX: &str = "Documentation";
 pub(crate) const BYTE_ORDER_MARK: char = '\u{feff}';
 
 /// Checks that every page, a `.md` file at any depth under `docs/`, is linked, optionally with a
-/// `#anchor`. A page directly under `docs/` is linked from the `## Documentation` section of the
+/// `#anchor`. A page directly under `docs/` is linked from a `## Documentation` section of the
 /// root `README.md`, or of `CONTRIBUTING.md` for a page only contributors need, with a path
-/// relative to the root; links elsewhere in either file don't count.
+/// relative to the root; every such section counts, and links elsewhere in either file don't.
 /// A page in a subdirectory, such as `docs/guides/setup.md`, is linked from a page in the
 /// directory above it, `docs/`, with a path relative to that page. A page no one links is a page
 /// readers don't find.
@@ -191,14 +191,17 @@ fn page_title(page: &str) -> &str {
     name.rsplit_once('.').map_or(name, |(stem, _)| stem)
 }
 
-/// The targets the `## Documentation` section of `readme`, a file at the root, links, relative to
+/// The targets the `## Documentation` sections of `readme`, a file at the root, link, relative to
 /// the root, or `None` if it has no such section.
 fn index_targets(readme: &str) -> Option<BTreeSet<String>> {
     let arena = Arena::new();
     let markdown = Markdown::parse(&arena, readme.trim_start_matches(BYTE_ORDER_MARK));
-    let section = markdown.section(INDEX)?;
+    let sections = markdown.sections(INDEX);
+    if sections.is_empty() {
+        return None;
+    }
     let mut targets = BTreeSet::new();
-    for block in section {
+    for block in sections.into_iter().flatten() {
         targets.extend(resolved_links(block, ""));
     }
     Some(targets)

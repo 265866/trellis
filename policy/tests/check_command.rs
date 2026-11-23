@@ -3971,6 +3971,47 @@ fn a_link_in_a_later_section_of_contributing_doesnt_count() {
 }
 
 #[test]
+fn every_documentation_section_of_contributing_counts_and_is_held_to_the_form() {
+    let project = Project::new();
+    project.write("docs/extra.md", "# Extra\n\nAn extra page.\n");
+    let owners = "# Contributing\n\nHow to send a change.\n\n## Documentation\n\n\
+                  - [Install](docs/install.md): how to install it.\n\n## Code\n\nThe rules.\n\n\
+                  ## Documentation\n\n";
+    project.write(
+        "CONTRIBUTING.md",
+        &format!("{owners}- [Extra](docs/extra.md): what a contributor does with it.\n"),
+    );
+    project.check().assert_passes();
+    project.write(
+        "CONTRIBUTING.md",
+        &format!("{owners}- [Extra](docs/extra.md)\n"),
+    );
+    project.check().assert_reports(
+        1,
+        "[docs_layout] CONTRIBUTING.md: The `## Documentation` entry `[Extra](docs/extra.md)` \
+         isn't an index entry",
+    );
+}
+
+#[test]
+fn every_documentation_section_of_the_readme_counts() {
+    let project = Project::new();
+    project.write("docs/extra.md", "# Extra\n\nAn extra page.\n");
+    project.write(
+        "README.md",
+        &format!(
+            "{README}\n## Documentation\n\n- [Extra](docs/extra.md): what the reader does with \
+             it.\n"
+        ),
+    );
+    let run = project.check();
+    assert!(
+        !run.stdout.contains("[docs_index]"),
+        "a page a second Documentation section links is indexed: {run:#?}"
+    );
+}
+
+#[test]
 fn a_contributing_index_hidden_in_html_fails() {
     let project = Project::new();
     project.write(
