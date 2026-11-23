@@ -306,7 +306,7 @@ jobs:
               printf '%s\n' "$first"
               if (($(tail -n +2 README.md | wc -c) == 0)); then
                 printf '%s%s%s' "$eol" "$note" "$eol"
-              elif [ -z "${second%$'\r'}" ]; then
+              elif [[ -z $second || $second == $'\r' ]]; then
                 printf '%s\n%s%s%s' "$second" "$note" "$eol" "$eol"
                 tail -n +3 README.md
               else

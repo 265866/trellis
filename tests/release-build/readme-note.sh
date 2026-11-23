@@ -65,14 +65,23 @@ a badge before the title|[![CI](ci.svg)](ci)\n\n# T\n|%s\n\n[![CI](ci.svg)](ci)\
 text without a last line break|# T\n\nText|# T\n\n%s\n\nText
 Latin-1 text under the title|# T\xe9\nText \xe9\n|# T\xe9\n%s\n\nText \xe9\n
 EOF
-# A first line of 4 MB took minutes in a UTF-8 locale when the title test stripped a byte order
-# mark from it.
-rm -rf "$dir/case"
-mkdir -p "$dir/case/dist/s"
-{ printf '# '; head -c 4000000 /dev/zero | tr '\0' x; printf '\n\nText\n'; } > "$dir/case/README.md"
-(cd "$dir/case" && version=1.2.3 stem=s GITHUB_SERVER_URL=https://github.com \
-  GITHUB_REPOSITORY=owner/repo LC_ALL=C.UTF-8 timeout 20 bash -euo pipefail -c "$lines") \
-  || fail "the step's lines failed or took over 20 seconds on a 4 MB title"
-[ "$(sed -n 3p "$dir/case/dist/s/README.md")" = "$note" ] \
-  || fail "the step put the note elsewhere under a 4 MB title"
+# A 4 MB first or second line took minutes when the step trimmed a prefix or suffix from it, so
+# each must take seconds, with the note on the line that says where it goes.
+long() { head -c 4000000 /dev/zero | tr '\0' x; }
+while IFS='|' read -r name at; do
+  rm -rf "$dir/case"
+  mkdir -p "$dir/case/dist/s"
+  case $name in
+    title) { printf '# '; long; printf '\n\nText\n'; } ;;
+    *) { printf '# T\n'; long; printf '\n'; } ;;
+  esac > "$dir/case/README.md"
+  (cd "$dir/case" && version=1.2.3 stem=s GITHUB_SERVER_URL=https://github.com \
+    GITHUB_REPOSITORY=owner/repo LC_ALL=C.UTF-8 timeout 20 bash -euo pipefail -c "$lines") \
+    || fail "the step's lines failed or took over 20 seconds on a 4 MB $name"
+  [ "$(sed -n "${at}p" "$dir/case/dist/s/README.md")" = "$note" ] \
+    || fail "the step put the note elsewhere with a 4 MB $name"
+done << 'EOF'
+title|3
+line under the title|2
+EOF
 echo "The Archive step wrote the README with the note as expected for $count shapes."
