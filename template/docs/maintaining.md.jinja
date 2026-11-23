@@ -776,11 +776,14 @@ hold need more than the update, and two can't change this way at all:
   `bun install --save-text-lockfile --lockfile-only`, the command `just web-install` names when
   it's missing, and don't run a plain `bun install` or `just web-build` on that branch: until
   the update merges, `.gitignore` doesn't ignore the app's `node_modules/` and `dist/`, so
-  `just rule-changes` counts what they write. Then run the update with `--data web_ui=true`, and
-  with `--data interface=web` if the web UI is what a person sees first, or otherwise with
-  `--data 'other_interfaces=[{{ (other_interfaces + ['web']) | join(', ') }}]'`.
-  The update refuses `web_ui=true` without `web` among the interfaces. Add the app's settings
-  files to its pull request. When the app trips a check that only a rule
+  `just rule-changes` counts what they write.
+{%- if interface == 'web' %} Then run the update with `--data web_ui=true`.
+{%- else %} Then run the update with `--data web_ui=true` and
+  `--data 'other_interfaces=[{{ (other_interfaces + ['web']) | join(', ') }}]'`, or, if the web UI becomes what a person sees first,
+  with `--data interface=web` and `--data 'other_interfaces=[{{ ([interface] + other_interfaces) | join(', ') }}]'`. The update refuses
+  `web_ui=true` without `web` among the interfaces.
+{%- endif %}
+  Add the app's settings files to its pull request. When the app trips a check that only a rule
   can settle, such as a class name `just typos` flags, which only an entry in `_typos.toml` lets
   through, land that rule in a rules pull request before the app's code pull request.
 {%- endif %}
@@ -809,8 +812,8 @@ uvx copier update --defaults
 An update never touches `crates/`, `Cargo.lock`, `CHANGELOG.md`, `docs/design.md` or `README.md`,
 which are yours after the project is generated. A new project's README starts as an outline, and
 one generated before trellis wrote outlines stays as it was.
-{%- if interfaces | select('in', ['web', 'desktop', 'terminal']) | list %} Nor does an update touch
-`docs/usage.md`, the screenshots page, if the project has one.
+{%- if interfaces | select('in', ['web', 'desktop', 'terminal']) | list %} An update doesn't touch
+`docs/usage.md` either, the screenshots page, if the project has one.
 {%- endif %}
 {%- if published %}
 The crate's `LICENSE*` files are the exception: they follow the license answer.

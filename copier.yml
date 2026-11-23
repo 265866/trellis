@@ -221,6 +221,11 @@ interfaces:
   type: yaml
   default: "{{ ([interface] + other_interfaces) | tojson }}"
   when: false
+  # Copier runs this even when it doesn't ask, so a `--data interfaces=...` answer, which no
+  # answers file stores, is refused instead of written once and lost on the next update.
+  validator: >-
+    {% if interfaces != [interface] + other_interfaces %}Pass `interface` and `other_interfaces`;
+    `interfaces` follows from them.{% endif %}
 
 build:
   type: yaml

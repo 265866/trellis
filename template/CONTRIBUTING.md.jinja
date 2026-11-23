@@ -294,11 +294,9 @@ The docs keep one shape. Write them to the
   and `readme_sections` the README's `##` sections, in order.
 - **The README.** A new project's `README.md` starts as an outline with a `**To write:**` prompt
   under each part, and one generated before trellis wrote outlines keeps what it had. Either way
-  the project owns it, and an update never touches it.
+  the project owns it, and an update never touches it{% if ui %}, or `docs/usage.md`, the
+  screenshots page, if the project has one{% endif %}.
   [docs/style.md](docs/style.md#documentation) says what a README opens with, and in what order.
-{%- if ui %}
-  Nor does an update touch `docs/usage.md`, the screenshots page, if the project has one.
-{%- endif %}
 - **Where things go.** Design decisions go in [docs/design.md](docs/design.md), and compatibility
   promises in [docs/stability.md](docs/stability.md). release-plz writes `CHANGELOG.md`; don't edit
   it by hand except as the release steps in [docs/maintaining.md](docs/maintaining.md#each-release)

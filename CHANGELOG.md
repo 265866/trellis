@@ -40,8 +40,9 @@ has the versioning rule.
   your edits.
 - **Turning on a web UI later names `web` among the interfaces.** An update with
   `--data web_ui=true` refuses a project whose interfaces lack `web`, rather than drop the ones it
-  has: pass `--data 'other_interfaces=[web]'` with it, listing the others it has too, or
-  `--data interface=web` when the web UI is what a person sees first.
+  has: pass `--data 'other_interfaces=[web]'` with it, listing the others it has too, or, when the
+  web UI becomes what a person sees first, `--data interface=web` with the old primary moved into
+  `other_interfaces`. A project whose `interface` is already `web` needs only `web_ui=true`.
 - If your `CONTRIBUTING.md` has a `## Documentation` section of your own, `just policy` now holds
   it to the index form: one-line entries such as `- [Title](path): what the reader does with it.`,
   and nothing else. With that section, the whole file is also held to the README's checks for HTML
