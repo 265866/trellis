@@ -1768,6 +1768,7 @@ shapes: (shape "binary") (shape "binary-windows-macos-dual") (shape "library-pub
 # copy runs without `--quiet`, so Copier prints the next steps, which must name the repository and
 # install just. `just setup-github --dry-run` must print the required checks and the label, and the
 # Actions policy and vulnerability reporting only for a public repository, without calling `gh`.
+# `just ci` must compare rule changes with `origin/main`, and `just ci <base>` with that base.
 # `just check-github` runs against the fixtures in tests/check-github/, and
 # `just check-release-token` and `just set-release-token` against the fake gh in
 # tests/check-release-token/. The private binary and library get a 55-character name, the longest
@@ -1872,6 +1873,11 @@ shape answers:
       else
         [ "$public" = no ] || fail "the setup-github dry run of a public repository lacks $public_only"
       fi
+    done
+    for base in "" origin/stacked; do
+      ci_plan=$(just --dry-run ci $base 2>&1) || fail "just ci $base doesn't run: $ci_plan"
+      grep --quiet -- "trellis-policy rule-changes ${base:-origin/main}$" <<< "$ci_plan" \
+        || fail "just ci $base doesn't run rule-changes against ${base:-origin/main}"
     done
     "$trellis/tests/check-github/test.sh" "$project"
     "$trellis/tests/check-release-token/test.sh" "$project"

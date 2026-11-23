@@ -23,6 +23,9 @@ has the versioning rule.
   need, such as the code style or the maintaining guide, needn't sit in the index a stranger
   reads. `just policy` holds that section to the same entry form. Every page is still indexed
   from one of the two.
+- `just ci` takes the branch a pull request targets, such as `just ci origin/my-rules`, and passes
+  it to `rule-changes`, so `just ci` can pass on a branch stacked on another pull request. Without
+  it, `rule-changes` compares with `origin/main`, as before.
 
 ### Fixed
 

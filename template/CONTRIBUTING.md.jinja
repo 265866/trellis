@@ -119,7 +119,9 @@ nightly rustfmt, and stable rustfmt ignores them with a warning. For rust-analyz
 
 ## Check a change
 
-`just ci` runs every check CI runs. `just` alone lists them, so you can run one at a time:
+`just ci` runs every check CI runs. `just` alone lists them, so you can run one at a time. On a
+branch stacked on another pull request, pass the branch it targets, such as
+`just ci origin/my-rules`, so `rule-changes` compares with that branch, not `origin/main`:
 
 | Recipe | Checks |
 | --- | --- |

@@ -36,9 +36,10 @@ export CLIPPY_CONF_DIR := justfile_directory()
 default:
     @just --list
 
-# Runs every check CI runs.
+# Runs every check CI runs. Pass the branch a stacked pull request targets as `base`, such as
+# `just ci origin/my-rules`, for `rule-changes` to compare against it.
 {%- endraw %}
-ci: fmt-check typos actionlint zizmor shear deny links policy lint dylint test docs build-release{{ ' notices' if kind != 'library' else '' }}{{ ' web-check web-build' if web_ui else '' }}{{ ' package' if kind == 'library' and publish_crate else '' }} rule-changes
+ci base="origin/main": fmt-check typos actionlint zizmor shear deny links policy lint dylint test docs build-release{{ ' notices' if kind != 'library' else '' }}{{ ' web-check web-build' if web_ui else '' }}{{ ' package' if kind == 'library' and publish_crate else '' }} (rule-changes base)
 {%- raw %}
 
 # Installs the pinned toolchains: stable, the nightly rustfmt, and the lints' nightly.
