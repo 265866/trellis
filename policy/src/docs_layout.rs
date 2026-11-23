@@ -1,13 +1,14 @@
 //! The docs keep their layout: the files `docs_files` lists exist, the root `README.md` has one
-//! title, the sections `readme_sections` lists and an index for its `Documentation` section, and
-//! every page in `docs/` opens with its title and a paragraph.
+//! title, the sections `readme_sections` lists and an index for its `Documentation` section, a
+//! `Documentation` section in `CONTRIBUTING.md` is an index too, and every page in `docs/` opens
+//! with its title and a paragraph.
 
 use std::path::Path;
 
 use comrak::Arena;
 use comrak::nodes::{Node, NodeValue};
 
-use crate::docs_index::{self, BYTE_ORDER_MARK, INDEX, README};
+use crate::docs_index::{self, BYTE_ORDER_MARK, CONTRIBUTING, INDEX, README};
 use crate::markdown::{self, Heading, Markdown, Unbalanced};
 use crate::policy_error::PolicyError;
 use crate::repository_files;
@@ -51,15 +52,19 @@ const UNCLOSED_HTML: &str = "opens HTML that doesn't close: a comment, a tag or 
 ///   each item is a link written exactly `[Title](path)` with a relative path, without entities
 ///   or escapes, then `: ` and a description whose rendered text has a letter in it, on a line
 ///   that ends in `.`;
+/// - a `## Documentation` section in `CONTRIBUTING.md`, which may index the pages only
+///   contributors need, holds an index written the same way, and a `CONTRIBUTING.md` with one is
+///   held to the HTML and byte order mark checks below, like the readme;
 /// - every page, a `.md` file at any depth under `docs/`, starts with a `#` line with text in
 ///   it, after any comments, then a blank line and a paragraph with words in it outside images;
-/// - neither the readme nor a page has an HTML block with a comment, a tag or a quoted
+/// - neither the readme, a page nor a `CONTRIBUTING.md` with an index has an HTML block with a comment, a tag or a quoted
 ///   attribute value that doesn't close in it, or an HTML element whose tags don't balance
 ///   between one top-level heading of level 1 or 2 and the next, which can hide what follows or
 ///   render it inside the element;
 /// - no file under `docs/` has another Markdown extension, such as `.markdown`, which the checks
 ///   would skip;
-/// - neither the readme nor a page starts with a byte order mark. The other checks read past
+/// - neither the readme, a page nor a `CONTRIBUTING.md` with an index starts with a byte order
+///   mark. The other checks read past
 ///   it, so a file gets one message for it.
 ///
 /// A missing setting is a violation rather than a default, since no default could say which
@@ -69,7 +74,8 @@ const UNCLOSED_HTML: &str = "opens HTML that doesn't close: a comment, a tag or 
 ///
 /// # Errors
 ///
-/// Fails if the repository's files can't be listed, or the readme or a page can't be read.
+/// Fails if the repository's files can't be listed, or the readme, `CONTRIBUTING.md` or a page
+/// can't be read.
 pub fn check(workspace: &Workspace) -> Result<Vec<Violation>, PolicyError> {
     let config = workspace.config();
     let docs_files = config.docs_files();
@@ -122,6 +128,21 @@ pub fn check(workspace: &Workspace) -> Result<Vec<Violation>, PolicyError> {
             ));
         }
         None => {}
+    }
+    if files.iter().any(|file| file == CONTRIBUTING)
+        && let Some(text) = docs_index::read_root_file(workspace.root(), CONTRIBUTING)?
+    {
+        let arena = Arena::new();
+        let contributing = Markdown::parse(&arena, text.trim_start_matches(BYTE_ORDER_MARK));
+        if let Some(section) = contributing.section(INDEX) {
+            violations.extend(byte_order_mark(CONTRIBUTING, &text));
+            for problem in html_problems(&contributing)
+                .into_iter()
+                .chain(index_problems(&contributing, &section))
+            {
+                violations.push(Violation::new(CONTRIBUTING.to_owned(), problem));
+            }
+        }
     }
     let docs = files.iter().filter(|file| docs_index::is_under_docs(file));
     for file in docs {

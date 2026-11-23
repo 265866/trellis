@@ -1,6 +1,6 @@
 //! Every page in `docs/` is linked: a page directly under `docs/` from the `Documentation`
-//! section of the root `README.md`, and a page in a subdirectory from a page in the directory
-//! above it.
+//! section of the root `README.md` or of `CONTRIBUTING.md`, and a page in a subdirectory from a
+//! page in the directory above it.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -19,10 +19,14 @@ use crate::workspace::Workspace;
 /// The file that links the docs, relative to the root.
 pub(crate) const README: &str = "README.md";
 
-/// The directory whose pages the readme links, relative to the root, without a trailing `/`.
+/// The file that may also link the docs, for pages only contributors need, relative to the root.
+pub(crate) const CONTRIBUTING: &str = "CONTRIBUTING.md";
+
+/// The directory whose pages the indexes link, relative to the root, without a trailing `/`.
 pub(crate) const DOCS: &str = "docs";
 
-/// The title of the readme's level-2 section that indexes the docs.
+/// The title of the level-2 section of the readme, or of `CONTRIBUTING.md`, that indexes the
+/// docs.
 pub(crate) const INDEX: &str = "Documentation";
 
 /// The byte order mark, which the checks report and then read past.
@@ -30,7 +34,8 @@ pub(crate) const BYTE_ORDER_MARK: char = '\u{feff}';
 
 /// Checks that every page, a `.md` file at any depth under `docs/`, is linked, optionally with a
 /// `#anchor`. A page directly under `docs/` is linked from the `## Documentation` section of the
-/// root `README.md`, with a path relative to the root; links elsewhere in the readme don't count.
+/// root `README.md`, or of `CONTRIBUTING.md` for a page only contributors need, with a path
+/// relative to the root; links elsewhere in either file don't count.
 /// A page in a subdirectory, such as `docs/guides/setup.md`, is linked from a page in the
 /// directory above it, `docs/`, with a path relative to that page. A page no one links is a page
 /// readers don't find.
@@ -44,8 +49,8 @@ pub(crate) const BYTE_ORDER_MARK: char = '\u{feff}';
 ///
 /// # Errors
 ///
-/// Fails if the repository's files can't be listed, or `README.md` or a page exists but can't be
-/// read.
+/// Fails if the repository's files can't be listed, or `README.md`, `CONTRIBUTING.md` or a page
+/// exists but can't be read.
 pub fn check(workspace: &Workspace) -> Result<Vec<Violation>, PolicyError> {
     let files = repository_files::list(workspace.root())?;
     let pages: Vec<&str> = files
@@ -58,6 +63,13 @@ pub fn check(workspace: &Workspace) -> Result<Vec<Violation>, PolicyError> {
     }
     let readme = read_readme(workspace.root())?;
     let index = readme.as_deref().and_then(index_targets);
+    let contributors_index = if files.iter().any(|file| file == CONTRIBUTING) {
+        read_root_file(workspace.root(), CONTRIBUTING)?
+            .as_deref()
+            .and_then(index_targets)
+    } else {
+        None
+    };
     let mut page_links: BTreeMap<&str, BTreeSet<String>> = BTreeMap::new();
     for page in &pages {
         let text = read_page(workspace.root(), page)?;
@@ -68,6 +80,12 @@ pub fn check(workspace: &Workspace) -> Result<Vec<Violation>, PolicyError> {
     for page in &pages {
         let parent = directory(directory(page));
         if directory(page) == DOCS {
+            let linked_by_contributors = contributors_index
+                .as_ref()
+                .is_some_and(|linked| linked.contains(*page));
+            if linked_by_contributors {
+                continue;
+            }
             if let Some(violation) = unindexed(page, readme.as_deref(), index.as_ref()) {
                 violations.push(violation);
             }
@@ -94,7 +112,7 @@ pub fn check(workspace: &Workspace) -> Result<Vec<Violation>, PolicyError> {
 
 /// The violation of `page`, directly under `docs/`, if the readme's index doesn't link it.
 /// `readme` is the readme, if there is one, and `index` the targets its index links, if it has
-/// one.
+/// one. The caller has already checked `CONTRIBUTING.md`'s index.
 fn unindexed(
     page: &str,
     readme: Option<&str>,
@@ -117,7 +135,8 @@ fn unindexed(
         format!(
             "{problem}, so readers don't find it. Add an entry such as \
              `- [{title}]({page}): what the reader does with it.` under `## {INDEX}` in \
-             `{README}`, or delete the page if nothing needs it.",
+             `{README}`, or in `{CONTRIBUTING}` for a page only contributors need, or delete \
+             the page if nothing needs it.",
             title = page_title(page)
         ),
     ))
@@ -125,7 +144,12 @@ fn unindexed(
 
 /// The root `README.md` of the workspace at `root`, or `None` if there is none.
 pub(crate) fn read_readme(root: &Path) -> Result<Option<String>, PolicyError> {
-    let path = root.join(README);
+    read_root_file(root, README)
+}
+
+/// The file `name` at the root of the workspace at `root`, or `None` if there is none.
+pub(crate) fn read_root_file(root: &Path, name: &str) -> Result<Option<String>, PolicyError> {
+    let path = root.join(name);
     match fs::read_to_string(&path) {
         Ok(text) => Ok(Some(text)),
         Err(error) if error.kind() == ErrorKind::NotFound => Ok(None),
@@ -167,8 +191,8 @@ fn page_title(page: &str) -> &str {
     name.rsplit_once('.').map_or(name, |(stem, _)| stem)
 }
 
-/// The targets the `## Documentation` section of `readme` links, relative to the root, or
-/// `None` if it has no such section.
+/// The targets the `## Documentation` section of `readme`, a file at the root, links, relative to
+/// the root, or `None` if it has no such section.
 fn index_targets(readme: &str) -> Option<BTreeSet<String>> {
     let arena = Arena::new();
     let markdown = Markdown::parse(&arena, readme.trim_start_matches(BYTE_ORDER_MARK));

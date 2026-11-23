@@ -528,7 +528,8 @@ fn a_page_the_index_doesnt_link_fails() {
         "error: [docs_index] README.md: the `## Documentation` section of `README.md` doesn't \
          link the page `docs/extra.md`, so readers don't find it. Add an entry such as \
          `- [extra](docs/extra.md): what the reader does with it.` under `## Documentation` in \
-         `README.md`, or delete the page if nothing needs it.",
+         `README.md`, or in `CONTRIBUTING.md` for a page only contributors need, or delete the \
+         page if nothing needs it.",
     );
     run.assert_reports(1, "doesn't link the page `docs/Upper.MD`");
     assert!(
@@ -3883,4 +3884,131 @@ fn a_project_with_both_kits_checks_each() {
         "#!/bin/sh\nexport APP_DIR=/srv/demo\n",
     );
     project.check().assert_passes();
+}
+
+#[test]
+fn a_page_contributings_index_links_passes() {
+    let project = Project::new();
+    project.write("docs/extra.md", "# Extra\n\nAn extra page.\n");
+    project.write(
+        "CONTRIBUTING.md",
+        "# Contributing\n\nHow to send a change.\n\n## Documentation\n\n- [Extra](docs/extra.md): \
+         what a contributor does with it.\n",
+    );
+    project.check().assert_passes();
+}
+
+#[test]
+fn a_link_elsewhere_in_contributing_doesnt_count() {
+    let project = Project::new();
+    project.write("docs/extra.md", "# Extra\n\nAn extra page.\n");
+    project.write(
+        "CONTRIBUTING.md",
+        "# Contributing\n\nSee [extra](docs/extra.md).\n\n## Code\n\nThe rules.\n",
+    );
+    project.check().assert_reports(
+        1,
+        "error: [docs_index] README.md: the `## Documentation` section of `README.md` doesn't \
+         link the page `docs/extra.md`, so readers don't find it. Add an entry such as \
+         `- [extra](docs/extra.md): what the reader does with it.` under `## Documentation` in \
+         `README.md`, or in `CONTRIBUTING.md` for a page only contributors need, or delete the \
+         page if nothing needs it.",
+    );
+}
+
+#[test]
+fn contributings_index_is_held_to_the_entry_form() {
+    let project = Project::new();
+    project.write(
+        "CONTRIBUTING.md",
+        "# Contributing\n\nHow to send a change.\n\n## Documentation\n\nSome text.\n\n\
+         - [Style](docs/style.md)\n",
+    );
+    let run = project.check();
+    run.assert_reports(
+        1,
+        "[docs_layout] CONTRIBUTING.md: The `## Documentation` entry `[Style](docs/style.md)` \
+         isn't an index entry",
+    );
+    run.assert_reports(
+        1,
+        "[docs_layout] CONTRIBUTING.md: The `## Documentation` section holds `Some text.`",
+    );
+}
+
+#[test]
+fn a_readme_without_an_index_is_named_when_only_contributing_has_one() {
+    let project = Project::new();
+    project.write(
+        "README.md",
+        "# Demo\n\nThe demo.\n\n## Install\n\nRun it.\n",
+    );
+    project.write(
+        "CONTRIBUTING.md",
+        "# Contributing\n\nHow to send a change.\n\n## Documentation\n\n- [Install](docs/install.md): \
+         how to install it.\n",
+    );
+    project.write("docs/extra.md", "# Extra\n\nAn extra page.\n");
+    project.check().assert_reports(
+        1,
+        "[docs_index] README.md: `README.md` has no `## Documentation` section to link the page \
+         `docs/extra.md`",
+    );
+}
+
+#[test]
+fn a_link_in_a_later_section_of_contributing_doesnt_count() {
+    let project = Project::new();
+    project.write("docs/extra.md", "# Extra\n\nAn extra page.\n");
+    project.write(
+        "CONTRIBUTING.md",
+        "# Contributing\n\nHow to send a change.\n\n## Documentation\n\n- [Install](docs/install.md): \
+         how to install it.\n\n## Code\n\nSee [extra](docs/extra.md).\n",
+    );
+    project
+        .check()
+        .assert_reports(1, "doesn't link the page `docs/extra.md`");
+}
+
+#[test]
+fn a_contributing_index_hidden_in_html_fails() {
+    let project = Project::new();
+    project.write(
+        "CONTRIBUTING.md",
+        "# Contributing\n\nHow to send a change.\n\n<details>\n\n## Documentation\n\n\
+         - [Style](docs/style.md): the style rules.\n\n## Next\n\nMore.\n\n</details>\n",
+    );
+    project
+        .check()
+        .assert_reports(1, "[docs_layout] CONTRIBUTING.md: Line 5 opens `<details>`");
+}
+
+#[test]
+fn a_byte_order_mark_in_a_contributing_with_an_index_is_reported() {
+    let project = Project::new();
+    project.write(
+        "CONTRIBUTING.md",
+        "\u{feff}# Contributing\n\nHow to send a change.\n\n## Documentation\n\n\
+         - [Style](docs/style.md): the style rules.\n",
+    );
+    project.check().assert_reports(
+        1,
+        "[docs_layout] CONTRIBUTING.md: It starts with a byte order mark.",
+    );
+}
+
+#[test]
+fn an_ignored_contributing_indexes_nothing() {
+    let project = Project::new();
+    project.git(&["init", "--quiet"]);
+    project.write(".gitignore", "CONTRIBUTING.md\n");
+    project.write("docs/extra.md", "# Extra\n\nAn extra page.\n");
+    project.write(
+        "CONTRIBUTING.md",
+        "# Contributing\n\nHow to send a change.\n\n## Documentation\n\n- [Extra](docs/extra.md): \
+         what a contributor does with it.\n",
+    );
+    project
+        .check()
+        .assert_reports(1, "doesn't link the page `docs/extra.md`");
 }

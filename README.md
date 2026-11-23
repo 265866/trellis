@@ -15,7 +15,7 @@ generates starts with:
   guide". Every exception is an `expect` with a reason.
 - **A structure checker.** [`trellis-policy`](policy) checks crate manifests, the dependencies
   between crates, where config files live, and the docs layout: the files and README sections
-  each project keeps, the README's docs index, and how each page opens.
+  each project keeps, the docs index in the README or CONTRIBUTING.md, and how each page opens.
 - **Rules apart from code.** A pull request changes the rules or the code, never both, so review
   sees each loosened rule apart from the code that might have needed it.
 - **CI and releases.** Checks on Linux, macOS and Windows; release-plz versions and changelogs;

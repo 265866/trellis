@@ -400,15 +400,18 @@ text in code, in HTML or in an HTML comment is neither a heading nor a link.
 - The Documentation section is an index and nothing else. Each entry is a one-line list item: a
   link written exactly `[Title](path)` with a relative path, then `: ` and a description that
   has a letter and ends in `.`, such as `- [Title](path): what the reader does with it.` Every
-  page directly under `docs/` has an entry.
+  page directly under `docs/` has an entry, there or, for a page only contributors need, in a
+  `## Documentation` section of `CONTRIBUTING.md` written the same way.
 - A page in a subdirectory of `docs/` is linked from a page in the directory above it, with any
   link GitHub renders.
 - Every page, at any depth under `docs/`, starts with a `# Title` line, after any comments,
   then a blank line and a paragraph with a letter in it outside images. Pages use the `.md`
-  extension, and neither the README nor a page starts with a byte order mark.
-- No HTML in the README or a page leaves a comment, a tag or a quoted attribute value open, and
-  every HTML element opened in a section closes in the same section, so nothing that follows is
-  hidden or rendered inside it. Comments may come before the title and in the index.
+  extension, and neither the README, a page nor a `CONTRIBUTING.md` with a `## Documentation`
+  index starts with a byte order mark.
+- No HTML in the README, a page or a `CONTRIBUTING.md` with a `## Documentation` index leaves a
+  comment, a tag or a quoted attribute value open, and every HTML element opened in a section
+  closes in the same section, so nothing that follows is hidden or rendered inside it. Comments
+  may come before the title and in the index.
 
 ### Docs review checklist
 
