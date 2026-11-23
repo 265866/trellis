@@ -20,16 +20,13 @@ echo "bash: $(command -v bash), $(bash -c 'echo "$BASH_VERSION"')"
 for tool in head tail od tr cat; do
   echo "$tool: $(command -v "$tool"), $({ "$tool" --version 2> /dev/null || echo "no --version"; } | sed -n 1p)"
 done
-# Runs the step's lines in $dir/case with the further variables, and fails after 20 seconds.
+# Runs the step's lines in $dir/case with the further variables, and fails when they fail or take
+# over 20 seconds.
 run() {
-  (cd "$dir/case" && exec env version=1.2.3 stem=s GITHUB_SERVER_URL=https://github.com \
-    GITHUB_REPOSITORY=owner/repo "$@" bash -euo pipefail -c "$lines") &
-  local step=$! status=0
-  (sleep 20 && kill "$step" 2> /dev/null) &
-  local watchdog=$!
-  wait "$step" || status=$?
-  kill "$watchdog" 2> /dev/null || true
-  return "$status"
+  local start=$SECONDS
+  (cd "$dir/case" && env version=1.2.3 stem=s GITHUB_SERVER_URL=https://github.com \
+    GITHUB_REPOSITORY=owner/repo "$@" bash -euo pipefail -c "$lines") || return 1
+  ((SECONDS - start <= 20))
 }
 note="> This file's links and images are relative to https://github.com/owner/repo/tree/v1.2.3."
 count=0
