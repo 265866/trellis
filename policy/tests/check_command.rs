@@ -528,7 +528,8 @@ fn a_page_the_index_doesnt_link_fails() {
         "error: [docs_index] README.md: the `## Documentation` section of `README.md` doesn't \
          link the page `docs/extra.md`, so readers don't find it. Add an entry such as \
          `- [extra](docs/extra.md): what the reader does with it.` under `## Documentation` in \
-         `README.md`, or delete the page if nothing needs it.",
+         `README.md`, or in `CONTRIBUTING.md` for a page only contributors need, or delete the \
+         page if nothing needs it.",
     );
     run.assert_reports(1, "doesn't link the page `docs/Upper.MD`");
     assert!(
@@ -3883,4 +3884,54 @@ fn a_project_with_both_kits_checks_each() {
         "#!/bin/sh\nexport APP_DIR=/srv/demo\n",
     );
     project.check().assert_passes();
+}
+
+#[test]
+fn a_page_contributings_index_links_passes() {
+    let project = Project::new();
+    project.write("docs/extra.md", "# Extra\n\nAn extra page.\n");
+    project.write(
+        "CONTRIBUTING.md",
+        "# Contributing\n\nHow to send a change.\n\n## Documentation\n\n- [Extra](docs/extra.md): \
+         what a contributor does with it.\n",
+    );
+    project.check().assert_passes();
+}
+
+#[test]
+fn a_link_elsewhere_in_contributing_doesnt_count() {
+    let project = Project::new();
+    project.write("docs/extra.md", "# Extra\n\nAn extra page.\n");
+    project.write(
+        "CONTRIBUTING.md",
+        "# Contributing\n\nSee [extra](docs/extra.md).\n\n## Code\n\nThe rules.\n",
+    );
+    project.check().assert_reports(
+        1,
+        "error: [docs_index] README.md: the `## Documentation` section of `README.md` doesn't \
+         link the page `docs/extra.md`, so readers don't find it. Add an entry such as \
+         `- [extra](docs/extra.md): what the reader does with it.` under `## Documentation` in \
+         `README.md`, or in `CONTRIBUTING.md` for a page only contributors need, or delete the \
+         page if nothing needs it.",
+    );
+}
+
+#[test]
+fn contributings_index_is_held_to_the_entry_form() {
+    let project = Project::new();
+    project.write(
+        "CONTRIBUTING.md",
+        "# Contributing\n\nHow to send a change.\n\n## Documentation\n\nSome text.\n\n\
+         - [Style](docs/style.md)\n",
+    );
+    let run = project.check();
+    run.assert_reports(
+        1,
+        "[docs_layout] CONTRIBUTING.md: The `## Documentation` entry `[Style](docs/style.md)` \
+         isn't an index entry",
+    );
+    run.assert_reports(
+        1,
+        "[docs_layout] CONTRIBUTING.md: The `## Documentation` section holds `Some text.`",
+    );
 }

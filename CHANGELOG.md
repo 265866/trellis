@@ -8,6 +8,14 @@ has the versioning rule.
 
 ## Unreleased
 
+### Changed
+
+- A page directly under `docs/` may be indexed from a `## Documentation` section in
+  `CONTRIBUTING.md`, written like the README's, instead of the README's: a page only contributors
+  need, such as the code style or the maintaining guide, needn't sit in the index a stranger
+  reads. `just policy` holds that section to the same entry form. Every page is still indexed
+  from one of the two.
+
 ### Fixed
 
 - `just rule-changes` says "1 rule file" and "1 code file", not "1 rule files".
