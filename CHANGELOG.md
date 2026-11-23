@@ -52,6 +52,10 @@ has the versioning rule.
 
 ### Changed
 
+- The generated `CONTRIBUTING.md`'s Tests rule says a fixture, stand-in, mock or corpus recorded or
+  generated from real use, or an assertion copied from an older project's tests, is real data
+  until every value is replaced, and that a privacy guard checks shape and range, never a list of
+  the values, hashed or not.
 - **trellis writes `README.md` once, and an update never touches it.** A new project's README is
   an outline: the title, badges and description, then a `**To write:**` prompt for the opening,
   the features and the picture or sample, and for `## Quick start`, with `## Documentation` and
