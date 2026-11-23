@@ -1049,16 +1049,22 @@ fn a_proc_macro_lands_as_a_rule_change_then_a_code_change_that_pass() {
             0,
             "Rule changes stand alone: 0 rule files and 2 code files changed",
         );
+}
 
-    project.git(&["branch", "derived"]);
+#[test]
+fn rule_changes_counts_one_file_in_the_singular() {
+    let project = Project::new();
+    project.git(&["init", "--quiet"]);
+    project.commit("a generated project");
+    project.git(&["branch", "generated"]);
     project.write(
         "crates/demo_core/src/lib.rs",
-        "//! The demo's core.\n\n/// A point on a plane.\n#[derive(serde_derive::Serialize)]\npub struct Point;\n",
+        "//! The demo's core.\n\n/// A point on a plane.\npub struct Point;\n",
     );
-    project.commit("document the point");
+    project.commit("add a point");
     project.check().assert_passes();
     project
-        .run(&["rule-changes", "derived", "--head", "HEAD"])
+        .run(&["rule-changes", "generated", "--head", "HEAD"])
         .assert_reports(
             0,
             "Rule changes stand alone: 0 rule files and 1 code file changed",
