@@ -34,6 +34,11 @@ installed. They don't run on Alpine or another musl distribution.
    command-line one.
 {%- if 'linux' in platforms or 'macos' in platforms %} On Linux or macOS, make a bare program executable first, with `chmod +x`.
 {%- endif %}
+{%- if release.installer %} The Windows installer installs for you alone, under
+   `%LOCALAPPDATA%\Programs`, without administrator rights, and an installed copy is removed from
+   Windows' installed apps. It isn't signed, so when it comes from a browser, Windows SmartScreen
+   warns about it: choose **More info**, then **Run anyway**.
+{%- endif %}
 {%- else %}
 3. Unpack the archive and move `{{ project_name }}` to where you keep programs, such as a directory
    on your `PATH`.
