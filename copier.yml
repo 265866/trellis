@@ -152,16 +152,23 @@ web_ui:
     build the container image, or a binary's release archives, ship. Most projects don't need one.
   default: false
   when: "{{ kind != 'library' }}"
+  # Turning the web UI on in an update keeps the stored interfaces, so they must name `web`.
+  validator: >-
+    {%- if web_ui and 'web_ui' in _copier_conf.data and interface is defined and interface != 'web'
+      and 'web' not in (other_interfaces | default([])) -%}
+    A project with a web UI has the `web` interface. Pass `--data 'other_interfaces=[web]'` too,
+    or `--data interface=web` if the web UI is what a person sees first.
+    {%- endif -%}
 
 # After `kind` and `web_ui`, which its default reads: on a copy, Copier renders a default when it
-# asks the question.
-interfaces:
+# asks the question. Copier stores a multiselect answer in the order of its choices, whatever order
+# it was given in, so the primary interface is a question of its own.
+interface:
   type: str
   help: >-
-    What a person who uses it sees, most important first. The first is the primary one: it shapes
-    the README outline's hero and quick start, and a project with web, desktop or terminal gets a
-    screenshots page. The others add their own prompts under the same parts.
-  multiselect: true
+    What a person who uses it sees first: the primary interface. It shapes the README outline's
+    picture or sample and its quick start, and web, desktop or terminal gives the project a
+    screenshots page.
   choices:
     "web: pages in a browser": web
     "desktop: a window": desktop
@@ -169,19 +176,51 @@ interfaces:
     "cli: commands that print and exit": cli
     "service: no UI, it serves or produces": service
     library: library
-  default: "{{ ['library'] if kind == 'library' else (['web'] if web_ui else (['service'] if kind == 'service' else ['cli'])) }}"
+  default: "{{ 'library' if kind == 'library' else ('web' if web_ui else ('service' if kind == 'service' else 'cli')) }}"
+  when: "{{ kind != 'library' }}"
+  # Like `visibility`'s check, the web UI's applies only when this answer is passed in this run, so
+  # Copier never drops a stored answer for it; `web_ui`'s and `other_interfaces`' checks cover the
+  # rest.
   validator: >-
-    {%- if not interfaces -%}
-    Pick at least one.
-    {%- elif interfaces | unique | list | length != interfaces | length -%}
-    Name each one once.
-    {%- elif kind == 'library' and interfaces != ['library'] -%}
-    A library's only interface is `library`.
-    {%- elif kind != 'library' and 'library' in interfaces -%}
+    {%- if kind == 'library' and interface != 'library' -%}
+    A library's interface is `library`.
+    {%- elif kind != 'library' and interface == 'library' -%}
     Only a library has the `library` interface.
-    {%- elif web_ui and 'web' not in interfaces -%}
-    A project with a web UI has the `web` interface.
+    {%- elif web_ui and interface != 'web' and 'interface' in _copier_conf.data
+      and 'web' not in (other_interfaces | default([])) -%}
+    A project with a web UI has the `web` interface: pass `--data 'other_interfaces=[web]'` too,
+    or make `web` the primary one.
     {%- endif -%}
+
+other_interfaces:
+  type: str
+  help: >-
+    What else a person who uses it sees, if anything, such as a command-line tool beside a web app.
+    Each adds its own prompts to the README outline, and web, desktop or terminal adds rows to the
+    screenshots page.
+  multiselect: true
+  choices:
+    "web: pages in a browser": web
+    "desktop: a window": desktop
+    "terminal: a full-screen terminal app": terminal
+    "cli: commands that print and exit": cli
+    "service: no UI, it serves or produces": service
+  default: []
+  when: "{{ kind != 'library' }}"
+  validator: >-
+    {%- if kind == 'library' and other_interfaces -%}
+    A library has no other interface.
+    {%- elif interface in other_interfaces -%}
+    `{{ interface }}` is the primary interface; leave it out of the others.
+    {%- elif web_ui and interface != 'web' and 'web' not in other_interfaces -%}
+    A project with a web UI has the `web` interface: add it here, or make it the primary one.
+    {%- endif -%}
+
+# The interfaces, the primary one first, as `[workspace.metadata.policy]` lists them.
+interfaces:
+  type: yaml
+  default: "{{ ([interface] + other_interfaces) | tojson }}"
+  when: false
 
 build:
   type: yaml

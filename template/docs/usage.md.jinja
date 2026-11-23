@@ -2,8 +2,8 @@
 {%- set noun = {'web': 'page', 'desktop': 'window', 'terminal': 'screen'} -%}
 # Use {{ project_name }}
 
-Read this page once {{ project_name }} runs. It shows what each {{ noun[ui[0]] }} does, with
-screenshots. The [README](../README.md)'s Quick start gets it running.
+Read this page once the [README](../README.md)'s Quick start has it running. It shows what each
+{{ noun[ui[0]] }} does, with screenshots.
 {% for interface in ui %}
 {%- if interface == 'web' %}
 > **To write:** a section for each part of the web app a person uses, such as a `## Pages` section
@@ -43,7 +43,7 @@ screenshots. The [README](../README.md)'s Quick start gets it running.
 > **To write:** the desktop app's screenshots. Start with a line that says the data is invented.
 > Then a table with one row per window or state: a bold name and what it shows, then the image
 > linked to itself, such as
-> `[<img src="screenshots/<window>.png" width="480" alt="<what it shows>">](screenshots/<window>.png)`.
+> `[<img src="screenshots/<window>.png" width="480" alt="...">](screenshots/<window>.png)`.
 > Capture each window at its default size.
 > [Screenshots](../CONTRIBUTING.md#screenshots) in CONTRIBUTING.md says how to capture them, and
 > the privacy check each one needs before it's committed.
@@ -52,7 +52,7 @@ screenshots. The [README](../README.md)'s Quick start gets it running.
 > such as "Each screenshot is a screen of the demo mode, so every name and number in it is made
 > up." Then a table with one row per screen: a bold name and what it shows, then the image linked
 > to itself, such as
-> `[<img src="screenshots/<screen>.svg" width="480" alt="<what it shows>">](screenshots/<screen>.svg)`.
+> `[<img src="screenshots/<screen>.svg" width="480" alt="...">](screenshots/<screen>.svg)`.
 > [Screenshots](../CONTRIBUTING.md#screenshots) in CONTRIBUTING.md says how to capture them, and
 > the privacy check each one needs before it's committed.
 {%- endif %}

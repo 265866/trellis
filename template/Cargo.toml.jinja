@@ -25,7 +25,7 @@ proc_macro_crates = []
 # Test-support crates: members may depend on one only as a dev-dependency.
 dev_only_crates = []
 # What a person who uses the project sees, the primary one first: `web`, `desktop`, `terminal`,
-# `cli`, `service` or `library`. The `interfaces` answer sets it.
+# `cli`, `service` or `library`. The `interface` and `other_interfaces` answers set it.
 interfaces = {{ interfaces | tojson }}
 # The docs files that must exist. The "Docs" section of CONTRIBUTING.md says what goes where.
 docs_files = [

@@ -777,7 +777,10 @@ hold need more than the update, and two can't change this way at all:
   it's missing, and don't run a plain `bun install` or `just web-build` on that branch: until
   the update merges, `.gitignore` doesn't ignore the app's `node_modules/` and `dist/`, so
   `just rule-changes` counts what they write. Then run the update with `--data web_ui=true`, and
-  add the app's settings files to its pull request. When the app trips a check that only a rule
+  with `--data interface=web` if the web UI is what a person sees first, or otherwise with
+  `--data 'other_interfaces=[{{ (other_interfaces + ['web']) | join(', ') }}]'`.
+  The update refuses `web_ui=true` without `web` among the interfaces. Add the app's settings
+  files to its pull request. When the app trips a check that only a rule
   can settle, such as a class name `just typos` flags, which only an entry in `_typos.toml` lets
   through, land that rule in a rules pull request before the app's code pull request.
 {%- endif %}
@@ -785,8 +788,9 @@ hold need more than the update, and two can't change this way at all:
 - **README.** An update never touches `README.md`, so when an answer changes what it says, such as
   the license, the visibility or a web UI, edit it in the update's pull request: its License
   section, its release badge and its Verify a release entry.
-{%- if kind == 'library' %} A library's `readme_sections` has `License`
-  only while it has a license, and `just policy` fails until the README's sections match.
+{%- if kind == 'library' %}
+  A library's `readme_sections` has `License` only while it has a license, and `just policy`
+  fails until the README's sections match.
 {%- endif %}
 
 The other answers change only files the update writes.
@@ -802,16 +806,26 @@ projects" part says what to do before or after the update merges. To update by h
 uvx copier update --defaults
 ```
 
-An update never touches `crates/`, `Cargo.lock`, `CHANGELOG.md`, `README.md`{% if interfaces | select('in', ['web', 'desktop', 'terminal']) | list %}, `docs/usage.md`{% endif %} or
-`docs/design.md`, which are yours after the project is generated.
-{%- if published %} The crate's `LICENSE*` files are the exception: they
-follow the license answer.
-{%- endif %} It is a rule change, so it can't also change code. Copier
-merges the new template into your edits to the files it renders, such as a crate's row in
-`CONTRIBUTING.md` and its settings in `Cargo.toml` and `release-plz.toml`. Where trellis changed a
-line you changed, or one next to it, Copier leaves conflict markers; resolve them before you
-commit. Once the update merges, run `just check-github` on `main`. A newer trellis can set more
-than the one you set up with, so if it reports a wrong setting, run `just setup-github`.
+An update never touches `crates/`, `Cargo.lock`, `CHANGELOG.md`, `docs/design.md` or `README.md`,
+which are yours after the project is generated. A new project's README starts as an outline, and
+one generated before trellis wrote outlines stays as it was.
+{%- if interfaces | select('in', ['web', 'desktop', 'terminal']) | list %} Nor does an update touch
+`docs/usage.md`, the screenshots page, if the project has one.
+{%- endif %}
+{%- if published %}
+The crate's `LICENSE*` files are the exception: they follow the license answer.
+{%- endif %}
+
+An update can change `readme_sections` in `Cargo.toml`, which lists the README's `##` sections,
+while the README keeps its own: `just policy` then fails until you rename or add the README's
+sections to match, in the update's pull request. The version's CHANGELOG entry says when it does.
+
+An update is a rule change, so it can't also change code. Copier merges the new template into
+your edits to the files it renders, such as a crate's row in `CONTRIBUTING.md` and its settings in
+`Cargo.toml` and `release-plz.toml`. Where trellis changed a line you changed, or one next to it,
+Copier leaves conflict markers; resolve them before you commit. Once the update merges, run
+`just check-github` on `main`. A newer trellis can set more than the one you set up with, so if it
+reports a wrong setting, run `just setup-github`.
 {%- if kind == 'service' %}
 
 An update that moves the base images' digests in the `Containerfile`, such as for a security fix,

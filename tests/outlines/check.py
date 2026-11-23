@@ -59,6 +59,33 @@ def images(text):
     return re.findall(r"!\[[^\]]*\]\((?!https://)|<img\b(?![^>]*src=\"https://)", text)
 
 
+def long_lines(path):
+    """The lines of the Markdown file `path` over 100 characters, outside tables, code blocks and
+    badges, as `path:line`."""
+    found = []
+    fenced = False
+    for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        bare = line.lstrip("> ")
+        if bare.startswith("```"):
+            fenced = not fenced
+            continue
+        if fenced or bare.startswith("|") or bare.startswith("[![") or len(line) <= 100:
+            continue
+        found.append(f"{path.relative_to(project)}:{number}")
+    return found
+
+
+manifest = (project / "Cargo.toml").read_text(encoding="utf-8")
+listed = re.search(r"^interfaces = (\[.*\])$", manifest, re.M)
+check(
+    listed and listed.group(1) == "[" + ", ".join(f'"{name}"' for name in interfaces) + "]",
+    f"Cargo.toml's interfaces line isn't {interfaces}, in that order",
+)
+markdown = [project / "README.md", project / "CONTRIBUTING.md", *sorted((project / "docs").glob("*.md"))]
+for path in markdown:
+    for where in long_lines(path):
+        check(False, f"{where} runs over 100 characters")
+
 readme = (project / "README.md").read_text(encoding="utf-8")
 head, _, rest = readme.partition("\n## Quick start\n")
 quick_start, _, rest = rest.partition("\n## Documentation\n")
@@ -74,7 +101,7 @@ for name, phrase in SECONDARY.items():
     check((phrase in quick_start) == (name in interfaces[1:]), f"the README's Quick start prompt for a secondary {name} is wrong")
 check(not images(readme), "the README references an image")
 check(
-    re.search(r'^readme_sections = \["Quick start", "Documentation"(, "License")?\]$', (project / "Cargo.toml").read_text(encoding="utf-8"), re.M),
+    re.search(r'^readme_sections = \["Quick start", "Documentation"(, "License")?\]$', manifest, re.M),
     "readme_sections isn't Quick start, Documentation and License",
 )
 check("(docs/style.md)" not in index and "(docs/maintaining.md)" not in index, "the README indexes a contributors' page")

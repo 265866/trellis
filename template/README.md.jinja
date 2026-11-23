@@ -27,7 +27,7 @@
 {%- if primary == 'terminal' or primary == 'desktop' %}
 > - whether it runs beside something else, such as a game or an editor;
 {%- endif %}
-> - its limits: what it doesn't do, and what it never sends, stores or shows.
+> - its limits: what it doesn't do, and what it never sends, stores or {{ 'logs' if primary == 'service' else 'shows' }}.
 {%- endif %}
 
 > **To write:** the features, as a list: a bullet for each thing a person can do with it, most
@@ -53,10 +53,10 @@
 {%- endif %}
 {%- if primary in ui %}
 > Save it in `docs/screenshots/`, and put it here as an image whose alt text says what the
-> {{ noun[primary] }} shows and that the data is invented. Link the image to
+> {{ noun[primary] }} shows and that the data is invented. Link the image to the gallery,
 > [Screenshots](docs/usage.md#screenshots), and follow it with a sentence that links there too,
-> such as "See every {{ noun[primary] }} in Screenshots." [Screenshots](CONTRIBUTING.md#screenshots)
-> in CONTRIBUTING.md says how to capture it.
+> such as "See every {{ noun[primary] }} in Screenshots." The Screenshots rules in
+> [CONTRIBUTING.md](CONTRIBUTING.md#screenshots) say how to capture it.
 {%- elif primary == 'cli' -%}
 > **To write:** the sample: the one command that best shows the main promise, and its real
 > output, in a fenced code block. Run it on invented input, and trim long output, but don't edit
@@ -77,13 +77,13 @@
 
 ## Quick start
 
-> **To write:** the shortest path from nothing to {{ 'a program that uses it' if primary == 'library' else 'it working' }}, as numbered steps with
-> commands to copy. Start with what the reader needs, and end at something they can see work.
-> Depth, such as every option or platform, goes on a page under `docs/`, with an entry under
-> Documentation. When what the reader needs, or where its files live and how to remove it, runs
-> past a few lines, give it a section of its own between Quick start and Documentation, such as
-> `## Requirements`, and add it to `readme_sections` in `Cargo.toml`. For this
-> {{ label[primary] }}, cover:
+> **To write:** the shortest path from nothing to something the reader can see work, as numbered
+> steps with commands to copy, starting with what the reader needs. Depth, such as every option or
+> platform, goes on a page under `docs/`, with an entry under Documentation. When what the reader
+> needs, or where its files live and how to remove it, runs past a few lines, give it a section of
+> its own between Quick start and Documentation, such as `## Requirements`, and add it to
+> `readme_sections` in `Cargo.toml`.
+> For this {{ label[primary] }}, cover:
 >
 {%- if primary == 'web' %}
 > - where it listens, and how a stranger reaches the UI: the bind address, a proxy or tunnel, and
@@ -116,11 +116,10 @@
 > - the configuration that matters: the environment variables, and where its data persists;
 > - what it needs to run, such as memory, disk or outside services;
 {%- else %}
-> - the dependency line, below;
+> - the dependency, which trellis filled in below: keep it as the first step;
 > - the minimum Rust version, which `rust-version` in `Cargo.toml` sets, and any `no_std` or
 >   async runtime needs;
 > - a whole program that calls it, if the example above isn't one;
-> - what [Stability](docs/stability.md) promises, and what 1.0 would mean;
 {%- endif %}
 {%- for other in others %}
 > - its {{ label[other] }}: {{ {'web': 'where its UI listens, how to reach it, and the page the reader sees first;', 'desktop': 'how to start it, and its first window;', 'terminal': 'how to start it, and its first screen;', 'cli': 'the command a person runs first, and what it prints;', 'service': 'how to start it in the background, and how to check that it runs;'}[other] }}
@@ -129,36 +128,41 @@
 {%- if kind == 'binary' %}
 >
 > [Install](docs/install.md) lists each release's files and how to build from source, and
-> [Verify a release](docs/verifying-releases.md) checks a download. Link them rather than repeat
-> them.
+> [Verify a release](docs/verifying-releases.md) checks a download. Link them; don't repeat them.
 {%- elif kind == 'service' %}
 >
-> [Container image](docs/install.md) has the image's name, tags and digest, and
-> [Verify a release](docs/verifying-releases.md) checks it. Link them rather than repeat them.
-{%- if visibility == 'private' %} The
-> image is private, so a reader signs in to `ghcr.io` first, as that page shows.
+> Show the command that runs the image, and link [Container image](docs/install.md) for its tags
+> and digest and [Verify a release](docs/verifying-releases.md) for checking it.
+{%- if visibility == 'private' %}
+> The image is private, so a reader signs in to `ghcr.io` first, as Container image shows.
 {%- endif %}
 {%- else %}
->
-> The dependency line:
->
-> ```toml
-> [dependencies]
+
+Add it to the `[dependencies]` of your `Cargo.toml`:
+
+```toml
+[dependencies]
 {%- if publish_crate %}
-> {{ crate_name }} = "<version>"
+{{ crate_name }} = "<version>"
 {%- else %}
-> {{ crate_name }} = { git = "https://github.com/{{ github_owner }}/{{ project_name }}", tag = "<tag>" }
+{{ crate_name }} = { git = "https://github.com/{{ github_owner }}/{{ project_name }}", tag = "<tag>" }
 {%- endif %}
-> ```
->
+```
 {%- if publish_crate %}
-> `cargo add {{ crate_name }}` writes the latest version.
+
+`cargo add {{ crate_name }}` writes the latest version.
 {%- else %}
-> `<tag>` is a release tag, such as the
-> [latest](https://github.com/{{ github_owner }}/{{ project_name }}/releases/latest).
-{%- if visibility == 'private' %} The
-> repository is private, so Cargo fetches it with the reader's Git credentials once
-> `~/.cargo/config.toml` sets `git-fetch-with-cli = true` under `[net]`.
+
+Replace `<tag>` with a release tag, such as the
+[latest](https://github.com/{{ github_owner }}/{{ project_name }}/releases/latest).
+{%- if visibility == 'private' %}
+The repository is private, so have Cargo fetch it with your Git credentials. Add this to your
+`~/.cargo/config.toml`:
+
+```toml
+[net]
+git-fetch-with-cli = true
+```
 {%- endif %}
 {%- endif %}
 {%- endif %}
@@ -168,7 +172,7 @@
 - [Use {{ project_name }}](docs/usage.md): what each {{ noun[ui[0]] }} does, with screenshots.
 {%- endif %}
 {%- if kind == 'binary' %}
-- [Install](docs/install.md): each release's files, installing one by hand, and building from source.
+- [Install](docs/install.md): each release's files, and installing one or building from source.
 {%- elif kind == 'service' %}
 - [Container image](docs/install.md): the image's tags and digest, and running it with Docker.
 {%- endif %}

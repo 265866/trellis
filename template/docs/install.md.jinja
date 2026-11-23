@@ -2,7 +2,7 @@
 # Install {{ project_name }}
 
 Read this page for the files each release has, and how to install one by hand, build from source
-and update. The [README](../README.md)'s Quick start is how {{ project_name }} runs.
+and update. The [README](../README.md)'s Quick start is how to run it.
 
 Each [release](https://github.com/{{ github_owner }}/{{ project_name }}/releases) has {% if release.files %}these files for
 each platform:{% else %}one archive per
@@ -78,9 +78,8 @@ That builds the program without its web UI. To have the UI too, clone the reposi
 {%- else -%}
 # Container image
 
-Read this page for {{ project_name }}'s container image: its name and tags, its digest, and a
-plain `docker run` to start from. The [README](../README.md)'s Quick start is how
-{{ project_name }} runs.
+Read this page for the container image: its name and tags, its digest, and a plain `docker run`
+to start from. The [README](../README.md)'s Quick start is how to run it.
 
 The image is `ghcr.io/{{ github_owner | lower }}/{{ project_name }}`, for {{ targets | map(attribute='name') | join(' and ') }}.
 {%- if targets | length > 1 %}

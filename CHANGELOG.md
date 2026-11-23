@@ -10,38 +10,51 @@ has the versioning rule.
 
 ### Action required in projects
 
+- **Rename your README's first `##` section to `## Quick start`, in the update's pull request.**
+  The update changes `readme_sections` in `Cargo.toml` to `["Quick start", "Documentation",
+  "License"]`, without `License` for a library without a license, but never touches `README.md`,
+  so `just policy` fails until the README's `## Install`, `## Run it` or `## Use it` is renamed.
+  If you set `readme_sections` to anything other than that line, `Cargo.toml` conflicts on it:
+  resolve it by keeping your own extra sections, with `Quick start`, `Documentation` and `License`
+  among them in that order, such as `["Quick start", "Run it on a server", "Documentation",
+  "License"]`, and give the README the same sections. A project that set exactly the new line
+  merges cleanly.
+- **Pass `interface` and `other_interfaces` when their defaults are wrong.** Two new answers say
+  what a person who uses the project sees: `interface`, the primary one, and `other_interfaces`,
+  any others, each from `web` (pages in a browser), `desktop` (a window), `terminal` (a
+  full-screen terminal app), `cli` (commands that print and exit) and `service` (no UI: it serves
+  or produces). A library's is always `library`. trellis writes them, the primary one first, to
+  `interfaces` in `[workspace.metadata.policy]`. An update takes the defaults: `interface` is
+  `library` for a library, `web` with a web UI, `service` for a service and `cli` for any other
+  binary, and `other_interfaces` is empty. They're wrong for a program whose window or full-screen
+  terminal screens are the product, which gets `cli`, and for a web app with a command-line tool
+  or desktop app beside it, which gets `web` alone. Run the update with the right answers then,
+  such as `uvx copier update --defaults --data interface=desktop`, or
+  `uvx copier update --defaults --data interface=web --data 'other_interfaces=[cli]'`.
+- **Turning on a web UI later names `web` among the interfaces.** An update with
+  `--data web_ui=true` refuses a project whose interfaces lack `web`, rather than drop the ones it
+  has: pass `--data 'other_interfaces=[web]'` with it, listing the others it has too, or
+  `--data interface=web` when the web UI is what a person sees first.
 - If your `CONTRIBUTING.md` has a `## Documentation` section of your own, `just policy` now holds
   it to the index form: one-line entries such as `- [Title](path): what the reader does with it.`,
   and nothing else. With that section, the whole file is also held to the README's checks for HTML
-  left open and for a byte order mark. A generated `CONTRIBUTING.md` has no such section. Rewrite
-  yours as entries, or rename it.
-- **Pass `interfaces` when its default is wrong.** The new `interfaces` answer says what a person
-  who uses the project sees, the primary one first: `web` (pages in a browser), `desktop` (a
-  window), `terminal` (a full-screen terminal app), `cli` (commands that print and exit),
-  `service` (no UI: it serves or produces) or `library`. trellis writes it to `interfaces` in
-  `[workspace.metadata.policy]`. An update takes the default: `[library]` for a library, `[web]`
-  with a web UI, `[service]` for a service and `[cli]` for any other binary. The default is wrong
-  for a program whose window or full-screen terminal screens are the product, which gets `[cli]`,
-  and for a web app with a command-line tool or desktop app beside it, which gets `[web]` alone.
-  Run the update with the right list then, such as
-  `uvx copier update --defaults --data 'interfaces=[desktop]'`, or
-  `--data 'interfaces=[web, cli]'`.
-- **If you set `readme_sections` to anything other than the new default, keep your line when
-  `Cargo.toml` conflicts.** The default is now `["Quick start", "Documentation", "License"]` for
-  every kind, without `License` for a library without a license. A project that set exactly that
-  line merges cleanly; one that set anything else gets a one-line conflict in `Cargo.toml`.
+  left open and for a byte order mark. The update adds a `## Documentation` section of trellis's
+  own near the end of `CONTRIBUTING.md`, and every such section counts, so one of yours stays a
+  second index; rewrite yours as entries, merge it into trellis's, or rename it.
 
 ### Changed
 
 - **trellis writes `README.md` once, and an update never touches it.** A new project's README is
   an outline: the title, badges and description, then a `**To write:**` prompt for the opening,
   the features and the picture or sample, and for `## Quick start`, with `## Documentation` and
-  `## License` filled in. The prompts follow the `interfaces` answer: a screenshot of a web page
-  or a desktop window, an SVG of a terminal screen, or a sample of a command's output, a service's
-  output or a library's code, and the quick start's points for that kind of program. The outline
+  `## License` filled in. The prompts follow the `interface` and `other_interfaces` answers: a
+  screenshot of a web page or a desktop window, an SVG of a terminal screen, or a sample of a
+  command's output, a service's output or a library's code, and the quick start's points for that
+  kind of program. The outline
   references no image. The index lists the user's pages; `Code style` and `Maintain` move to a new
-  `## Documentation` section in `CONTRIBUTING.md`. An existing project's README stays as it is,
-  and may drop its own `Code style` and `Maintain` entries.
+  `## Documentation` section in `CONTRIBUTING.md`. A library's dependency line stays filled in
+  below the Quick start prompt. An existing project's README stays as it is, and may drop its own
+  `Code style` and `Maintain` entries.
 - A new project with a `web`, `desktop` or `terminal` interface also gets `docs/usage.md`, a
   screenshots page outline that an update never touches either; its `CONTRIBUTING.md` gets the
   Screenshots rules: where images live, invented data only, dark mode, a web page at a desktop and
@@ -55,12 +68,14 @@ has the versioning rule.
   adds what the checks catch first in test-only code. `docs/maintaining.md` lists `README.md`, and
   `docs/usage.md` where a project has one, among the files an update never touches, says to edit
   the README by hand when an answer changes what it says, and says a release pull request holding
-  only test-only changes can wait for a change that ships.
+  only test-only changes can wait for a change that ships. `CONTRIBUTING.md`'s `just fmt-check`
+  row says to run `just fmt`, not `cargo fmt`, whose stable rustfmt skips the nightly options.
 - A page directly under `docs/` may be indexed from a `## Documentation` section in
   `CONTRIBUTING.md`, written like the README's, instead of the README's: a page only contributors
   need, such as the code style or the maintaining guide, needn't sit in the index a stranger
   reads. `just policy` holds that section to the same entry form. Every page is still indexed
-  from one of the two.
+  from one of the two. A file with more than one `## Documentation` section indexes the pages each
+  one links, and each is held to the form.
 - `just ci` takes the branch a pull request targets, such as `just ci origin/my-rules`, and passes
   it to `rule-changes`, so `just ci` can pass on a branch stacked on another pull request. Without
   it, `rule-changes` compares with `origin/main`, as before.

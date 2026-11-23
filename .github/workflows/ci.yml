@@ -108,20 +108,20 @@ jobs:
           - name: binary with a desktop interface
             os: ubuntu-24.04
             kind: binary
-            interfaces: "[desktop]"
+            interfaces: desktop
             recipes: ci
             tools: just@1.59.0,cargo-deny@0.20.2,cargo-shear@1.14.0,typos@1.51.1,taplo@0.10.0,shellcheck@0.11.0,zizmor@1.31.1,lychee@0.24.2,cargo-nextest@0.9.150,cargo-dylint@6.4.0,dylint-link@6.4.0,uv@0.13.8,cargo-about@0.9.3
           - name: binary with a terminal interface
             os: ubuntu-24.04
             kind: binary
-            interfaces: "[terminal]"
+            interfaces: terminal
             recipes: ci
             tools: just@1.59.0,cargo-deny@0.20.2,cargo-shear@1.14.0,typos@1.51.1,taplo@0.10.0,shellcheck@0.11.0,zizmor@1.31.1,lychee@0.24.2,cargo-nextest@0.9.150,cargo-dylint@6.4.0,dylint-link@6.4.0,uv@0.13.8,cargo-about@0.9.3
           - name: binary with a web UI
             os: ubuntu-24.04
             kind: binary
             web: "true"
-            interfaces: "[web,cli]"
+            interfaces: web,cli
             recipes: ci
             tools: just@1.59.0,cargo-deny@0.20.2,cargo-shear@1.14.0,typos@1.51.1,taplo@0.10.0,shellcheck@0.11.0,zizmor@1.31.1,lychee@0.24.2,cargo-nextest@0.9.150,cargo-dylint@6.4.0,dylint-link@6.4.0,uv@0.13.8,cargo-about@0.9.3
           - name: service

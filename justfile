@@ -488,7 +488,7 @@ lints-test:
     cargo test --locked
 
 # Runs `template` for each kind, then `shapes`, `dependencies`, `update` and the extras checks.
-templates: (template "binary") (template "binary" "ci" "false" "false" "" "false" "[desktop]") (template "binary" "ci" "false" "false" "" "false" "[terminal]") (template "binary" "ci" "false" "true" "" "false" "[web,cli]") (template "service") (template "service" "ci" "false" "true") (template "library") (template "library" "ci" "true") shapes outlines dependencies update build-extras image-extras release-extras checker-install
+templates: (template "binary") (template "binary" "ci" "false" "false" "" "false" "desktop") (template "binary" "ci" "false" "false" "" "false" "terminal") (template "binary" "ci" "false" "true" "" "false" "web,cli") (template "service") (template "service" "ci" "false" "true") (template "library") (template "library" "ci" "true") shapes outlines dependencies update build-extras image-extras release-extras checker-install
 
 # Checks that every exclusion in copier.yml renders with only the answers an older trellis asked,
 # as Copier renders them when a project updates from it. Then copies the working tree into a
@@ -498,8 +498,11 @@ templates: (template "binary") (template "binary" "ci" "false" "false" "" "false
 # Then it changes the template's scaffold, a rule file, a docs page, the README and lines near the
 # owner's, and runs `copier update` to the second. The update must merge each file with no conflict
 # markers, keep the owner's lines, bring v2's, and pass `trellis-policy check`; the owner's code,
-# changelog and README must not move. A terminal app generated from the first, whose owner edits
-# its README and screenshots page, updates to the second with both byte for byte the same. Then it makes the project private and public again with
+# changelog and README must not move. The first writes readme_sections and the README's first
+# section as trellis 0.19 did, so after the update `trellis-policy check` must report only that the
+# README's sections don't match, and pass once the owner renames the section to `Quick start`. A
+# terminal app generated from the first, whose owner edits its README and screenshots page,
+# updates to the second with both byte for byte the same. Then it makes the project private and public again with
 # `--vcs-ref=:current:`, which must keep v2 and the owner's edits, and publishes the crate under
 # each license, which must deliver only that license's files to the crate's directory and fail
 # `trellis-policy check` on the owner's crate until the owner swaps in the root's there too, from
@@ -525,6 +528,12 @@ update:
     tar --create --exclude=./.git --exclude=./target --exclude=./lints/target --file=- . \
       | tar --extract --directory="$out/trellis" --file=-
     cd "$out/trellis"
+    # v1 writes the README's first section and readme_sections as trellis 0.19 did, so the update
+    # moves readme_sections to Quick start while the owner's README keeps `## Use it`.
+    sed -i.bak 's/^readme_sections = \["Quick start", /readme_sections = ["Use it", /' template/Cargo.toml.jinja
+    sed -i.bak 's/^## Quick start$/## Use it/' template/README.md.jinja
+    rm template/Cargo.toml.jinja.bak template/README.md.jinja.bak
+    grep --quiet '^readme_sections = \["Use it", ' template/Cargo.toml.jinja || { echo "error: v1 kept the new readme_sections" >&2; exit 1; }
     git init --quiet --initial-branch main
     git add --all
     commit commit --quiet --message v1
@@ -593,6 +602,7 @@ update:
       done
     }
     cd "$out/trellis"
+    cp "$trellis/template/Cargo.toml.jinja" "$trellis/template/README.md.jinja" template/
     scaffold="template/crates/{% if kind == 'library' %}{{{{ crate_name }}{% endif %}/src"
     sed -i.bak 's/Hello, /Hi, /' "$scaffold/greeting.rs" && rm "$scaffold/greeting.rs.bak"
     printf '/// New.\npub fn added() {}\n' > "$scaffold/added.rs"
@@ -634,6 +644,15 @@ update:
     done
     ! has CONTRIBUTING.md "$boundaries" || fail "the update kept v1's Product boundaries sentence"
     cmp --quiet README.md "$out/README.md" || fail "the update changed the owner's README.md"
+    # The README keeps `## Use it` while readme_sections moved, so `trellis-policy check` names the
+    # mismatch, as the changelog's action item says, until the owner renames the section.
+    if policy check > "$out/sections.txt" \
+      || [ "$(grep --count '^error: ' "$out/sections.txt")" != 1 ] \
+      || ! grep --quiet '^error: \[docs_layout\] README.md: The readme'"'"'s `##` sections are `Use it`, `Documentation`, `License`, but `readme_sections` in `\[workspace.metadata.policy\]` lists `Quick start`, `Documentation`, `License`\.' "$out/sections.txt"; then
+      cat "$out/sections.txt" >&2
+      fail "trellis-policy check didn't report only the README's old section after the update"
+    fi
+    swap README.md '## Use it' '## Quick start'
     policy check
     grep --quiet '^_commit: v2$' .copier-answers.yml || fail "the answers don't record v2"
     tail -n 1 rustfmt.toml | grep --quiet 'A rule a later trellis adds' || fail "rustfmt.toml didn't move"
@@ -644,7 +663,7 @@ update:
     tail -n 1 CHANGELOG.md | grep --quiet "An owner's line" || fail "CHANGELOG.md was rewritten"
     # A terminal app's screenshots page is its owner's too.
     copier copy --quiet --defaults --vcs-ref v1 --data project_name=screens \
-      --data "description=A demo terminal app." --data kind=binary --data 'interfaces=[terminal]' \
+      --data "description=A demo terminal app." --data kind=binary --data interface=terminal \
       "$out/trellis" "$out/screens"
     (
       cd "$out/screens"
@@ -771,7 +790,8 @@ update:
 # Generates a project of one kind, `binary`, `service` or `library`, from the working tree, with
 # the lints and checker from this checkout, and runs `recipes` in it, `ci` by default. `true` as
 # `publish` makes a library a published one, and `true` as `web` gives a binary or service a web UI.
-# `interfaces`, such as `[desktop]`, answers `interfaces` in place of its default. After `ci`, a
+# `interfaces`, such as `desktop` or `web,cli`, answers `interface` with the first and
+# `other_interfaces` with the rest, in place of their defaults. After `ci`, a
 # binary on Linux runs its release build's steps for this machine's target, whose archive must hold
 # the program, its license files and notices, and a web UI's build and notices only when it has
 # one. After `ci`, a service also builds and runs its image when Docker is
@@ -804,9 +824,13 @@ template kind recipes="ci" publish="false" web="false" target="" installer="fals
       out=$(cygpath --mixed "$out")
     fi
     project="$out/demo-{{ kind }}"
-    interfaces_answer=""
+    interface_answer="" others_answer=""
     if [ -n "{{ interfaces }}" ]; then
-      interfaces_answer="interfaces={{ interfaces }}"
+      interfaces="{{ interfaces }}"
+      interface_answer="interface=${interfaces%%,*}"
+      others=""
+      [[ $interfaces != *,* ]] || others=${interfaces#*,}
+      others_answer="other_interfaces=[$others]"
     fi
     installer_answer=""
     if [ "{{ installer }}" = true ]; then
@@ -823,7 +847,7 @@ template kind recipes="ci" publish="false" web="false" target="" installer="fals
       $( [ "{{ publish }}" = true ] && echo "--data publish_crate=true --data license=MIT" ) \
       $( [ "{{ web }}" = true ] && echo "--data web_ui=true" ) \
       ${installer_answer:+--data "$installer_answer"} \
-      ${interfaces_answer:+--data "$interfaces_answer"} \
+      ${interface_answer:+--data "$interface_answer"} ${others_answer:+--data "$others_answer"} \
       "$trellis" "$project"
     cd "$project"
     git init --quiet --initial-branch main
@@ -1928,12 +1952,13 @@ shape answers:
     fi
     cargo run --locked --quiet --manifest-path "$trellis/Cargo.toml" --package trellis-policy -- check
 
-# Generates a project for each primary interface and for a web app with a command-line tool, and
-# checks its README outline with `tests/outlines/check.py`: a prompt in each part the owner writes,
-# shaped by the interfaces, and no image. A web, desktop or terminal interface must get
-# `docs/usage.md` with its screenshots prompts, CONTRIBUTING.md's Screenshots rules and the pull
-# request template's line about images, and any other none of them. Each outline, untouched, must
-# pass `trellis-policy check` and `just links`.
+# Generates a project for each primary interface, for a web app with a command-line tool and for a
+# service with one, and checks its README outline with `tests/outlines/check.py`: a prompt in each
+# part the owner writes, shaped by the interfaces in their order, no image, and no line of prose
+# over 100 characters. A web, desktop or terminal interface must get `docs/usage.md` with its
+# screenshots prompts, CONTRIBUTING.md's Screenshots rules and the pull request template's line
+# about images, and any other none of them. Each outline, untouched, must pass
+# `trellis-policy check` and `just links`.
 #
 # Checks the README outline each interface gets.
 outlines:
@@ -1942,13 +1967,21 @@ outlines:
     trellis="{{ justfile_directory() }}"
     out=$(mktemp -d)
     trap 'rm -rf "$out"' EXIT
+    # A library is asked neither interface question. service,cli puts the primary interface after
+    # its other one in the order of the choices, which Copier stores a multiselect answer in.
     for spec in binary:web:web_ui=true binary:desktop binary:terminal binary:cli service:service \
-      library:library binary:web,cli:web_ui=true service:web:web_ui=true; do
+      library:library binary:web,cli:web_ui=true service:web:web_ui=true service:service,cli; do
       IFS=: read -r kind interfaces web <<< "$spec"
       project="$out/$kind-${interfaces/,/-}"
+      answers=()
+      if [ "$kind" != library ]; then
+        others=""
+        [[ $interfaces != *,* ]] || others=${interfaces#*,}
+        answers=(--data "interface=${interfaces%%,*}" --data "other_interfaces=[$others]")
+      fi
       uv tool run copier@9.19.1 copy --quiet --defaults --vcs-ref HEAD \
         --data project_name=demo --data "description=A demo that trellis generates." \
-        --data kind="$kind" --data "interfaces=[$interfaces]" ${web:+--data "$web"} \
+        --data kind="$kind" "${answers[@]}" ${web:+--data "$web"} \
         --data trellis_path="$trellis" "$trellis" "$project"
       uv run --quiet --no-project python -I tests/outlines/check.py "$project" "$interfaces"
       (cd "$project" && just links)
