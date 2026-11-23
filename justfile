@@ -1978,7 +1978,10 @@ shape answers:
 # over 100 characters. A web, desktop or terminal interface must get `docs/usage.md` with its
 # screenshots prompts, CONTRIBUTING.md's Screenshots rules and the pull request template's line
 # about images, and any other none of them. Each outline, untouched, must pass
-# `trellis-policy check` and `just links`.
+# `trellis-policy check` and `just links`, printing its prompts as notices, and fail
+# `trellis-policy check --release` on them, and on the missing picture where the first interface
+# is web, desktop or terminal. Written by `tests/outlines/answer.py`, as an owner would, with the
+# picture where one is needed, it must pass `--release` and `just links`.
 #
 # Checks the README outline each interface gets.
 outlines:
@@ -2005,10 +2008,40 @@ outlines:
         --data trellis_path="$trellis" "$trellis" "$project"
       uv run --quiet --no-project python -I tests/outlines/check.py "$project" "$interfaces"
       (cd "$project" && just links)
-      cargo run --locked --quiet --manifest-path "$trellis/Cargo.toml" --package trellis-policy -- \
-        check --manifest-path "$project/Cargo.toml"
+      policy() {
+        cargo run --locked --quiet --manifest-path "$trellis/Cargo.toml" --package trellis-policy -- \
+          check --manifest-path "$project/Cargo.toml" "$@"
+      }
+      policy > "$out/everyday.txt" || { cat "$out/everyday.txt" >&2; exit 1; }
+      prompts='\[readme\] README.md: Lines [0-9, ]* hold prompts of the outline'
+      picture='\[readme\] README.md: The readme has no picture before its first `##`'
+      grep --quiet --extended-regexp "^(notice: |::notice::)$prompts" "$out/everyday.txt" \
+        || { cat "$out/everyday.txt" >&2; echo "error: $project: just policy doesn't note the prompts" >&2; exit 1; }
+      if policy --release > "$out/release.txt"; then
+        cat "$out/release.txt" >&2
+        echo "error: $project: the release check passed an outline" >&2
+        exit 1
+      fi
+      grep --quiet --extended-regexp "^(error: |::error::)$prompts" "$out/release.txt" \
+        || { cat "$out/release.txt" >&2; echo "error: $project: the release check doesn't fail on the prompts" >&2; exit 1; }
+      case "${interfaces%%,*}" in
+        web | desktop | terminal) want_picture=true ;;
+        *) want_picture=false ;;
+      esac
+      if [ "$want_picture" = true ] && ! grep --quiet --extended-regexp "^(error: |::error::)$picture" "$out/release.txt"; then
+        cat "$out/release.txt" >&2
+        echo "error: $project: the release check doesn't ask a UI's README for its picture" >&2
+        exit 1
+      elif [ "$want_picture" = false ] && grep --quiet "$picture" "$out/release.txt"; then
+        cat "$out/release.txt" >&2
+        echo "error: $project: the release check asks a README without a UI for a picture" >&2
+        exit 1
+      fi
+      uv run --quiet --no-project python -I tests/outlines/answer.py "$project" "$interfaces"
+      policy --release > "$out/release.txt" || { cat "$out/release.txt" >&2; echo "error: $project: the written README fails the release check" >&2; exit 1; }
+      (cd "$project" && just links)
     done
-    echo "Each interface's README outline holds its prompts and no image, and passes the docs checks."
+    echo "Each interface's README outline holds its prompts and no image, passes the docs checks with notices, fails the release check until it is written, and passes it after."
 
 # Generates a binary, a service, a library and a published library, and checks with
 # `tests/release-gate/gate.py` that the release pull request's CI and the release workflow both run
