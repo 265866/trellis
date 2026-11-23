@@ -39,6 +39,11 @@ Commit the generated project on a branch named `main` (`git init --initial-branc
    `squash_merge_commit_title` from `PR_TITLE`, or allowing other merges, is a rule change that
    must change its "Find whether this push releases" step with it. It creates the `release` label
    that release-plz puts on its pull request.
+
+   It sets the repository's description to the `description` answer without its backticks, which
+   GitHub would show as typed. With a `topics` answer, such as `[rust, cli]`, it sets the
+   repository's topics to exactly that list, so people can find it by topic. Without one, it
+   leaves GitHub's topics as they are.
 {%- if visibility == 'public' %}
 
    It adds the Actions policy that allows `pull_request_target` for `rule-changes.yml`; without
@@ -99,7 +104,9 @@ Commit the generated project on a branch named `main` (`git init --initial-branc
 5. Check the settings. `just check-github` reports each one as ok or wrong, and fails if any is
    wrong. It checks that the `RELEASE_PLZ_TOKEN` secret exists, but GitHub never shows it a
    secret's value, so the token's access is left to the check in step 4. A missing `main` ruleset,
-   one that isn't active and one that anything may bypass are each wrong.
+   one that isn't active and one that anything may bypass are each wrong, and so are a description
+   or topics that differ from the answers. Without a `topics` answer, topics on GitHub are only a
+   note, which gives the command that records them as the answer.
 {%- if visibility == 'private' %} When GitHub answers that
    the account's plan can't protect `main` in a private repository, it reports `main`'s protection
    as unavailable rather than wrong. On Windows, run it in Git Bash too:
@@ -667,7 +674,10 @@ on `main`, and `just setup-github` if it reports a wrong setting. Changing the p
 nothing on GitHub, since `CI passed` covers whatever platforms CI runs. Some answers also change
 what GitHub needs:
 {%- endif %}
-{% if published %}
+
+- **Description and topics.** `just setup-github` sets them on GitHub from the answers, such as
+  `--data 'topics=[rust, cli]'`.
+{%- if published %}
 - **Visibility.** The repository stays public while it publishes to crates.io, so the update
   refuses `--data visibility=private` unless you also pass `--data publish_crate=false`.
 {%- else %}

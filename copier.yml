@@ -88,6 +88,36 @@ description:
     Start with a capital letter, end with a period, and leave out <, >, [ and ].
     {% endif %}
 
+# GitHub's rules for a topic: lowercase letters, numbers and hyphens, 50 characters or less, and
+# no more than 20 on a repository. Its API also refuses a topic that doesn't start with a letter or
+# number: "Topics must start with a lowercase letter or number". An empty list leaves the
+# repository's topics on GitHub alone.
+topics:
+  type: yaml
+  default: []
+  help: >-
+    Topics for the GitHub repository, so people can find it, as a YAML list such as
+    [rust, self-hosted, cli], or [] for none. `just setup-github` sets them.
+  validator: >-
+    {%- set ns = namespace(error='') -%}
+    {%- if topics is string or topics is not iterable or topics is mapping -%}
+    {%- set ns.error = 'List the topics, such as `[rust, cli]`, or give `[]` for none.' -%}
+    {%- elif topics | length > 20 -%}
+    {%- set ns.error = 'GitHub takes at most 20 topics.' -%}
+    {%- else -%}
+    {%- for topic in topics if not (topic is string and topic | regex_search('^[a-z0-9][a-z0-9-]{0,49}\\Z')) -%}
+    {%- if topic is not string -%}
+    {%- set ns.error = 'YAML reads `' ~ topic ~ '` as something other than text: quote it, as in `[\'' ~ topic ~ '\']`.' -%}
+    {%- else -%}
+    {%- set ns.error = '`' ~ topic ~ '` is not a topic: use lowercase letters, numbers and hyphens, starting with a letter or number, at most 50.' -%}
+    {%- endif -%}
+    {%- endfor -%}
+    {%- if not ns.error and topics | unique | list | length != topics | length -%}
+    {%- set ns.error = 'Name each topic once.' -%}
+    {%- endif -%}
+    {%- endif -%}
+    {{ ns.error }}
+
 kind:
   type: str
   help: What it ships
