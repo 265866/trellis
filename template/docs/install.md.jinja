@@ -90,6 +90,10 @@ Each release pushes three tags, such as these for 1.4.2:
 | `v1.4.2`, the version | That release only |
 | `1.4`, the minor version | The latest patch release of 1.4 |
 | `latest` | The latest release |
+
+The commands below show how to pull and run a tag. They run it with no data folder, published
+ports, devices or settings, so they're a reference rather than a working setup; the
+[README](../README.md)'s Quick start says what running {{ project_name }} needs.
 {%- if visibility == 'private' %}
 
 ## Sign in to the registry
@@ -131,8 +135,4 @@ docker rm -f {{ project_name }}
 ```
 
 Then run the image again as above. To roll back, run the previous version's tag, such as `v1.4.1`.
-
-The commands on this page show the image's name and tags. They run it with no data folder,
-published ports, devices or settings, so they're a reference rather than a working setup; the
-[README](../README.md)'s Quick start says what running {{ project_name }} needs.
 {%- endif %}
