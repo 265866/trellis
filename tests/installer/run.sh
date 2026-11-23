@@ -9,9 +9,10 @@
 # the Inno Setup 6 release pinned here, and 0.2.0-beta.1 a second time with CloseApplications
 # "force" defined in release/installer-custom.iss, then runs test.ps1 on the four installers. Each
 # build uses tests/installer/custom.iss as the custom file, shaped like a real program's with
-# [Code] last. Before that, it compiles the installer with a custom file that ends in each section
-# a project may add, and checks that a line between the include and trellis's [Setup], as trellis
-# 0.19.2 wrote, fails the [Code]-last build.
+# [Code] last. Before that, it compiles the installer with the custom file trellis generates, with
+# one that ends in each section a project commonly adds and one whose last line has no newline,
+# checks that the custom file's SetupMutex reaches [Setup], and checks that a line between the
+# include and trellis's [Setup], as trellis 0.19.2 wrote, fails the [Code]-last build.
 set -euo pipefail
 project=$1 target=$2
 here=$(cd "$(dirname "$0")" && pwd)
@@ -91,7 +92,29 @@ compile() {
     "/DStaging=$(cygpath -w "$RUNNER_TEMP/staging")" "/O$(cygpath -w "$work/$1")" \
     "$(cygpath -w release/installer.iss)" > "$work/$1.log" 2>&1
 }
+# Prints release/installer.iss preprocessed, as compile would build it. Its readers take all of it,
+# without grep --quiet, so tr isn't killed by SIGPIPE, which pipefail would report as a failure.
+preprocess() {
+  MSYS_NO_PATHCONV=1 "$ISCC" -e "/DTarget=$target" /DAppVersion=0.1.0 \
+    "/DStaging=$(cygpath -w "$RUNNER_TEMP/staging")" "$(cygpath -w release/installer.iss)" | tr -d '\r'
+}
 cp release/installer-custom.iss "$work/installer-custom.iss"
+preprocess | grep --line-regexp 'SetupMutex=DemoBinary.Setup' > /dev/null \
+  || fail "the custom file's SetupMutex doesn't reach [Setup]"
+git checkout --quiet -- release/installer-custom.iss
+if ! compile default; then
+  cat "$work/default.log" >&2
+  fail "the installer doesn't compile with the custom file trellis generates"
+fi
+preprocess | grep --line-regexp 'CloseApplications=yes' > /dev/null \
+  || fail "the installer doesn't default CloseApplications to yes"
+echo "the installer compiles with the custom file trellis generates"
+printf '[Code]\nfunction Demo: Boolean;\nbegin\n  Result := True;\nend;' > release/installer-custom.iss
+if ! compile no-final-newline; then
+  cat "$work/no-final-newline.log" >&2
+  fail "the installer doesn't compile with a custom file whose last line has no newline"
+fi
+echo "the installer compiles with a custom file whose last line has no newline"
 while IFS='|' read -r section entry; do
   printf '; Ends in [%s].\n\n[%s]\n%b\n' "$section" "$section" "$entry" > release/installer-custom.iss
   if ! compile "section-$section"; then
@@ -112,13 +135,18 @@ SECTIONS
 # A comment line between the include and [Setup], as trellis 0.19.2 wrote, lands in the custom
 # file's [Code], so the [Code]-last build must fail with it.
 cp release/installer.iss "$work/installer.iss"
+include=$(grep --line-number --max-count 1 '^#include "installer-custom.iss"$' release/installer.iss | cut -d: -f1)
 sed -i 's/^#include "installer-custom.iss"$/&\n; A comment after the include./' release/installer.iss
 grep --quiet '^; A comment after the include\.$' release/installer.iss || fail "found no include to put a comment after"
 cp "$work/installer-custom.iss" release/installer-custom.iss
 if compile comment-after-include; then
   fail "the installer compiled with a comment between the include and [Setup] and [Code] last"
 fi
-grep Error "$work/comment-after-include.log" || true
+# Inno Setup reports an error in an included file at the include's line, so another failure,
+# such as a missing file in [Setup], doesn't pass for this one.
+grep --after-context 1 'Error on line' "$work/comment-after-include.log" || true
+grep --quiet --extended-regexp "Error on line ($include|$((include + 1))) in .*installer\.iss" \
+  "$work/comment-after-include.log" || fail "the [Code]-last build failed, but not at the include"
 echo "a comment between the include and [Setup] fails the [Code]-last build, as it should"
 cp "$work/installer.iss" release/installer.iss
 # Inno Setup 6 builds the same version from the same script, for the upgrade from a project's

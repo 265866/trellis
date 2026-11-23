@@ -5,7 +5,8 @@
 ; with a #define: CloseApplications and SetupMutex. The release build compiles it
 ; with Inno Setup for each target the entry names:
 ;   ISCC "/DTarget=<target triple>" "/DAppVersion=<version>" "/DStaging=<folder>" "/O<folder>"
-;     release\installer.iss
+;     "release\installer.iss"
+; In Git Bash, set MSYS_NO_PATHCONV=1 first, or it rewrites the / options as paths.
 ; Staging holds the files release/package.sh staged to install. docs/maintaining.md says what it
 ; gets.
 

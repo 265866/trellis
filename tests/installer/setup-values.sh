@@ -12,6 +12,9 @@
 #   diff <(setup-values.sh old.iss "/DAppVersion=1.0.0" ...) \
 #     <(setup-values.sh release/installer.iss "/DTarget=x86_64-pc-windows-msvc" "/DAppVersion=1.0.0" ...)
 #
+# Sorting hides the order of entries, which matters in [Run], [UninstallRun] and [Files]: they run
+# or install in order, so compare those sections' order by eye.
+#
 # `ISCC -e` only preprocesses: it doesn't compile the script, so it doesn't check that [Code]
 # parses or that the files and icon it names exist. The comparison can't stand in for a build;
 # compile the installer, as the release build does, to know it builds.
