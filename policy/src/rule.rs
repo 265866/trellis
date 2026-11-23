@@ -41,12 +41,14 @@ pub enum Rule {
     /// No member's `[dependencies]` or `[dev-dependencies]` gives a path dependency on another
     /// member a `version`, which release-plz would rewrite beside the root's.
     InternalDependencyVersions,
-    /// The `Documentation` section of the root `README.md` links every page directly under
-    /// `docs/`, and a page in the directory above links each page in a subdirectory.
+    /// The `Documentation` section of the root `README.md`, or of `CONTRIBUTING.md`, links every
+    /// page directly under `docs/`, and a page in the directory above links each page in a
+    /// subdirectory.
     DocsIndex,
     /// The docs files `docs_files` lists exist, the root `README.md` has one title, the
-    /// sections `readme_sections` lists and an index for its `Documentation` section, and every
-    /// page in `docs/` opens with its title and a paragraph.
+    /// sections `readme_sections` lists and an index for its `Documentation` section, a
+    /// `Documentation` section in `CONTRIBUTING.md` is an index too, and every page in `docs/`
+    /// opens with its title and a paragraph.
     DocsLayout,
     /// `release-plz.toml` exists, its main package's entry takes every other member into its
     /// changelog, and release-plz can write no changelog to a file that is code.

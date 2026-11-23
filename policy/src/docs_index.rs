@@ -22,10 +22,11 @@ pub(crate) const README: &str = "README.md";
 /// The file that may also link the docs, for pages only contributors need, relative to the root.
 pub(crate) const CONTRIBUTING: &str = "CONTRIBUTING.md";
 
-/// The directory whose pages the readme links, relative to the root, without a trailing `/`.
+/// The directory whose pages the indexes link, relative to the root, without a trailing `/`.
 pub(crate) const DOCS: &str = "docs";
 
-/// The title of the readme's level-2 section that indexes the docs.
+/// The title of the level-2 section of the readme, or of `CONTRIBUTING.md`, that indexes the
+/// docs.
 pub(crate) const INDEX: &str = "Documentation";
 
 /// The byte order mark, which the checks report and then read past.
@@ -48,8 +49,8 @@ pub(crate) const BYTE_ORDER_MARK: char = '\u{feff}';
 ///
 /// # Errors
 ///
-/// Fails if the repository's files can't be listed, or `README.md` or a page exists but can't be
-/// read.
+/// Fails if the repository's files can't be listed, or `README.md`, `CONTRIBUTING.md` or a page
+/// exists but can't be read.
 pub fn check(workspace: &Workspace) -> Result<Vec<Violation>, PolicyError> {
     let files = repository_files::list(workspace.root())?;
     let pages: Vec<&str> = files
@@ -61,12 +62,14 @@ pub fn check(workspace: &Workspace) -> Result<Vec<Violation>, PolicyError> {
         return Ok(Vec::new());
     }
     let readme = read_readme(workspace.root())?;
-    let mut index = readme.as_deref().and_then(index_targets);
-    if let Some(contributing) = read_root_file(workspace.root(), CONTRIBUTING)?
-        && let Some(targets) = index_targets(&contributing)
-    {
-        index.get_or_insert_with(BTreeSet::new).extend(targets);
-    }
+    let index = readme.as_deref().and_then(index_targets);
+    let contributors_index = if files.iter().any(|file| file == CONTRIBUTING) {
+        read_root_file(workspace.root(), CONTRIBUTING)?
+            .as_deref()
+            .and_then(index_targets)
+    } else {
+        None
+    };
     let mut page_links: BTreeMap<&str, BTreeSet<String>> = BTreeMap::new();
     for page in &pages {
         let text = read_page(workspace.root(), page)?;
@@ -77,6 +80,12 @@ pub fn check(workspace: &Workspace) -> Result<Vec<Violation>, PolicyError> {
     for page in &pages {
         let parent = directory(directory(page));
         if directory(page) == DOCS {
+            let linked_by_contributors = contributors_index
+                .as_ref()
+                .is_some_and(|linked| linked.contains(*page));
+            if linked_by_contributors {
+                continue;
+            }
             if let Some(violation) = unindexed(page, readme.as_deref(), index.as_ref()) {
                 violations.push(violation);
             }
@@ -101,9 +110,9 @@ pub fn check(workspace: &Workspace) -> Result<Vec<Violation>, PolicyError> {
     Ok(violations)
 }
 
-/// The violation of `page`, directly under `docs/`, if no index links it. `readme` is the
-/// readme, if there is one, and `index` the targets the readme's and `CONTRIBUTING.md`'s indexes
-/// link, if either has one.
+/// The violation of `page`, directly under `docs/`, if the readme's index doesn't link it.
+/// `readme` is the readme, if there is one, and `index` the targets its index links, if it has
+/// one. The caller has already checked `CONTRIBUTING.md`'s index.
 fn unindexed(
     page: &str,
     readme: Option<&str>,

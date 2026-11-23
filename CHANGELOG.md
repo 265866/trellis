@@ -16,6 +16,13 @@ has the versioning rule.
   reads. `just policy` holds that section to the same entry form. Every page is still indexed
   from one of the two.
 
+### Action required in projects
+
+- If your `CONTRIBUTING.md` has a `## Documentation` section of your own, `just policy` now holds
+  it to the index form: one-line entries such as `- [Title](path): what the reader does with it.`,
+  and nothing else, with no HTML left open around it. A generated `CONTRIBUTING.md` has no such
+  section. Rewrite yours as entries, or rename it.
+
 ### Fixed
 
 - `just rule-changes` says "1 rule file" and "1 code file", not "1 rule files".

@@ -3935,3 +3935,80 @@ fn contributings_index_is_held_to_the_entry_form() {
         "[docs_layout] CONTRIBUTING.md: The `## Documentation` section holds `Some text.`",
     );
 }
+
+#[test]
+fn a_readme_without_an_index_is_named_when_only_contributing_has_one() {
+    let project = Project::new();
+    project.write(
+        "README.md",
+        "# Demo\n\nThe demo.\n\n## Install\n\nRun it.\n",
+    );
+    project.write(
+        "CONTRIBUTING.md",
+        "# Contributing\n\nHow to send a change.\n\n## Documentation\n\n- [Install](docs/install.md): \
+         how to install it.\n",
+    );
+    project.write("docs/extra.md", "# Extra\n\nAn extra page.\n");
+    project.check().assert_reports(
+        1,
+        "[docs_index] README.md: `README.md` has no `## Documentation` section to link the page \
+         `docs/extra.md`",
+    );
+}
+
+#[test]
+fn a_link_in_a_later_section_of_contributing_doesnt_count() {
+    let project = Project::new();
+    project.write("docs/extra.md", "# Extra\n\nAn extra page.\n");
+    project.write(
+        "CONTRIBUTING.md",
+        "# Contributing\n\nHow to send a change.\n\n## Documentation\n\n- [Install](docs/install.md): \
+         how to install it.\n\n## Code\n\nSee [extra](docs/extra.md).\n",
+    );
+    project
+        .check()
+        .assert_reports(1, "doesn't link the page `docs/extra.md`");
+}
+
+#[test]
+fn a_contributing_index_hidden_in_html_fails() {
+    let project = Project::new();
+    project.write(
+        "CONTRIBUTING.md",
+        "# Contributing\n\nHow to send a change.\n\n<details>\n\n## Documentation\n\n\
+         - [Style](docs/style.md): the style rules.\n\n## Next\n\nMore.\n\n</details>\n",
+    );
+    project
+        .check()
+        .assert_reports(1, "[docs_layout] CONTRIBUTING.md: ");
+}
+
+#[test]
+fn a_byte_order_mark_in_a_contributing_with_an_index_is_reported() {
+    let project = Project::new();
+    project.write(
+        "CONTRIBUTING.md",
+        "\u{feff}# Contributing\n\nHow to send a change.\n\n## Documentation\n\n\
+         - [Style](docs/style.md): the style rules.\n",
+    );
+    project.check().assert_reports(
+        1,
+        "[docs_layout] CONTRIBUTING.md: It starts with a byte order mark.",
+    );
+}
+
+#[test]
+fn an_ignored_contributing_indexes_nothing() {
+    let project = Project::new();
+    project.git(&["init", "--quiet"]);
+    project.write(".gitignore", "CONTRIBUTING.md\n");
+    project.write("docs/extra.md", "# Extra\n\nAn extra page.\n");
+    project.write(
+        "CONTRIBUTING.md",
+        "# Contributing\n\nHow to send a change.\n\n## Documentation\n\n- [Extra](docs/extra.md): \
+         what a contributor does with it.\n",
+    );
+    project
+        .check()
+        .assert_reports(1, "doesn't link the page `docs/extra.md`");
+}

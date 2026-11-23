@@ -407,9 +407,9 @@ text in code, in HTML or in an HTML comment is neither a heading nor a link.
 - Every page, at any depth under `docs/`, starts with a `# Title` line, after any comments,
   then a blank line and a paragraph with a letter in it outside images. Pages use the `.md`
   extension, and neither the README nor a page starts with a byte order mark.
-- No HTML in the README or a page leaves a comment, a tag or a quoted attribute value open, and
-  every HTML element opened in a section closes in the same section, so nothing that follows is
-  hidden or rendered inside it. Comments may come before the title and in the index.
+- No HTML in the README, a page or a `CONTRIBUTING.md` with a `## Documentation` index leaves a
+  comment, a tag or a quoted attribute value open, and every HTML element opened in a section
+  closes in the same section, so nothing that follows is hidden or rendered inside it. Comments may come before the title and in the index.
 
 ### Docs review checklist
 

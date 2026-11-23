@@ -53,7 +53,8 @@ const UNCLOSED_HTML: &str = "opens HTML that doesn't close: a comment, a tag or 
 ///   or escapes, then `: ` and a description whose rendered text has a letter in it, on a line
 ///   that ends in `.`;
 /// - a `## Documentation` section in `CONTRIBUTING.md`, which may index the pages only
-///   contributors need, holds an index written the same way;
+///   contributors need, holds an index written the same way, and a `CONTRIBUTING.md` with one is
+///   held to the HTML and byte order mark checks below, like the readme;
 /// - every page, a `.md` file at any depth under `docs/`, starts with a `#` line with text in
 ///   it, after any comments, then a blank line and a paragraph with words in it outside images;
 /// - neither the readme nor a page has an HTML block with a comment, a tag or a quoted
@@ -72,7 +73,8 @@ const UNCLOSED_HTML: &str = "opens HTML that doesn't close: a comment, a tag or 
 ///
 /// # Errors
 ///
-/// Fails if the repository's files can't be listed, or the readme or a page can't be read.
+/// Fails if the repository's files can't be listed, or the readme, `CONTRIBUTING.md` or a page
+/// can't be read.
 pub fn check(workspace: &Workspace) -> Result<Vec<Violation>, PolicyError> {
     let config = workspace.config();
     let docs_files = config.docs_files();
@@ -126,11 +128,17 @@ pub fn check(workspace: &Workspace) -> Result<Vec<Violation>, PolicyError> {
         }
         None => {}
     }
-    if let Some(text) = docs_index::read_root_file(workspace.root(), CONTRIBUTING)? {
+    if files.iter().any(|file| file == CONTRIBUTING)
+        && let Some(text) = docs_index::read_root_file(workspace.root(), CONTRIBUTING)?
+    {
         let arena = Arena::new();
         let contributing = Markdown::parse(&arena, text.trim_start_matches(BYTE_ORDER_MARK));
         if let Some(section) = contributing.section(INDEX) {
-            for problem in index_problems(&contributing, &section) {
+            violations.extend(byte_order_mark(CONTRIBUTING, &text));
+            for problem in html_problems(&contributing)
+                .into_iter()
+                .chain(index_problems(&contributing, &section))
+            {
                 violations.push(Violation::new(CONTRIBUTING.to_owned(), problem));
             }
         }
