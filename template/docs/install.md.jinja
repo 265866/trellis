@@ -106,10 +106,6 @@ Paste the token, press Enter, then press Ctrl-D. Podman takes the same arguments
 
 ## Run the image
 
-This runs the image and nothing else: no data folder, published ports, devices or settings. It is
-a reference for the image's name and tags, not a working setup; the [README](../README.md)'s
-Quick start says what running {{ project_name }} needs.
-
 ```sh
 docker run -d --name {{ project_name }} --restart unless-stopped \
   ghcr.io/{{ github_owner | lower }}/{{ project_name }}:<minor>
@@ -135,4 +131,8 @@ docker rm -f {{ project_name }}
 ```
 
 Then run the image again as above. To roll back, run the previous version's tag, such as `v1.4.1`.
+
+The commands on this page show the image's name and tags. They run it with no data folder,
+published ports, devices or settings, so they're a reference rather than a working setup; the
+[README](../README.md)'s Quick start says what running {{ project_name }} needs.
 {%- endif %}
