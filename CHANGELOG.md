@@ -15,9 +15,47 @@ has the versioning rule.
   and nothing else. With that section, the whole file is also held to the README's checks for HTML
   left open and for a byte order mark. A generated `CONTRIBUTING.md` has no such section. Rewrite
   yours as entries, or rename it.
+- **Pass `interfaces` when its default is wrong.** The new `interfaces` answer says what a person
+  who uses the project sees, the primary one first: `web` (pages in a browser), `desktop` (a
+  window), `terminal` (a full-screen terminal app), `cli` (commands that print and exit),
+  `service` (no UI: it serves or produces) or `library`. trellis writes it to `interfaces` in
+  `[workspace.metadata.policy]`. An update takes the default: `[library]` for a library, `[web]`
+  with a web UI, `[service]` for a service and `[cli]` for any other binary. The default is wrong
+  for a program whose window or full-screen terminal screens are the product, which gets `[cli]`,
+  and for a web app with a command-line tool or desktop app beside it, which gets `[web]` alone.
+  Run the update with the right list then, such as
+  `uvx copier update --defaults --data 'interfaces=[desktop]'`, or
+  `--data 'interfaces=[web, cli]'`.
+- **If you set `readme_sections` to anything other than the new default, keep your line when
+  `Cargo.toml` conflicts.** The default is now `["Quick start", "Documentation", "License"]` for
+  every kind, without `License` for a library without a license. A project that set exactly that
+  line merges cleanly; one that set anything else gets a one-line conflict in `Cargo.toml`.
 
 ### Changed
 
+- **trellis writes `README.md` once, and an update never touches it.** A new project's README is
+  an outline: the title, badges and description, then a `**To write:**` prompt for the opening,
+  the features and the picture or sample, and for `## Quick start`, with `## Documentation` and
+  `## License` filled in. The prompts follow the `interfaces` answer: a screenshot of a web page
+  or a desktop window, an SVG of a terminal screen, or a sample of a command's output, a service's
+  output or a library's code, and the quick start's points for that kind of program. The outline
+  references no image. The index lists the user's pages; `Code style` and `Maintain` move to a new
+  `## Documentation` section in `CONTRIBUTING.md`. An existing project's README stays as it is,
+  and may drop its own `Code style` and `Maintain` entries.
+- A new project with a `web`, `desktop` or `terminal` interface also gets `docs/usage.md`, a
+  screenshots page outline that an update never touches either; its `CONTRIBUTING.md` gets the
+  Screenshots rules: where images live, invented data only, dark mode, a web page at a desktop and
+  a phone width, a terminal screen as an SVG, PNG files without metadata, where capture code may
+  live, and a privacy check before an image is committed. Its pull request template asks whether
+  the privacy check ran on changed images.
+- `docs/install.md` no longer claims to be how the project runs: it points to the README's Quick
+  start. A service's is titled "Container image": the image's name, tags and digest, and a plain
+  `docker run` to start from.
+- `docs/style.md` replaces "a short README" with what a README opens with, and in what order, and
+  adds what the checks catch first in test-only code. `docs/maintaining.md` lists `README.md`, and
+  `docs/usage.md` where a project has one, among the files an update never touches, says to edit
+  the README by hand when an answer changes what it says, and says a release pull request holding
+  only test-only changes can wait for a change that ships.
 - A page directly under `docs/` may be indexed from a `## Documentation` section in
   `CONTRIBUTING.md`, written like the README's, instead of the README's: a page only contributors
   need, such as the code style or the maintaining guide, needn't sit in the index a stranger
