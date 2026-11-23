@@ -2,7 +2,8 @@
 # Every check CI runs on a pull request is a recipe here, so `just ci` before pushing runs the same
 # checks. The exceptions are the pull request title, which only exists on GitHub, and the release
 # builds for each platform and the container image, which CI runs on their own runners. CI runs
-# `rule-changes` against the pull request's base, with the checker the base branch pins.
+# `rule-changes` against the pull request's base, with the checker the base branch pins;
+# `just ci <base>` does the same locally.
 # On Windows, recipes run in Windows PowerShell, which every Windows install has. The owner's
 # recipes, in the `owner` group, need admin rights on the repository or the release token, so
 # `just ci` leaves them out.
@@ -36,9 +37,12 @@ export CLIPPY_CONF_DIR := justfile_directory()
 default:
     @just --list
 
+# On a branch stacked on another pull request, pass the branch it targets as the argument, such as
+# `just ci origin/my-rules`, for `rule-changes` to compare against it.
+#
 # Runs every check CI runs.
 {%- endraw %}
-ci: fmt-check typos actionlint zizmor shear deny links policy lint dylint test docs build-release{{ ' notices' if kind != 'library' else '' }}{{ ' web-check web-build' if web_ui else '' }}{{ ' package' if kind == 'library' and publish_crate else '' }} rule-changes
+ci base="origin/main": fmt-check typos actionlint zizmor shear deny links policy lint dylint test docs build-release{{ ' notices' if kind != 'library' else '' }}{{ ' web-check web-build' if web_ui else '' }}{{ ' package' if kind == 'library' and publish_crate else '' }} (rule-changes base)
 {%- raw %}
 
 # Installs the pinned toolchains: stable, the nightly rustfmt, and the lints' nightly.
