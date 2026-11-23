@@ -875,6 +875,14 @@ template kind recipes="ci" publish="false" web="false" target="" installer="fals
         just "$recipe"
       fi
     done
+    if [ "{{ kind }}" = binary ] && [ "{{ installer }}" != true ]; then
+      # The Archive step's lines that write the release archive's README, with the bash and tools
+      # this runner gives the release build, and on macOS with its own bash 3.2 too.
+      "$trellis/tests/release-build/readme-note.sh" "$project"
+      if [ "$(uname -s)" = Darwin ] && [ "$(command -v bash)" != /bin/bash ]; then
+        PATH="/bin:$PATH" "$trellis/tests/release-build/readme-note.sh" "$project"
+      fi
+    fi
     if [ "{{ installer }}" = true ]; then
       "$trellis/tests/installer/run.sh" "$project" "{{ target }}"
     fi

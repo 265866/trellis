@@ -16,6 +16,22 @@ lines=$(sed -n '/^note=/,/^} > "dist\/\$stem\/README.md"$/p' <<< "$script")
   || fail "found no lines from note= to the README's write in the Archive step"
 dir=$(mktemp -d)
 trap 'rm -rf "$dir"' EXIT
+# The tools the step runs, as this system resolves them. macOS's are BSD's, without `--version`.
+echo "bash: $(command -v bash), $(bash -c 'echo "$BASH_VERSION"')"
+for tool in head sed tail wc od; do
+  echo "$tool: $(command -v "$tool"), $({ "$tool" --version 2> /dev/null || echo "no --version"; } | head -n 1)"
+done
+# Runs the step's lines in $dir/case with the further variables, and fails after 20 seconds.
+run() {
+  (cd "$dir/case" && exec env version=1.2.3 stem=s GITHUB_SERVER_URL=https://github.com \
+    GITHUB_REPOSITORY=owner/repo "$@" bash -euo pipefail -c "$lines") &
+  local step=$! status=0
+  (sleep 20 && kill "$step" 2> /dev/null) &
+  local watchdog=$!
+  wait "$step" || status=$?
+  kill "$watchdog" 2> /dev/null || true
+  return "$status"
+}
 note="> This file's links and images are relative to https://github.com/owner/repo/tree/v1.2.3."
 count=0
 # Each case is a name, then the README and the output it must give as printf formats, in which %s
@@ -27,9 +43,8 @@ while IFS='|' read -r name readme expected; do
   printf "$readme" > "$dir/case/README.md"
   # shellcheck disable=SC2059 # The formats come from the table below.
   printf "$expected" "$note" > "$dir/expected.md"
-  (cd "$dir/case" && version=1.2.3 stem=s GITHUB_SERVER_URL=https://github.com GITHUB_REPOSITORY=owner/repo \
-    bash -euo pipefail -c "$lines") || fail "the step's lines failed on $name"
-  if ! cmp --quiet "$dir/expected.md" "$dir/case/dist/s/README.md"; then
+  run || fail "the step's lines failed or took over 20 seconds on $name"
+  if ! cmp -s "$dir/expected.md" "$dir/case/dist/s/README.md"; then
     echo "expected:" >&2
     od -c "$dir/expected.md" >&2
     echo "written:" >&2
@@ -48,7 +63,7 @@ while IFS='|' read -r name readme expected; do
     }' "$dir/case/dist/s/README.md" > "$dir/restored.md"
   LC_ALL=C sed "1s/^$bom//" "$dir/case/README.md" > "$dir/original.md"
   if [ -s "$dir/original.md" ] && [ -n "$(tail -c 1 "$dir/original.md")" ]; then echo >> "$dir/original.md"; fi
-  cmp --quiet "$dir/original.md" "$dir/restored.md" \
+  cmp -s "$dir/original.md" "$dir/restored.md" \
     || fail "taking the note out of what the step wrote for $name doesn't give back the README"
   count=$((count + 1))
 done << 'EOF'
@@ -75,9 +90,7 @@ while IFS='|' read -r name at; do
     title) { printf '# '; long; printf '\n\nText\n'; } ;;
     *) { printf '# T\n'; long; printf '\n'; } ;;
   esac > "$dir/case/README.md"
-  (cd "$dir/case" && version=1.2.3 stem=s GITHUB_SERVER_URL=https://github.com \
-    GITHUB_REPOSITORY=owner/repo LC_ALL=C.UTF-8 timeout 20 bash -euo pipefail -c "$lines") \
-    || fail "the step's lines failed or took over 20 seconds on a 4 MB $name"
+  run LC_ALL=C.UTF-8 || fail "the step's lines failed or took over 20 seconds on a 4 MB $name"
   [ "$(sed -n "${at}p" "$dir/case/dist/s/README.md")" = "$note" ] \
     || fail "the step put the note elsewhere with a 4 MB $name"
 done << 'EOF'
