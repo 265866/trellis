@@ -1029,7 +1029,7 @@ fn a_proc_macro_lands_as_a_rule_change_then_a_code_change_that_pass() {
         .run(&["rule-changes", "generated", "--head", "HEAD"])
         .assert_reports(
             0,
-            "Rule changes stand alone: 1 rule files and 0 code files changed",
+            "Rule changes stand alone: 1 rule file and 0 code files changed",
         );
 
     project.write(
@@ -1048,6 +1048,20 @@ fn a_proc_macro_lands_as_a_rule_change_then_a_code_change_that_pass() {
         .assert_reports(
             0,
             "Rule changes stand alone: 0 rule files and 2 code files changed",
+        );
+
+    project.git(&["branch", "derived"]);
+    project.write(
+        "crates/demo_core/src/lib.rs",
+        "//! The demo's core.\n\n/// A point on a plane.\n#[derive(serde_derive::Serialize)]\npub struct Point;\n",
+    );
+    project.commit("document the point");
+    project.check().assert_passes();
+    project
+        .run(&["rule-changes", "derived", "--head", "HEAD"])
+        .assert_reports(
+            0,
+            "Rule changes stand alone: 0 rule files and 1 code file changed",
         );
 }
 

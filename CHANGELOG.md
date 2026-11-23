@@ -6,6 +6,16 @@ part lists what a project's owner must do around the update: a rule that can fla
 a setting to change, or a step to do by hand. [CONTRIBUTING.md](CONTRIBUTING.md#release-trellis)
 has the versioning rule.
 
+## Unreleased
+
+### Fixed
+
+- `just rule-changes` says "1 rule file" and "1 code file", not "1 rule files".
+- With Windows among its platforms, a binary's `docs/maintaining.md` no longer gives the
+  windows-2025 runners' Inno Setup `iscc` as the Windows program `release/package.sh` might call.
+  With an `installer` answer the release build compiles the installer with trellis's own pinned
+  Inno Setup, as the "Windows installer" part says.
+
 ## v0.19.3
 
 ### Fixed

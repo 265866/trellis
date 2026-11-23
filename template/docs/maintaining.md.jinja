@@ -389,9 +389,8 @@ An update leaves them alone.
   build script reads a relative path from its crate's directory.
 {%- if 'windows' in platforms %}
 
-  Git Bash turns an argument that starts with `/` into a path, so call a Windows program such as
-  Inno Setup's `iscc`, which the windows-2025 runners have, with `MSYS_NO_PATHCONV=1`, and give it
-  paths through `cygpath -w`.
+  Git Bash turns an argument that starts with `/` into a path, so call a Windows program with
+  `MSYS_NO_PATHCONV=1`, and give it paths through `cygpath -w`.
 {%- endif %}
 
   The script is a rule, like the workflows, and `just actionlint` shellchecks it. Write it, then
