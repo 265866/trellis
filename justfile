@@ -1080,16 +1080,13 @@ template kind recipes="ci" publish="false" web="false" target="" installer="fals
       if [ "{{ web }}" != true ] && grep --quiet '^web/' "$out/archive.txt"; then
         echo "error: the release archive of a binary without a web UI has web/" >&2; exit 1
       fi
-      # The archive's README is the repository's, with a line under its title, which is its first
-      # line, and a blank line after that, saying the links work at the tag of the repository the
-      # answers name.
+      # The archive's README is a line saying the links work at the tag of the repository the
+      # answers name, a blank line, and the repository's README.
       archive=$(cat "$out/dist.txt")
       tar --extract --gzip --to-stdout --file "$archive" "$(basename "$archive" .tar.gz)/README.md" > "$out/archive-readme.md"
       note="> This file's links and images are relative to https://github.com/265866/demo-binary/tree/v0.1.0."
-      if [ "$(sed -n 1p README.md)" != '# demo-binary' ] || [ -n "$(sed -n 2p README.md)" ] \
-        || [ "$(sed -n 3p "$out/archive-readme.md")" != "$note" ] || [ -n "$(sed -n 4p "$out/archive-readme.md")" ] \
-        || ! sed '3,4d' "$out/archive-readme.md" | cmp --quiet - README.md; then
-        echo "error: the release archive's README.md isn't the repository's with this line and a blank line under its title: $note" >&2
+      if ! { printf '%s\n\n' "$note"; cat README.md; } | cmp --quiet - "$out/archive-readme.md"; then
+        echo "error: the release archive's README.md isn't this line, a blank line and the repository's README: $note" >&2
         diff README.md "$out/archive-readme.md" | head -n 20 >&2
         exit 1
       fi

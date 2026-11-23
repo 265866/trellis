@@ -46,9 +46,8 @@ installed. They don't run on Alpine or another musl distribution.
 {%- if web_ui and not release.files %} The archive's `web` directory holds the web UI. Keep it beside the program, or
    set `{{ crate_name | upper }}_WEB_DIR` to where you keep it.
 {%- endif %}
-{%- if not release.files %} The archive's `README.md` has a line under its
-   title, or at the top when it doesn't open with a `# ` title, that links to the repository at the
-   release's tag, where its links and images work.
+{%- if not release.files %} The archive's `README.md` opens with a line that
+   links to the repository at the release's tag, where its links and images work.
 {%- endif %}
 
 To update, install the new release{{ ' the same way' if not release.files else ', unless the program updates itself' }}.
