@@ -294,15 +294,15 @@ jobs:
           # The README's relative links and images lead nowhere in the archive, so its copy says
           # where they work: under its title, or at the top when it doesn't open with a `# ` title.
           # Taking out the line and the blank line beside it gives back the README, line endings
-          # and a leading byte order mark included. `just release-extras` runs these lines.
+          # and a leading byte order mark included, with a line break after a title that had none.
           note="> This file's links and images are relative to $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/tree/v$version."
           bom=$'\xef\xbb\xbf'
           first=$(head -n 1 README.md)
-          second=$(sed -n 2p README.md)
+          second=$(LC_ALL=C sed -n 2p README.md)
           eol=$'\n'
           if [[ $first == *$'\r' ]]; then eol=$'\r\n'; fi
           {
-            if [[ ${first#"$bom"} == '# '* ]]; then
+            if [[ $first == '# '* || $first == "$bom# "* ]]; then
               printf '%s\n' "$first"
               if (($(tail -n +2 README.md | wc -c) == 0)); then
                 printf '%s%s%s' "$eol" "$note" "$eol"

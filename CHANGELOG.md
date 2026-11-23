@@ -16,7 +16,8 @@ has the versioning rule.
   or at the top when the README doesn't open with a `# ` title. It changes only those first lines
   of `README.md` in the archive of a binary without a `release` answer's `files`; nothing else in
   a release changes, and the repository's `README.md` doesn't. Every such binary's update changes
-  `.github/workflows/build-release.yml`, which writes the line.
+  `.github/workflows/build-release.yml`, which writes the line, and `docs/install.md`, which says
+  so.
 - A service's `docs/stability.md` calls its links to `docs/install.md` "Container image", the
   page's title since v0.20.0, not "Install".
 
