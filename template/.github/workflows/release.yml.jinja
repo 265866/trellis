@@ -91,6 +91,20 @@ jobs:
       # `pr_branch_prefix`, `release-plz-`, and `release_always = false`. Changing either there is
       # a rule change that must change this step, and CI's check of the release pull request, with
       # it.
+      #
+      # GitHub's list of the pull requests a commit belongs to can lag just after the merge, and
+      # release-plz asks it again seconds later. So the step also reads the pull request's number
+      # from the commit's subject, which ends in ` (#N)` because the repository only squash-merges
+      # with the pull request's title, as `just setup-github` sets it, and asks GitHub for that
+      # pull request's branch; if it can't, the step fails rather than skip the check.
+{%- if kind == 'library' %} A subject
+      # without a number is a push straight to `main`, which the ruleset from `just setup-github`
+      # forbids, so the check runs then too: release-plz publishes the crate in its own step, and no
+      # later step can stop it.
+{%- else %} A push it
+      # misses anyway, such as one straight to `main`, is caught after release-plz: "Check the docs
+      # as a release does, after release-plz released" runs before the build and publish jobs.
+{%- endif %}
 {%- raw %}
       - name: Find whether this push releases
         id: releases
@@ -98,9 +112,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           branches=$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls" --jq '.[].head.ref')
+          number=$(git log -1 --format=%s | sed -nE 's/.* \(#([0-9]+)\)$/\1/p')
+          if [ -n "$number" ]; then
+            branch=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$number" --jq .head.ref)
+            branches="$branches"$'\n'"$branch"
+          fi
 {%- endraw %}
 {%- if kind == 'library' %}
-          if grep --quiet '^release-plz-' <<< "$branches"; then
+          if grep --quiet '^release-plz-' <<< "$branches" || [ -z "$number" ]; then
 {%- else %}
           if grep --quiet '^release-plz-' <<< "$branches" || [ -n "$(git tag --points-at HEAD --list 'v*')" ]; then
 {%- endif %}
@@ -186,6 +205,21 @@ jobs:
             fi
           fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
+{%- raw %}
+
+      # The check before release-plz runs only on a push it knows releases. If release-plz released
+      # anyway, or a tag is left to publish, the check runs now, and if it fails the job fails, so
+      # no job that builds or publishes starts. A tag release-plz made then waits for a re-run,
+      # whose check before release-plz runs for a `v*` tag on the commit.
+      - uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2.90.5
+        if: steps.releases.outputs.releases != 'true' && (steps.tag.outputs.tag != '' || (steps.release-plz.outputs.releases != '' && steps.release-plz.outputs.releases != '[]'))
+        with:
+          tool: just@1.59.0
+
+      - name: Check the docs as a release does, after release-plz released
+        if: steps.releases.outputs.releases != 'true' && (steps.tag.outputs.tag != '' || (steps.release-plz.outputs.releases != '' && steps.release-plz.outputs.releases != '[]'))
+        run: just policy-release
+{%- endraw %}
 {%- endif %}
 {%- if kind == 'binary' %}
 {%- raw %}

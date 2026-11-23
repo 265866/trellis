@@ -20,6 +20,21 @@ has the versioning rule.
   off the program itself, not only the capture browser: a network namespace with only loopback,
   or a recorded list of the connections it opens.
 
+### Fixed
+
+- **A release could publish without its docs check.** This changes `.github/workflows/release.yml`
+  in every project, so every project's update touches it. The release job decided whether a push
+  releases from GitHub's list of the pull requests a commit belongs to, which can still be empty
+  just after the merge; the check was then skipped, and release-plz, asking seconds later, could
+  release anyway. The job now also reads the release pull request's number from the end of the
+  squash-merged commit's subject, ` (#12)`, and fails if GitHub can't say which branch that pull
+  request came from. A binary or service also runs `just policy-release` after release-plz
+  whenever release-plz released or a tag is left to publish and the check hadn't run, so nothing
+  is built or published until it passes. A library runs the check on a push straight to `main`,
+  whose subject has no number, since release-plz publishes its crate in the same step.
+  `docs/maintaining.md` says the release check depends on squash merges titled from the pull
+  request, which `just setup-github` sets.
+
 ## v0.20.0
 
 ### Action required in projects

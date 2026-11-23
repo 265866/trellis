@@ -13,7 +13,8 @@ import sys
 
 import yaml
 
-STRICT = "just policy-release"
+STRICT_STEP = "Check the docs as a release does"
+AFTER_STEP = "Check the docs as a release does, after release-plz released"
 
 
 def edit(name, change):
@@ -37,8 +38,13 @@ def release_steps(document):
 
 
 def strict(steps):
-    """The step that runs the strict check."""
-    return next(step for step in steps if step.get("run") == STRICT)
+    """The step that runs the strict check, before release-plz in the release job."""
+    return next(step for step in steps if step.get("name") == STRICT_STEP)
+
+
+def after_step(steps):
+    """The step that runs the strict check after release-plz."""
+    return next(step for step in steps if step.get("name") == AFTER_STEP)
 
 
 def find_step(steps):
@@ -65,14 +71,51 @@ def drop_last_needs(document):
     last.pop("needs", None)
 
 
-def install_step(steps):
-    """The step that installs just in the release job."""
-    return next(
+def just_installs(steps):
+    """The steps that install just, in order."""
+    return [
         step
         for step in steps
         if str(step.get("uses", "")).startswith("taiki-e/install-action@")
         and "just@" in str(step.get("with", {}).get("tool", ""))
+    ]
+
+
+def install_step(steps):
+    """The step that installs just for the strict check before release-plz."""
+    return just_installs(steps)[0]
+
+
+def after_install_step(steps):
+    """The step that installs just for the strict check after release-plz."""
+    return just_installs(steps)[-1]
+
+
+def move_after_check_before_release_plz(document):
+    """Moves the check after release-plz, and its install, before the release-plz step."""
+    steps = release_steps(document)
+    moved = [after_install_step(steps), after_step(steps)]
+    for step in moved:
+        steps.remove(step)
+    publish = next(
+        index
+        for index, other in enumerate(steps)
+        if str(other.get("uses", "")).startswith("release-plz/action@")
     )
+    steps[publish:publish] = moved
+
+
+def ignore_release_failure(document):
+    """Lets the first job after the release job run even when the release job fails: the build or
+    image job of a binary or service, or a library's release-pr job."""
+    job = list(document["jobs"].values())[1]
+    job["if"] = f"always() && ({job['if']})" if "if" in job else "always()"
+
+
+def invert_after_check(document):
+    """Runs the check after release-plz only when the check before it ran."""
+    step = after_step(release_steps(document))
+    step["if"] = step["if"].replace("!= 'true'", "== 'true'", 1)
 
 
 def move_install_after_strict(document):
@@ -151,6 +194,26 @@ MUTATIONS = {
     "release-find-step-renamed": lambda document: find_step(release_steps(document)).update(
         {"name": "Find the release"}
     ),
+    "release-find-step-ignores-subject": replace_in_find(
+        "number=$(git log -1 --format=%s | sed -nE 's/.* \\(#([0-9]+)\\)$/\\1/p')", "number="
+    ),
+    "release-find-step-pull-lookup-fails-open": replace_in_find(
+        "--jq .head.ref)", "--jq .head.ref || true)"
+    ),
+    "release-find-step-other-pull": replace_in_find("pulls/$number", "pulls/1"),
+    "release-job-failure-ignored": ignore_release_failure,
+    "release-find-step-skips-direct-pushes": replace_in_find(' || [ -z "$number" ]', ""),
+    "release-after-check-removed": lambda document: release_steps(document).remove(
+        after_step(release_steps(document))
+    ),
+    "release-after-check-inverted": invert_after_check,
+    "release-after-check-continues-on-error": lambda document: after_step(
+        release_steps(document)
+    ).update({"continue-on-error": True}),
+    "release-after-check-before-release-plz": move_after_check_before_release_plz,
+    "release-after-install-removed": lambda document: release_steps(document).remove(
+        after_install_step(release_steps(document))
+    ),
 }
 
 RELEASE_PLZ_MUTATIONS = {
@@ -162,7 +225,16 @@ RELEASE_PLZ_MUTATIONS = {
     ),
 }
 
-TAG_MUTATIONS = {"release-find-step-ignores-tags"}
+TAG_MUTATIONS = {
+    "release-find-step-ignores-tags",
+    "release-after-check-removed",
+    "release-after-check-inverted",
+    "release-after-check-continues-on-error",
+    "release-after-check-before-release-plz",
+    "release-after-install-removed",
+}
+
+LIBRARY_MUTATIONS = {"release-find-step-skips-direct-pushes"}
 
 
 def reads_tag(path):
@@ -175,7 +247,11 @@ def reads_tag(path):
 
 if sys.argv[1:2] == ["--list"]:
     tagged = reads_tag(sys.argv[2])
-    names = [name for name in MUTATIONS if tagged or name not in TAG_MUTATIONS]
+    names = [
+        name
+        for name in MUTATIONS
+        if (tagged or name not in TAG_MUTATIONS) and (not tagged or name not in LIBRARY_MUTATIONS)
+    ]
     print("\n".join([*names, *RELEASE_PLZ_MUTATIONS]))
     sys.exit(0)
 project, mutation = sys.argv[1:]

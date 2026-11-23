@@ -34,8 +34,11 @@ Commit the generated project on a branch named `main` (`git init --initial-branc
    ```
 
    It allows squash merging only, with the pull request's title and description as the commit, so
-   the title becomes the commit on `main`. It creates the `release` label that release-plz puts on
-   its pull request.
+   the title becomes the commit on `main`. GitHub ends that title with the pull request's number,
+   ` (#12)`, which the release workflow reads to find the release pull request, so changing
+   `squash_merge_commit_title` from `PR_TITLE`, or allowing other merges, is a rule change that
+   must change its "Find whether this push releases" step with it. It creates the `release` label
+   that release-plz puts on its pull request.
 {%- if visibility == 'public' %}
 
    It adds the Actions policy that allows `pull_request_target` for `rule-changes.yml`; without
@@ -179,10 +182,18 @@ a change that ships joins it. To ship:
    releases as `release-plz.toml` sets it up: from a pull request whose branch starts with
    release-plz's default `pr_branch_prefix`, `release-plz-`, with `release_always = false`.
    Changing either there is a rule change that must change the condition in
-   `.github/workflows/ci.yml` and `.github/workflows/release.yml` with it. Merge no other pull
-   request until the release workflow's **{{ 'Release' if kind == 'library' else 'Tag' }}** job
-   finishes. A pull request merged before then can get no release pull request until the next
-   push to `main`.
+   `.github/workflows/ci.yml` and `.github/workflows/release.yml` with it. The workflow finds that
+   pull request from both GitHub's list of a commit's pull requests and the ` (#12)` the squash
+   merge ends the commit's subject with, since the list can lag just after a merge; a lookup that
+   fails stops the release.
+{%- if kind == 'library' %} A push without a number, straight to `main`, runs the check
+   too.
+{%- else %} If release-plz releases a push the check missed, the check runs
+   after it, before anything is built or published.
+{%- endif %}
+   Merge no other pull request until the release workflow's
+   **{{ 'Release' if kind == 'library' else 'Tag' }}** job finishes. A pull request merged before
+   then can get no release pull request until the next push to `main`.
 {%- if kind != 'library' %}
 4. If a later job fails, re-run the failed jobs. They pick up from the same tag.
 
