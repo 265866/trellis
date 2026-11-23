@@ -37,19 +37,25 @@ screenshots. The [README](../README.md)'s Quick start gets it running.
 > `[<img src="screenshots/<page>.png" width="480" alt="<page>, desktop">](screenshots/<page>.png)`
 > for the desktop and `width="160"` for the phone. Capture the desktop at a width such as 1440×900
 > and the phone at a phone width, such as 390×844 CSS pixels at 2×.
+> [Screenshots](../CONTRIBUTING.md#screenshots) in CONTRIBUTING.md says how to capture them, and
+> the privacy check each one needs before it's committed.
 {%- elif interface == 'desktop' %}
 > **To write:** the desktop app's screenshots. Start with a line that says the data is invented.
 > Then a table with one row per window or state: a bold name and what it shows, then the image
 > linked to itself, such as
 > `[<img src="screenshots/<window>.png" width="480" alt="<what it shows>">](screenshots/<window>.png)`.
 > Capture each window at its default size.
+> [Screenshots](../CONTRIBUTING.md#screenshots) in CONTRIBUTING.md says how to capture them, and
+> the privacy check each one needs before it's committed.
 {%- elif interface == 'terminal' %}
 > **To write:** the terminal app's screenshots. Start with a line that says the data is invented,
 > such as "Each screenshot is a screen of the demo mode, so every name and number in it is made
 > up." Then a table with one row per screen: a bold name and what it shows, then the image linked
 > to itself, such as
 > `[<img src="screenshots/<screen>.svg" width="480" alt="<what it shows>">](screenshots/<screen>.svg)`.
-{%- endif %}
-{% endfor %}
 > [Screenshots](../CONTRIBUTING.md#screenshots) in CONTRIBUTING.md says how to capture them, and
 > the privacy check each one needs before it's committed.
+{%- endif %}
+{%- if not loop.last %}
+{% endif %}
+{%- endfor %}

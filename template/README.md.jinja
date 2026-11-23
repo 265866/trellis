@@ -13,15 +13,17 @@
 {{ description | wordwrap(100, break_long_words=False, break_on_hyphens=False) }}
 
 > **To write:** the opening, in a paragraph or two that start from the sentence above. A stranger
-> reads it to decide whether this is for them, so say:
+> reads it to decide whether this is for them, so say, with every claim checked against the code:
 >
 {%- if primary == 'library' %}
 > - the problem it solves, and for whom;
-> - how it differs from the crates people use for that now, named;
+> - how it differs from the crates people use for that now, named, or by kind when you can't
+>   vouch for the comparison;
 > - its limits: what it leaves to the caller, and what it never does.
 {%- else %}
 > - who it's for, and what it does for them, in their words rather than the code's;
-> - how it differs from what they'd use instead, named;
+> - how it differs from what they'd use instead, named, or by kind when you can't vouch for the
+>   comparison;
 {%- if primary == 'terminal' or primary == 'desktop' %}
 > - whether it runs beside something else, such as a game or an editor;
 {%- endif %}

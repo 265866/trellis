@@ -314,6 +314,9 @@ these rules:
   page, and so does a sentence below it.
 - **Data.** Invented data only, never a real person, account, address, number or message. The
   screenshots page says the data is invented.
+- **Closed off.** Capture from a build or instance that can't reach the network, or reaches only
+  stand-ins on loopback, and check that it didn't: a build that falls back to its defaults can
+  fetch real content, and a container can read a public site as it starts.
 - **Theme.** Dark mode, where the app has one.
 {%- if 'web' in interfaces %}
 - **Web sizes.** Each page at a desktop width, such as 1440×900, and at a phone width, such as
