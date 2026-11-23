@@ -6,6 +6,26 @@ part lists what a project's owner must do around the update: a rule that can fla
 a setting to change, or a step to do by hand. [CONTRIBUTING.md](CONTRIBUTING.md#release-trellis)
 has the versioning rule.
 
+## Unreleased
+
+### Fixed
+
+- A project's Windows installer builds when its `release/installer-custom.iss` ends in a `[Code]`
+  section. `release/installer.iss` wrote comment lines between its `#include` of the custom file and
+  its own `[Setup]`, which landed in the custom file's last section, where in `[Code]` a `;` line
+  isn't a comment, so ISCC stopped with "'BEGIN' expected". Only preprocessor directives come
+  between them now. trellis's Windows tests build the installer with a custom file shaped like a
+  real program's, `[Code]` last, and compile one that ends in each section a project commonly adds.
+- trellis's `tests/installer/setup-values.sh`, which an owner moving a project's own Inno Setup
+  script into `release/installer-custom.iss` can run to compare it with the one trellis writes,
+  sorts its output, so a diff lines the entries up whatever order their sections come in. It says
+  that sorting hides the order of `[Run]` and `[Files]` entries, and that `ISCC -e` doesn't compile
+  `[Code]`, so the comparison can't stand in for a build. Its `/D` examples are quoted, since Git
+  Bash drops the backslashes of an unquoted Windows path.
+- With an `installer` answer, the generated `CONTRIBUTING.md`'s layout lists
+  `release/installer.iss` and `release/installer-custom.iss`, and says `release/package.sh` stages
+  an installer target's files.
+
 ## v0.19.2
 
 ### Added

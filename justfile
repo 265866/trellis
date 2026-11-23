@@ -1552,6 +1552,10 @@ release-extras:
       || fail "release/installer.iss doesn't name the installer as the answer's file"
     grep --quiet --line-regexp 'AppPublisher=265866' release/installer.iss || fail "release/installer.iss doesn't name the author as its publisher"
     grep --quiet --line-regexp '#include "installer-custom.iss"' release/installer.iss || fail "release/installer.iss doesn't include the custom file"
+    # The include splices the custom file in as text, so a line other than a preprocessor directive
+    # between it and [Setup] lands in the custom file's last section, such as [Code].
+    between=$(awk '/^#include "installer-custom.iss"$/ { inside = 1; next } /^\[Setup\]$/ { exit } inside && !/^ *(#|$)/' release/installer.iss)
+    [ -z "$between" ] || fail "release/installer.iss writes more than directives between its include and [Setup]: $between"
     contract . demo-binary-0.1.0-setup.exe demo-binary-0.1.0.zip
     printf '#!/usr/bin/env bash\nset -euo pipefail\ncp "$BINARY" "$STAGING/$NAME.exe"\n' > release/package.sh
     git init --quiet --initial-branch main

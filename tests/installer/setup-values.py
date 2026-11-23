@@ -3,11 +3,12 @@
 Usage: setup-values.py <preprocessed script>
 
 `ISCC -e` (Inno Setup 7.1 and later) preprocesses a script, `#define`s and `#include`s resolved,
-without compiling it. This prints each `[Setup]` directive the script sets, with a note on any set
-twice, which the compiler refuses; then each entry of the other sections, one per line, apart from
-`[Code]`, of which it prints the header of each function and procedure and each line that reads a
-command-line parameter. Each line starts with its section, so `sort` and `diff` line two scripts
-up entry by entry.
+without compiling it, so nothing here checks that `[Code]` parses or that the script builds. This
+prints each `[Setup]` directive the script sets, with a note on any set twice, which the compiler
+refuses; then each entry of the other sections, one per line, apart from `[Code]`, of which it
+prints the header of each function and procedure and each line that reads a command-line
+parameter. Each line starts with its section, so once sorted, as setup-values.sh sorts them, a
+`diff` lines two scripts up entry by entry.
 """
 
 import re

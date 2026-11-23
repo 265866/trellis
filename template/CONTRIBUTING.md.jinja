@@ -27,7 +27,11 @@ need admin rights on the repository or the release token, so `just ci` leaves th
 {%- if image.files %}
 | `crates/{{ crate_name }}/image` | The files the image adds, at their paths under its root: `crates/{{ crate_name }}/image/app/data.json` lands at `/app/data.json`. `image` in `.copier-answers.yml` turns them on, and [docs/maintaining.md](docs/maintaining.md#extend-what-trellis-generates) says what else it sets. |
 {%- endif %}
-{%- if release.files %}
+{%- if release.installer %}
+| `release/package.sh` | Writes each target's release files, the ones `release` in `.copier-answers.yml` names; for a target with an installer, it stages the files the installer installs in `STAGING` and writes only the target's other files, and the release build writes the installer. [docs/maintaining.md](docs/maintaining.md#extend-what-trellis-generates) says what it gets. It is a rule, like the workflows. |
+| `release/installer.iss` | The Windows installer's Inno Setup script, which trellis writes from `installer` in `.copier-answers.yml` and rewrites on every update, so never edit it. It is a rule. |
+| `release/installer-custom.iss` | The project's own part of the installer, which `release/installer.iss` includes and an update never touches: `[Code]`, `[InstallDelete]`, the icon, extra `[Run]` entries and the `#define`s that change `CloseApplications` and `SetupMutex`. It is a rule. |
+{%- elif release.files %}
 | `release/package.sh` | Writes each target's release files, the ones `release` in `.copier-answers.yml` names. [docs/maintaining.md](docs/maintaining.md#extend-what-trellis-generates) says what it gets. It is a rule, like the workflows. |
 {%- endif %}
 {%- if web_ui %}
