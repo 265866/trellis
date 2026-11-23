@@ -357,11 +357,12 @@ release:
   # its checks refuse. Every file name holds `{version}`, so an attestation for one release's file
   # can't pass for another's, and the names are unique across targets, since the publish job puts
   # every target's files in one directory. An installer's `app_id` is how Windows finds the
-  # installed program, so a passed answer can't change a stored one. The comparison runs only in
-  # an update's own render, where `_commit` holds the stored commit and the passed data lacks
-  # `project_name`: Copier also renders into empty directories, with every answer passed, where
-  # the answers file is missing. Copier runs this even when it doesn't ask, so a `--data` answer
-  # can't reach another kind.
+  # installed program, so an answer, passed or typed, can't change the one the answers file holds,
+  # and every target shares it. Copier also renders into empty directories during an update, with
+  # every answer passed, `project_name` among them, where reading the missing answers file would
+  # warn, so a run that passes `project_name` doesn't compare: a new project, which has no answers
+  # file, passes it. Copier runs this even when it doesn't ask, so a `--data` answer can't reach
+  # another kind.
   validator: >-
     {%- set ns = namespace(error='', names=[]) -%}
     {%- if release is not mapping -%}
@@ -438,7 +439,11 @@ release:
     {%- endif -%}
     {%- endif -%}
     {%- endfor -%}
-    {%- if _commit is defined and 'release' in _copier_conf.data and 'project_name' not in _copier_conf.data -%}
+    {%- set ids = release.installer.values() | select('mapping') | map(attribute='app_id', default='') | unique | list -%}
+    {%- if ids | length > 1 -%}
+    {%- set ns.error = 'Every target in `installer` takes the same `app_id`: an x64 installer runs on ARM64 Windows too, and two AppIds would give one program two installs.' -%}
+    {%- endif -%}
+    {%- if 'project_name' not in _copier_conf.data -%}
     {%- set stored = (_external_data.previous or {}).release | default({}) -%}
     {%- set stored = stored.installer | default({}) if stored is mapping else {} -%}
     {%- for triple, entry in release.installer.items() if stored is mapping and entry is mapping and stored[triple] is defined and stored[triple] is mapping and stored[triple].app_id is defined and stored[triple].app_id != entry.app_id | default('') -%}

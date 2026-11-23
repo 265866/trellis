@@ -417,9 +417,13 @@ An update leaves them alone.
   silently with `/VERYSILENT /SUPPRESSMSGBOXES /NORESTART`, so the program can update itself. To add
   one, generate an AppId once, with `uuidgen` or, in PowerShell, `New-Guid`, and give it without
   braces. The AppId must never change and must never be copied from another project: Windows finds
-  the installed program by it, and `copier update` refuses an answer that changes it. `file` names
-  one of the target's `files`, ending in `.exe`, and `name`, optional, is the name the installer
-  shows, the answer's `name` by default:
+  the installed program by it. Give every Windows target the same one, which the answer's check
+  requires: the x64 installer also runs on ARM64 Windows, and two AppIds would give one user two
+  installs and two uninstall entries. `copier update` refuses an answer, passed or typed at its
+  prompt, whose `app_id` differs from the one `.copier-answers.yml` holds, unless the update also
+  passes `project_name`; it can't catch an edit to that file, or an installer removed and later
+  added back with another AppId. `file` names one of the target's `files`, ending in `.exe`, and
+  `name`, optional, is the name the installer shows, the answer's `name` by default:
 
   ```sh
   uvx copier update --defaults --vcs-ref=:current: \
@@ -447,7 +451,8 @@ An update leaves them alone.
   installer used. For a target with an installer, `release/package.sh` stages the files to install
   in `STAGING`, with `{{ project_name }}.exe` at its top, and writes only the target's other files
   to `DIST`; the build then compiles the script with the pinned Inno Setup and writes the installer
-  to `DIST`.
+  to `DIST`. An update that drops the `installer` key deletes both files, the custom file too; git
+  history keeps it.
 
   An upgrade closes the running program first, without asking in a silent install. Windows can't
   close a process without a window, so when one of the program's processes has none, such as a tray
