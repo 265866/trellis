@@ -6,7 +6,7 @@ part lists what a project's owner must do around the update: a rule that can fla
 a setting to change, or a step to do by hand. [CONTRIBUTING.md](CONTRIBUTING.md#release-trellis)
 has the versioning rule.
 
-## Unreleased
+## v0.20.0
 
 ### Action required in projects
 
@@ -142,6 +142,10 @@ has the versioning rule.
   the README by hand when an answer changes what it says, and says a release pull request holding
   only test-only changes can wait for a change that ships. `CONTRIBUTING.md`'s `just fmt-check`
   row says to run `just fmt`, not `cargo fmt`, whose stable rustfmt skips the nightly options.
+  Not done, and open: excluding `tests/` from an unpublished crate's package, so release-plz
+  never counts a test-only commit, needs its own check against release-plz before trellis
+  could adopt it. trellis sets no `release_commits`: in this layout a lock-only dependency fix
+  touches no package file, so it would stop releasing.
 - A page directly under `docs/` may be indexed from a `## Documentation` section in
   `CONTRIBUTING.md`, written like the README's, instead of the README's: a page only contributors
   need, such as the code style or the maintaining guide, needn't sit in the index a stranger
