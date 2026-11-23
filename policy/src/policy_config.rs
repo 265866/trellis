@@ -4,6 +4,7 @@ use std::collections::BTreeMap;
 
 use toml::{Table, Value};
 
+use crate::interface::Interface;
 use crate::policy_error::PolicyError;
 use crate::restricted_crate::RestrictedCrate;
 use crate::toml_file;
@@ -30,19 +31,23 @@ pub(crate) struct PolicyConfig {
     /// The level-2 headings of the root `README.md`, in order, or `None` if the key is missing
     /// (`docs_layout`).
     readme_sections: Option<Vec<String>>,
+    /// What a person who uses the project sees, the primary interface first, or `None` if the key
+    /// is missing.
+    interfaces: Option<Vec<Interface>>,
     /// Each restricted package, by its key, mapped to its pattern and the members that may reach
     /// it (`restricted_crates`).
     restricted_crates: BTreeMap<String, RestrictedCrate>,
 }
 
 /// The keys of `[workspace.metadata.policy]`.
-const KEYS: [&str; 7] = [
+const KEYS: [&str; 8] = [
     "build_script_crates",
     "proc_macro_crates",
     "internal_dependencies",
     "dev_only_crates",
     "docs_files",
     "readme_sections",
+    "interfaces",
     "restricted_crates",
 ];
 
@@ -68,6 +73,7 @@ impl PolicyConfig {
                 "readme_sections" => {
                     config.readme_sections = Some(strings(key, value, "headings")?);
                 }
+                "interfaces" => config.interfaces = Some(interfaces(key, value)?),
                 "restricted_crates" => config.restricted_crates = restricted_crates(key, value)?,
                 _ => {
                     return Err(PolicyError::Config(format!(
@@ -108,6 +114,13 @@ impl PolicyConfig {
     /// isn't set.
     pub(crate) fn readme_sections(&self) -> Option<&[String]> {
         self.readme_sections.as_deref()
+    }
+
+    /// What a person who uses the project sees, the primary interface first, or `None` if
+    /// `interfaces` isn't set.
+    #[cfg_attr(not(test), expect(dead_code, reason = "the readme rule will read it"))]
+    pub(crate) fn interfaces(&self) -> Option<&[Interface]> {
+        self.interfaces.as_deref()
     }
 
     /// Each restricted package's key, mapped to its pattern and the members that may reach it.
@@ -211,6 +224,40 @@ fn relative_paths(key: &str, value: &Value) -> Result<Vec<String>, PolicyError> 
         }
     }
     Ok(paths)
+}
+
+/// The interfaces in `value`, the setting `key`, which must be a non-empty array of the names
+/// [`Interface::ALL`] lists, each at most once.
+fn interfaces(key: &str, value: &Value) -> Result<Vec<Interface>, PolicyError> {
+    let allowed = || {
+        Interface::ALL
+            .map(|(name, _)| format!("`{name}`"))
+            .join(", ")
+    };
+    let names = strings(key, value, "interface names")?;
+    if names.is_empty() {
+        return Err(PolicyError::Config(format!(
+            "`{key}` is empty; list what a person who uses the project sees, the primary one \
+             first, from {}",
+            allowed()
+        )));
+    }
+    let mut interfaces = Vec::with_capacity(names.len());
+    for name in &names {
+        let Some(interface) = Interface::parse(name) else {
+            return Err(PolicyError::Config(format!(
+                "`{key}` lists `{name}`, which isn't an interface; use {}",
+                allowed()
+            )));
+        };
+        if interfaces.contains(&interface) {
+            return Err(PolicyError::Config(format!(
+                "`{key}` lists `{name}` twice; list each interface once"
+            )));
+        }
+        interfaces.push(interface);
+    }
+    Ok(interfaces)
 }
 
 /// The map in `value`, the setting `key`: a table from a package name, a name prefix ending in
@@ -451,6 +498,52 @@ mod tests {
             error
                 .to_string()
                 .contains("`readme_sections` must be an array of headings"),
+            "a string where a list belongs should fail: {error}"
+        );
+    }
+
+    #[test]
+    fn interfaces_are_read_in_order_and_stay_unset_when_missing() {
+        let set = config("[workspace.metadata.policy]\ninterfaces = [\"web\", \"cli\"]\n").unwrap();
+        assert_eq!(
+            set.interfaces(),
+            Some([Interface::Web, Interface::Cli].as_slice()),
+            "the listed interfaces should be read, the primary one first"
+        );
+        let unset = config("[workspace.metadata.policy]\n").unwrap();
+        assert_eq!(
+            unset.interfaces(),
+            None,
+            "a missing key stays unset, so a rule can ask for it"
+        );
+    }
+
+    #[test]
+    fn an_unknown_empty_or_repeated_interface_fails() {
+        let error = config("[workspace.metadata.policy]\ninterfaces = [\"tui\"]\n").unwrap_err();
+        assert!(
+            error.to_string().contains(
+                "`interfaces` lists `tui`, which isn't an interface; use `web`, `desktop`, \
+                 `terminal`, `cli`, `service`, `library`"
+            ),
+            "an unknown interface should fail and name the allowed ones: {error}"
+        );
+        let error = config("[workspace.metadata.policy]\ninterfaces = []\n").unwrap_err();
+        assert!(
+            error.to_string().contains("`interfaces` is empty"),
+            "an empty list should fail: {error}"
+        );
+        let error =
+            config("[workspace.metadata.policy]\ninterfaces = [\"web\", \"web\"]\n").unwrap_err();
+        assert!(
+            error.to_string().contains("lists `web` twice"),
+            "a repeated interface should fail: {error}"
+        );
+        let error = config("[workspace.metadata.policy]\ninterfaces = \"web\"\n").unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("`interfaces` must be an array of interface names"),
             "a string where a list belongs should fail: {error}"
         );
     }

@@ -125,7 +125,7 @@ branch stacked on another pull request, pass the branch it targets, such as
 
 | Recipe | Checks |
 | --- | --- |
-| `just fmt-check` | Rust and TOML formatting. `just fmt` fixes both. |
+| `just fmt-check` | Rust and TOML formatting. `just fmt` fixes both. Use it, not `cargo fmt`: stable rustfmt skips the nightly options in `rustfmt.toml`, so `just fmt-check` fails after a plain `cargo fmt`. |
 | `just typos` | Spelling. |
 | `just actionlint`, `just zizmor` | The GitHub workflows, and their security. |
 | `just shear` | Every declared dependency is used. |
@@ -284,24 +284,62 @@ one:
 {%- endif %}
 
 ## Docs
+{%- set ui = interfaces | select('in', ['web', 'desktop', 'terminal']) | list %}
 
 The docs keep one shape. Write them to the
 [docs review checklist](docs/style.md#docs-review-checklist); `just policy` checks the parts
 [a tool can decide](docs/style.md#docs-checked-by-just-policy).
-{%- set usage_section = {'binary': 'Install', 'service': 'Run it', 'library': 'Use it'}[kind] %}
-{%- if license != 'none' or kind != 'library' %}
-{%- set readme_sections = '`' ~ usage_section ~ '`, `Documentation` and `License`' %}
-{%- else %}
-{%- set readme_sections = '`' ~ usage_section ~ '` and `Documentation`' %}
-{%- endif %}
 
 - **Settings.** `docs_files` in `[workspace.metadata.policy]` sets the files `just policy` expects,
-  and `readme_sections` the README's `##` sections, in order. trellis starts the README with
-  {{ readme_sections }}.
+  and `readme_sections` the README's `##` sections, in order.
+- **The README.** A new project's `README.md` starts as an outline with a `**To write:**` prompt
+  under each part, and one generated before trellis wrote outlines keeps what it had. Either way
+  the project owns it, and an update never touches it{% if ui %}, or `docs/usage.md`, the
+  screenshots page, if the project has one{% endif %}.
+  [docs/style.md](docs/style.md#documentation) says what a README opens with, and in what order.
 - **Where things go.** Design decisions go in [docs/design.md](docs/design.md), and compatibility
   promises in [docs/stability.md](docs/stability.md). release-plz writes `CHANGELOG.md`; don't edit
   it by hand except as the release steps in [docs/maintaining.md](docs/maintaining.md#each-release)
   say.
+
+{%- if ui %}
+
+### Screenshots
+
+The README's picture and the screenshots page, `docs/usage.md` when trellis wrote it, follow
+these rules:
+
+- **Where.** Images live in `docs/screenshots/`. The README's picture links to the screenshots
+  page, and so does a sentence below it.
+- **Data.** Invented data only, never a real person, account, address, number or message. The
+  screenshots page says the data is invented.
+- **Closed off.** Capture from a build or instance that can't reach the network, or reaches only
+  stand-ins on loopback, and make the capture fail if the program opens a connection off
+  loopback. Settings alone don't prove it: a build that can't read its settings falls back to
+  its defaults and can fetch real content, and a container can read a public site as it starts.
+- **Theme.** Dark mode, where the app has one.
+{%- if 'web' in interfaces %}
+- **Web sizes.** Each page at a desktop width, such as 1440×900, and at a phone width, such as
+  390×844 CSS pixels at 2×, which gives a 780×1688 image.
+{%- endif %}
+{%- if 'desktop' in interfaces %}
+- **Windows.** Each window at its default size.
+{%- endif %}
+{%- if 'terminal' in interfaces %}
+- **Terminal captures.** An SVG with one cell per character, shapes for the borders, and the
+  screen's text in `<desc>`. GitHub renders it in both themes, and it keeps its columns with any
+  font.
+{%- endif %}
+- **Metadata.** A PNG carries no metadata: no text, EXIF or time chunks.
+- **Privacy check.** Before you commit an image, look at it, and search an SVG's text, for any
+  real name, account, address, number or key, and any value this project's domain keeps private.
+- **Capture tooling.** It lives in the repository only when it is small, runs in `just ci`, and
+  builds on a demo mode the program already has. Then it is test-only code in the crate: a
+  `#[cfg(test)]` module, which can reach screens the crate keeps private. Otherwise it lives
+  outside the repository.
+- **Review.** The pull request that adds or changes images says that the privacy check ran and
+  that someone looked at each image.
+{%- endif %}
 
 ## Product boundaries
 
@@ -494,6 +532,11 @@ or `source-path=` that leaves the kit, any key but `disable`, `enable`, `shell`,
 rule: a `justfile` or `*.just` module, an `action.yml`, `.gitignore`, `.ignore`, `bunfig.toml`,
 `.npmrc`, `build.rs`, TypeScript settings file, agent instruction file or tool configuration file,
 and a path Windows reads as another.
+
+## Documentation
+
+- [Code style](docs/style.md): the style rules a tool checks, and the review checklist for the rest.
+- [Maintain](docs/maintaining.md): the owner's repository settings, releases and trellis updates.
 {%- if license == 'MIT' %}
 
 ## License

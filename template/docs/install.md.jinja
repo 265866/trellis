@@ -1,4 +1,4 @@
-# Install {{ project_name }}
+# {{ 'Install ' ~ project_name if kind == 'binary' else 'Container image' }}
 {% if kind == 'binary' %}
 Read this page to run {{ project_name }} on your machine. It shows how to install a release or
 build from source, and how to update.

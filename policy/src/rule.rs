@@ -41,7 +41,7 @@ pub enum Rule {
     /// No member's `[dependencies]` or `[dev-dependencies]` gives a path dependency on another
     /// member a `version`, which release-plz would rewrite beside the root's.
     InternalDependencyVersions,
-    /// The `Documentation` section of the root `README.md`, or of `CONTRIBUTING.md`, links every
+    /// A `Documentation` section of the root `README.md`, or of `CONTRIBUTING.md`, links every
     /// page directly under `docs/`, and a page in the directory above links each page in a
     /// subdirectory.
     DocsIndex,

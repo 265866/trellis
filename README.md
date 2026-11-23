@@ -21,8 +21,9 @@ generates starts with:
 - **CI and releases.** Checks on Linux, macOS and Windows; release-plz versions and changelogs;
   release archives or a container image, attested and signed when the repository is public;
   Renovate for updates.
-- **The same docs layout.** A short README with a docs index, task pages under `docs/`,
-  `CONTRIBUTING.md`, `SECURITY.md`, and one `AGENTS.md` for coding agents.
+- **The same docs layout.** A README that starts as an outline with a prompt under each part,
+  shaped by what the project is, and that the project then owns; a docs index; task pages under
+  `docs/`; `CONTRIBUTING.md`, `SECURITY.md`, and one `AGENTS.md` for coding agents.
 
 The rules are written for code that coding agents write and that nobody reads line by line. So a
 rule lives in the types or in a check wherever one can hold it, and review is the last resort. An
@@ -46,9 +47,10 @@ uvx copier@9.19.1 copy https://github.com/265866/trellis.git my-project
 
 It asks for a name, a description, what the project ships (a binary, a container service or a
 library), whether the repository is public or private, the platforms and processors, whether a
-binary or service has a web UI built with Bun, what a binary's builds need, what a service's
-image adds, and a license, then prints the next steps. Commit the project, install the tools that
-the generated `CONTRIBUTING.md` lists, and run every check:
+binary or service has a web UI built with Bun, what a person who uses it sees first and what else
+(a web app, a desktop app, a terminal app, a command-line tool or a service), what a binary's
+builds need, what a service's image adds, and a license, then prints the next steps. Commit the
+project, install the tools that the generated `CONTRIBUTING.md` lists, and run every check:
 
 ```sh
 cd my-project

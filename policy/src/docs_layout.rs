@@ -48,11 +48,11 @@ const UNCLOSED_HTML: &str = "opens HTML that doesn't close: a comment, a tag or 
 /// - its top-level `##` headings are exactly the ones `readme_sections` lists, in order, each
 ///   written as plain text; it has no `##` heading inside a list item, quote or footnote, no
 ///   setext heading, a line underlined with `=` or `-`, and no HTML heading tag such as `<h2>`;
-/// - its `## Documentation` section holds only list items of one line each, and comments, and
+/// - each `## Documentation` section holds only list items of one line each, and comments, and
 ///   each item is a link written exactly `[Title](path)` with a relative path, without entities
 ///   or escapes, then `: ` and a description whose rendered text has a letter in it, on a line
 ///   that ends in `.`;
-/// - a `## Documentation` section in `CONTRIBUTING.md`, which may index the pages only
+/// - each `## Documentation` section in `CONTRIBUTING.md`, which may index the pages only
 ///   contributors need, holds an index written the same way, and a `CONTRIBUTING.md` with one is
 ///   held to the HTML and byte order mark checks below, like the readme;
 /// - every page, a `.md` file at any depth under `docs/`, starts with a `#` line with text in
@@ -106,7 +106,7 @@ pub fn check(workspace: &Workspace) -> Result<Vec<Violation>, PolicyError> {
         violations.push(unset(
             "readme_sections",
             "which sections the root `README.md` has. Set it to the readme's `##` headings in \
-             order, such as `readme_sections = [\"Install\", \"Documentation\", \"License\"]`.",
+             order, such as `readme_sections = [\"Quick start\", \"Documentation\", \"License\"]`.",
         ));
     }
     match docs_index::read_readme(workspace.root())? {
@@ -134,12 +134,13 @@ pub fn check(workspace: &Workspace) -> Result<Vec<Violation>, PolicyError> {
     {
         let arena = Arena::new();
         let contributing = Markdown::parse(&arena, text.trim_start_matches(BYTE_ORDER_MARK));
-        if let Some(section) = contributing.section(INDEX) {
+        let sections = contributing.sections(INDEX);
+        if !sections.is_empty() {
             violations.extend(byte_order_mark(CONTRIBUTING, &text));
-            for problem in html_problems(&contributing)
-                .into_iter()
-                .chain(index_problems(&contributing, &section))
-            {
+            let index = sections
+                .iter()
+                .flat_map(|section| index_problems(&contributing, section));
+            for problem in html_problems(&contributing).into_iter().chain(index) {
                 violations.push(Violation::new(CONTRIBUTING.to_owned(), problem));
             }
         }
@@ -224,9 +225,8 @@ fn readme_problems(readme: &Markdown<'_>, sections: Option<&[String]>) -> Vec<St
             problems.push(format!(
                 "The readme's `##` sections are {}, but `readme_sections` in \
                  `[workspace.metadata.policy]` lists {}. Give the readme exactly those sections, \
-                 in that order, and move anything longer than a few commands to a page in \
-                 `docs/`, or change `readme_sections` in a rule change if the project's sections \
-                 change.",
+                 in that order, with the depth on pages in `docs/`, or change `readme_sections` \
+                 in a rule change if the project's sections change.",
                 heading_list(&found),
                 heading_list(required)
             ));
@@ -272,7 +272,7 @@ fn readme_problems(readme: &Markdown<'_>, sections: Option<&[String]>) -> Vec<St
         ));
     }
     problems.extend(html_problems(readme));
-    if let Some(section) = readme.section(INDEX) {
+    for section in readme.sections(INDEX) {
         problems.extend(index_problems(readme, &section));
     }
     problems
@@ -574,7 +574,7 @@ mod tests {
         let readme = format!("# Demo\n\n## Documentation\n\n{text}\n## License\n");
         let arena = Arena::new();
         let markdown = Markdown::parse(&arena, &readme);
-        index_problems(&markdown, &markdown.section(INDEX).unwrap())
+        index_problems(&markdown, &markdown.sections(INDEX)[0])
     }
 
     fn page(text: &str) -> Option<&'static str> {

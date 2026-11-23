@@ -343,6 +343,24 @@ Write these like this rather than inventing a workaround:
 - **Pinning.** Pin a future with `std::pin::pin!`. `tokio::pin!` writes `allow(unused_mut)` over the
   caller's `let`.
 
+### Test-only code
+
+The checks read a `#[cfg(test)]` module, such as a screenshot capture or a test helper, like any
+other code: clippy and the custom lints run on every target. These catch test code first:
+
+- **Formatting.** Run `just fmt`, not `cargo fmt`, whose stable rustfmt skips the nightly options in
+  `rustfmt.toml`, so `just fmt-check` still fails.
+- **Spelling.** `just typos` reads test vectors too: the input of base64 `"Zm8="` is two letters
+  it takes for a misspelled "of". Pick vectors that are words, such as `b"Man"` for `"TWFu"`.
+- **clippy.** `-D warnings` holds here too. `write!` into a `String` returns `fmt::Result`: use
+  `writeln!(out, ..)?` in a helper that returns it, and unwrap once at the test, not
+  `let _ = write!(..)`.
+- **Comments.** `code_comment` reads test bodies: move the explanation into the item's `///` doc,
+  or the block into a documented helper.
+- **Tuples and loops.** `multi_field_tuple` turns `Vec<(u16, u16, Kind)>` into a `Vec` of a
+  named struct, and `iterator_chain_in_for` turns `for x in a.iter().flat_map(..)` into a named
+  `let` that collects the chain, then a loop over it.
+
 ## Where trellis goes further than the guide
 
 - **No code comments.** The guide allows `//` comments; trellis doesn't, except `// SAFETY:`. A
@@ -379,8 +397,11 @@ Write these like this rather than inventing a workaround:
 
 ## Documentation
 
-A trellis project's docs have one shape: a short README, an index in its Documentation section,
-and a page in `docs/` for each task a reader has.
+A trellis project's README is what a stranger reads first, so it opens, in this order, with what
+the project is, who it's for, how it differs and its limits; a list of what it does; one picture,
+or for a project without a UI a sample of its output or code; and a Quick start that ends in
+something working. Its Documentation section then indexes a page in `docs/` for each task a reader
+has, where the depth goes, and the License section closes it.
 
 ### Docs checked by `just policy`
 
@@ -417,7 +438,9 @@ text in code, in HTML or in an HTML comment is neither a heading nor a link.
 
 No check decides these, so review does.
 
-- **A short README.** Anything longer than a few commands moves to a page in `docs/`.
+- **The README's order.** The opening says who it's for, how it differs and its limits, before
+  the features, the picture or sample, and the Quick start. What a first run doesn't need, such as
+  every option or platform, goes on a page in `docs/`.
 - **One page per task.** Each page covers one task a reader has, such as installing, verifying a
   release or configuring, and its index entry says what the reader does with it.
 - **Page shape.** The paragraph after the title says who the page is for and what it gets them.

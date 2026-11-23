@@ -103,21 +103,25 @@ impl<'tree> Markdown<'tree> {
         headings
     }
 
-    /// The top-level blocks after the first top-level level-2 heading whose text is `title`, up
-    /// to the next top-level heading of level 1 or 2, or `None` if there is no such heading.
-    /// Footnote definitions aren't in any section: the parser moves them to the end.
-    pub(crate) fn section(&self, title: &str) -> Option<Vec<Node<'tree>>> {
+    /// For each top-level level-2 heading whose text is `title`, in order, the top-level blocks
+    /// after it up to the next top-level heading of level 1 or 2; empty if there is no such
+    /// heading. Footnote definitions aren't in any section: the parser moves them to the end.
+    pub(crate) fn sections(&self, title: &str) -> Vec<Vec<Node<'tree>>> {
         let mut blocks = self.blocks();
         blocks
             .retain(|block| !matches!(block.data.borrow().value, NodeValue::FootnoteDefinition(_)));
-        let start = blocks.iter().position(|block| {
-            heading(block).is_some_and(|heading| heading.level == 2) && text(block) == title
-        })? + 1;
-        let length = blocks[start..]
-            .iter()
-            .position(|block| heading(block).is_some_and(|heading| heading.level <= 2))
-            .unwrap_or(blocks.len() - start);
-        Some(blocks[start..start + length].to_vec())
+        let mut sections = Vec::new();
+        for (index, block) in blocks.iter().enumerate() {
+            if heading(block).is_some_and(|heading| heading.level == 2) && text(block) == title {
+                let start = index + 1;
+                let length = blocks[start..]
+                    .iter()
+                    .position(|block| heading(block).is_some_and(|heading| heading.level <= 2))
+                    .unwrap_or(blocks.len() - start);
+                sections.push(blocks[start..start + length].to_vec());
+            }
+        }
+        sections
     }
 
     /// The 1-based line `number` as written, without its line break, or `""` past the end.
@@ -529,14 +533,36 @@ mod tests {
             &arena,
             "# T\n\n## Docs\n\n- a\n\n### Sub\n\nText\n\n## Next\n\n- b\n",
         );
-        let section = markdown.section("Docs").unwrap();
-        let lines: Vec<usize> = section.iter().map(|block| first_line(block)).collect();
+        let sections = markdown.sections("Docs");
+        let lines: Vec<Vec<usize>> = sections
+            .iter()
+            .map(|section| section.iter().map(|block| first_line(block)).collect())
+            .collect();
         assert_eq!(
             lines,
-            [5, 7, 9],
+            [[5, 7, 9]],
             "the list, the level-3 heading and the paragraph"
         );
-        assert!(markdown.section("Missing").is_none(), "no such heading");
+        assert!(markdown.sections("Missing").is_empty(), "no such heading");
+    }
+
+    #[test]
+    fn every_section_with_the_title_is_found() {
+        let arena = Arena::new();
+        let markdown = Markdown::parse(
+            &arena,
+            "# T\n\n## Docs\n\n- a\n\n## Other\n\n- b\n\n## Docs\n\n- c\n",
+        );
+        let lines: Vec<Vec<usize>> = markdown
+            .sections("Docs")
+            .iter()
+            .map(|section| section.iter().map(|block| first_line(block)).collect())
+            .collect();
+        assert_eq!(
+            lines,
+            [[5], [13]],
+            "both Docs sections, in order, without the one between"
+        );
     }
 
     #[test]

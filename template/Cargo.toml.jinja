@@ -16,6 +16,9 @@ libraries = [
 
 # Settings for `trellis-policy check`, which `just policy` runs. Changing them is a rule change.
 [workspace.metadata.policy]
+# What a person who uses the project sees, the primary one first: `web`, `desktop`, `terminal`,
+# `cli`, `service` or `library`. The `interface` and `other_interfaces` answers set it.
+interfaces = {{ interfaces | tojson }}
 # Crates allowed a build script. A build script can emit `cargo::rustc-cfg` and hide code from the
 # lint runs, so each one listed here needs a reason.
 build_script_crates = []
@@ -49,9 +52,8 @@ docs_files = [
 {%- endif %}
 ]
 # The `##` headings of README.md, exactly and in order.
-{%- set usage_section = {'binary': 'Install', 'service': 'Run it', 'library': 'Use it'}[kind] %}
 {%- set license_section = ', "License"' if license != 'none' or kind != 'library' else '' %}
-readme_sections = ["{{ usage_section }}", "Documentation"{{ license_section }}]
+readme_sections = ["Quick start", "Documentation"{{ license_section }}]
 
 # The workspace crates each member may depend on directly. A new crate, or a new edge between
 # crates, is a rule change.

@@ -25,6 +25,7 @@ mod git;
 mod git_attributes;
 mod head;
 mod html;
+mod interface;
 pub mod internal_dependencies;
 pub mod internal_dependency_versions;
 pub mod license_files;

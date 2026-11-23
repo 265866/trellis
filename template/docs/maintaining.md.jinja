@@ -134,7 +134,9 @@ package settings on GitHub, so others can pull the image. GitHub can't make it p
 release-plz keeps a release pull request open with the next version and its `CHANGELOG.md` entry.
 Merging it releases that version, with that entry as the release notes;
 [release.yml](../.github/workflows/release.yml) does the rest. Before 1.0, a `feat` or a `!` bumps
-the minor version and a `fix` the patch version. To ship:
+the minor version and a `fix` the patch version. A release pull request whose changes are all
+test-only code, such as screenshot capture code, ships users nothing new, so it can wait open until
+a change that ships joins it. To ship:
 
 1. To reword an entry, edit `CHANGELOG.md` on the release pull request's branch, as the last step
    before you merge: the next merge to `main` closes the release pull request and opens a new one
@@ -730,13 +732,14 @@ hold need more than the update, and two can't change this way at all:
   or passes on crates the new answer doesn't describe. To rename the project or change what it
   ships, generate a new project and move the code into it.
 {%- if kind == 'service' %}
-- **Description.** The update changes `README.md`, `CONTRIBUTING.md` and the image's description
-  label in `Containerfile`. Each crate's `description` in its `Cargo.toml` and its `//!` crate docs
-  keep the old sentence; change them in a code pull request.
+- **Description.** The update changes `CONTRIBUTING.md` and the image's description label in
+  `Containerfile`. `README.md`, each crate's `description` in its `Cargo.toml` and its `//!` crate
+  docs keep the old sentence; change the README in any pull request, and the crates in a code pull
+  request.
 {%- else %}
-- **Description.** The update changes `README.md` and `CONTRIBUTING.md`. Each crate's
-  `description` in its `Cargo.toml` and its `//!` crate docs keep the old sentence; change them
-  in a code pull request.
+- **Description.** The update changes `CONTRIBUTING.md`. `README.md`, each crate's `description`
+  in its `Cargo.toml` and its `//!` crate docs keep the old sentence; change the README in any
+  pull request, and the crates in a code pull request.
 {%- endif %}
 - **License.** Between `MIT` and `MIT OR Apache-2.0`, the update is all it takes
 {%- if published %} for the crate
@@ -773,11 +776,24 @@ hold need more than the update, and two can't change this way at all:
   `bun install --save-text-lockfile --lockfile-only`, the command `just web-install` names when
   it's missing, and don't run a plain `bun install` or `just web-build` on that branch: until
   the update merges, `.gitignore` doesn't ignore the app's `node_modules/` and `dist/`, so
-  `just rule-changes` counts what they write. Then run the update with `--data web_ui=true`, and
-  add the app's settings files to its pull request. When the app trips a check that only a rule
+  `just rule-changes` counts what they write.
+{%- if interface == 'web' %} Then run the update with `--data web_ui=true`.
+{%- else %} Then run the update with `--data web_ui=true` and
+  `--data 'other_interfaces=[{{ (other_interfaces + ['web']) | join(', ') }}]'`, or, if the web UI becomes what a person sees first,
+  with `--data interface=web` and `--data 'other_interfaces=[{{ ([interface] + other_interfaces) | join(', ') }}]'`. The update refuses
+  `web_ui=true` without `web` among the interfaces.
+{%- endif %}
+  Add the app's settings files to its pull request. When the app trips a check that only a rule
   can settle, such as a class name `just typos` flags, which only an entry in `_typos.toml` lets
   through, land that rule in a rules pull request before the app's code pull request.
 {%- endif %}
+{%- endif %}
+- **README.** An update never touches `README.md`, so when an answer changes what it says, such as
+  the license, the visibility or a web UI, edit it in the update's pull request: its License
+  section, its release badge and its Verify a release entry.
+{%- if kind == 'library' %}
+  A library's `readme_sections` has `License` only while it has a license, and `just policy`
+  fails until the README's sections match.
 {%- endif %}
 
 The other answers change only files the update writes.
@@ -793,17 +809,26 @@ projects" part says what to do before or after the update merges. To update by h
 uvx copier update --defaults
 ```
 
-An update never touches `crates/`, `Cargo.lock`, `CHANGELOG.md` or `docs/design.md`, which are
-yours after the project is generated.
-{%- if published %} The crate's `LICENSE*` files are the exception: they
-follow the license answer.
-{%- endif %} It is a rule change, so it can't also change code. Copier
-merges the new template into your edits to the files it renders, such as a crate's row in
-`CONTRIBUTING.md`, its settings in `Cargo.toml` and `release-plz.toml`, and a page's line in
-`README.md`. Where trellis changed a line you changed, or one next to it, Copier leaves conflict
-markers; resolve them before you commit. Once the update merges, run `just check-github` on
-`main`. A newer trellis can set more than the one you set up with, so if it reports a wrong
-setting, run `just setup-github`.
+An update never touches `crates/`, `Cargo.lock`, `CHANGELOG.md`, `docs/design.md` or `README.md`,
+which are yours after the project is generated. A new project's README starts as an outline, and
+one generated before trellis wrote outlines stays as it was.
+{%- if interfaces | select('in', ['web', 'desktop', 'terminal']) | list %} An update doesn't touch
+`docs/usage.md` either, the screenshots page, if the project has one.
+{%- endif %}
+{%- if published %}
+The crate's `LICENSE*` files are the exception: they follow the license answer.
+{%- endif %}
+
+An update can change `readme_sections` in `Cargo.toml`, which lists the README's `##` sections,
+while the README keeps its own: `just policy` then fails until you rename or add the README's
+sections to match, in the update's pull request. The version's CHANGELOG entry says when it does.
+
+An update is a rule change, so it can't also change code. Copier merges the new template into
+your edits to the files it renders, such as a crate's row in `CONTRIBUTING.md` and its settings in
+`Cargo.toml` and `release-plz.toml`. Where trellis changed a line you changed, or one next to it,
+Copier leaves conflict markers; resolve them before you commit. Once the update merges, run
+`just check-github` on `main`. A newer trellis can set more than the one you set up with, so if it
+reports a wrong setting, run `just setup-github`.
 {%- if kind == 'service' %}
 
 An update that moves the base images' digests in the `Containerfile`, such as for a security fix,
