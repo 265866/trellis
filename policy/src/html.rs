@@ -23,6 +23,26 @@ pub(crate) struct Tag {
     pub(crate) offset: usize,
     /// Its length in bytes, up to its `>`.
     length: usize,
+    /// Its attributes, in order.
+    attributes: Vec<Attribute>,
+}
+
+/// A piece of HTML.
+#[derive(Clone, Debug)]
+enum Piece<'text> {
+    /// A tag.
+    Tag(Tag),
+    /// The text between two tags, comments and the like.
+    Text(&'text str),
+}
+
+/// An attribute of a tag.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct Attribute {
+    /// Its name, in lowercase.
+    name: String,
+    /// Its value without quotes and with its entities decoded, or `""` when it has none.
+    value: String,
 }
 
 /// The HTML elements, current and obsolete, that have content, so that their tags must balance
@@ -62,9 +82,51 @@ impl<'text> Html<'text> {
     /// and CDATA sections. `Err` holds the byte offset of the first of those, or of a tag, that
     /// opens and doesn't close.
     pub(crate) fn tags(self) -> Result<Vec<Tag>, usize> {
+        let tags: Vec<Tag> = self
+            .pieces()?
+            .into_iter()
+            .filter_map(|piece| match piece {
+                Piece::Tag(tag) => Some(tag),
+                Piece::Text(_) => None,
+            })
+            .collect();
+        Ok(tags)
+    }
+
+    /// Whether the HTML has a letter in its text outside tags, comments and the like, entities
+    /// such as `&nbsp;`, and the elements named `element`, such as `a`. HTML that doesn't close
+    /// has none.
+    pub(crate) fn has_words_outside(self, element: &str) -> bool {
+        let Ok(pieces) = self.pieces() else {
+            return false;
+        };
+        let mut depth = 0_usize;
+        for piece in pieces {
+            match piece {
+                Piece::Tag(tag) if tag.name == element && !tag.self_closing => {
+                    depth = if tag.closing {
+                        depth.saturating_sub(1)
+                    } else {
+                        depth + 1
+                    };
+                }
+                Piece::Tag(_) => {}
+                Piece::Text(text) => {
+                    if depth == 0 && decoded(text).chars().any(char::is_alphabetic) {
+                        return true;
+                    }
+                }
+            }
+        }
+        false
+    }
+
+    /// The tags in the HTML and the text between them, in order, as [`Self::tags`] reads them.
+    fn pieces(self) -> Result<Vec<Piece<'text>>, usize> {
         let html = self.text;
-        let mut tags = Vec::new();
+        let mut pieces = Vec::new();
         let mut position = 0;
+        let mut text_start = 0;
         while let Some(found) = html[position..].find('<') {
             let start = position + found;
             let rest = &html[start..];
@@ -73,25 +135,41 @@ impl<'text> Html<'text> {
                 .get(..9)
                 .is_some_and(|opener| opener.eq_ignore_ascii_case("<![cdata["));
             let starts_name = |text: &str| text.starts_with(|c: char| c.is_ascii_alphabetic());
+            let is_declaration = after.strip_prefix('!').is_some_and(starts_name);
+            let is_tag = starts_name(after) || after.strip_prefix('/').is_some_and(starts_name);
+            let is_text = !(rest.starts_with("<!--")
+                || rest.starts_with("<?")
+                || is_cdata
+                || is_declaration
+                || is_tag);
+            if !is_text && text_start < start {
+                pieces.push(Piece::Text(&html[text_start..start]));
+            }
             let length = if rest.starts_with("<!--") {
                 comment_end(rest)
             } else if rest.starts_with("<?") {
                 rest.find("?>").map(|end| end + 2)
             } else if is_cdata {
                 rest.find("]]>").map(|end| end + 3)
-            } else if after.strip_prefix('!').is_some_and(starts_name) {
+            } else if is_declaration {
                 rest.find('>').map(|end| end + 1)
-            } else if starts_name(after) || after.strip_prefix('/').is_some_and(starts_name) {
+            } else if is_tag {
                 let tag = Tag::parse(rest, start).ok_or(start)?;
                 let length = tag.length;
-                tags.push(tag);
+                pieces.push(Piece::Tag(tag));
                 Some(length)
             } else {
                 Some(1)
             };
             position = start + length.ok_or(start)?;
+            if !is_text {
+                text_start = position;
+            }
         }
-        Ok(tags)
+        if text_start < html.len() {
+            pieces.push(Piece::Text(&html[text_start..]));
+        }
+        Ok(pieces)
     }
 
     /// The byte offsets of the HTML's heading tags, `<h1>` to `<h6>` or their closing tags, in
@@ -139,7 +217,8 @@ impl<'text> Html<'text> {
 impl Tag {
     /// The tag `html` starts with, at the byte offset `offset` of the HTML it is in, read with
     /// HTML's grammar for a tag: a name, then attributes, each a name with an optional `=` and a
-    /// value, which is quoted with `"` or `'` or runs to the next space or `>`. `None` if the tag
+    /// value, which is quoted with `"` or `'` or runs to the next space or `>`. The name is read
+    /// as an attribute's name is, and isn't kept as an attribute. `None` if the tag
     /// doesn't close, or if a `<` comes before its `>` outside a quoted value, since GitHub then
     /// reads the tag as running on into what follows.
     fn parse(html: &str, offset: usize) -> Option<Self> {
@@ -152,6 +231,7 @@ impl Tag {
             .collect();
         let mut index = 1 + usize::from(closing);
         let mut slash = false;
+        let mut attributes = Vec::new();
         loop {
             let byte = *bytes.get(index)?;
             if byte == b'>' {
@@ -161,6 +241,7 @@ impl Tag {
                     self_closing: slash,
                     offset,
                     length: index + 1,
+                    attributes,
                 });
             }
             if byte == b'<' {
@@ -171,6 +252,7 @@ impl Tag {
                 index += 1;
                 continue;
             }
+            let name_start = index;
             index += 1;
             while let Some(&next) = bytes.get(index) {
                 if next == b'<' {
@@ -181,11 +263,17 @@ impl Tag {
                 }
                 index += 1;
             }
+            let is_tag_name = name_start == 1 + usize::from(closing);
+            let attribute = (!is_tag_name).then(|| html[name_start..index].to_ascii_lowercase());
             let mut value = index;
             while bytes.get(value).is_some_and(|&next| is_space(next)) {
                 value += 1;
             }
             if bytes.get(value) != Some(&b'=') {
+                attributes.extend(attribute.map(|name| Attribute {
+                    name,
+                    value: String::new(),
+                }));
                 continue;
             }
             value += 1;
@@ -195,6 +283,11 @@ impl Tag {
             let quote = *bytes.get(value)?;
             if quote == b'"' || quote == b'\'' {
                 let close = html[value + 1..].find(char::from(quote))?;
+                let text = &html[value + 1..value + 1 + close];
+                attributes.extend(attribute.map(|name| Attribute {
+                    name,
+                    value: decoded(text),
+                }));
                 index = value + 1 + close + 1;
             } else {
                 index = value;
@@ -207,8 +300,22 @@ impl Tag {
                     }
                     index += 1;
                 }
+                let text = &html[value..index];
+                attributes.extend(attribute.map(|name| Attribute {
+                    name,
+                    value: decoded(text),
+                }));
             }
         }
+    }
+
+    /// The value of the tag's first attribute named `name`, in lowercase, as HTML reads a
+    /// repeated attribute, or `None` if it has none. An attribute without a value has `""`.
+    pub(crate) fn attribute(&self, name: &str) -> Option<&str> {
+        self.attributes
+            .iter()
+            .find(|attribute| attribute.name == name)
+            .map(|attribute| attribute.value.as_str())
     }
 
     /// Whether the tag's element has content, so its tags must balance, as [`ELEMENTS`] lists.
@@ -221,6 +328,44 @@ impl Tag {
     pub(crate) fn has_optional_end(name: &str) -> bool {
         OPTIONAL_END_NAMES.contains(name)
     }
+}
+
+/// `text` with its character references decoded: the named ones `&amp;`, `&lt;`, `&gt;`,
+/// `&quot;`, `&apos;` and `&nbsp;`, and numeric ones such as `&#39;` or `&#x27;`. Any other `&`
+/// stays as written.
+fn decoded(text: &str) -> String {
+    let mut decoded = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(start) = rest.find('&') {
+        decoded.push_str(&rest[..start]);
+        rest = &rest[start..];
+        let reference = rest.find(';').map(|end| (&rest[1..end], end + 1));
+        let character = reference.and_then(|(name, _)| match name {
+            "amp" => Some('&'),
+            "lt" => Some('<'),
+            "gt" => Some('>'),
+            "quot" => Some('"'),
+            "apos" => Some('\''),
+            "nbsp" => Some('\u{a0}'),
+            _ => {
+                let number = name.strip_prefix('#')?;
+                let code = match number.strip_prefix(['x', 'X']) {
+                    Some(hex) => u32::from_str_radix(hex, 16).ok()?,
+                    None => number.parse().ok()?,
+                };
+                char::from_u32(code)
+            }
+        });
+        if let (Some(character), Some((_, length))) = (character, reference) {
+            decoded.push(character);
+            rest = &rest[length..];
+        } else {
+            decoded.push('&');
+            rest = &rest[1..];
+        }
+    }
+    decoded.push_str(rest);
+    decoded
 }
 
 /// The length of the comment `html` starts with, up to the end of its `-->` or `--!>`, or `None`
@@ -266,6 +411,90 @@ mod tests {
             ["<div>"],
             "comments, instructions, CDATA and declarations hold no tags, and names are lowercase"
         );
+    }
+
+    #[test]
+    fn attributes_are_read_with_their_values() {
+        let tags = Html::new(
+            "<img SRC=\"a b.png\" width=480 alt='it\"s' hidden><a href=docs/x.md#y>x</a>",
+        )
+        .tags()
+        .unwrap();
+        let image = &tags[0];
+        assert_eq!(
+            image.attribute("src"),
+            Some("a b.png"),
+            "a quoted value keeps its spaces"
+        );
+        assert_eq!(
+            image.attribute("width"),
+            Some("480"),
+            "an unquoted value runs to a space"
+        );
+        assert_eq!(
+            image.attribute("alt"),
+            Some("it\"s"),
+            "the other quote is part of a value"
+        );
+        assert_eq!(
+            image.attribute("hidden"),
+            Some(""),
+            "an attribute without a value has \"\""
+        );
+        assert_eq!(
+            image.attribute("title"),
+            None,
+            "a missing attribute has no value"
+        );
+        assert_eq!(
+            tags[1].attribute("href"),
+            Some("docs/x.md#y"),
+            "an unquoted value runs to the `>`"
+        );
+        let repeated = Html::new("<img alt=\"\" alt=\"b\">").tags().unwrap();
+        assert_eq!(
+            repeated[0].attribute("alt"),
+            Some(""),
+            "the first of a repeated attribute counts"
+        );
+    }
+
+    #[test]
+    fn attribute_values_and_text_decode_character_references() {
+        let tags = Html::new("<img alt=\"&nbsp;\" src=\"a&amp;b.png\" title=&#x41;&#66;&unknown;>")
+            .tags()
+            .unwrap();
+        assert_eq!(
+            tags[0].attribute("alt"),
+            Some("\u{a0}"),
+            "`&nbsp;` is a space"
+        );
+        assert_eq!(tags[0].attribute("src"), Some("a&b.png"), "`&amp;` is `&`");
+        assert_eq!(
+            tags[0].attribute("title"),
+            Some("AB&unknown;"),
+            "numeric references decode, and an unknown one stays as written"
+        );
+    }
+
+    #[test]
+    fn words_outside_an_element_are_found() {
+        for (html, words) in [
+            ("<p align=\"center\">A tool for people.</p>", true),
+            (
+                "<p align=\"center\"><a href=x><img src=a.png alt=CI></a></p>",
+                false,
+            ),
+            ("<p><a href=x>Docs</a> &nbsp; <!-- a note --></p>", false),
+            ("<p><a href=x>Docs</a> and more</p>", true),
+            ("<div>\n<!-- unclosed\n</div>", false),
+        ] {
+            assert_eq!(
+                Html::new(html).has_words_outside("a"),
+                words,
+                "{html:?} has words outside links: {words}"
+            );
+        }
     }
 
     #[test]
@@ -360,6 +589,7 @@ mod tests {
             self_closing: false,
             offset: 0,
             length: 0,
+            attributes: Vec::new(),
         };
         for name in ["details", "div", "select", "search", "li", "marquee"] {
             assert!(tag(name).has_content(), "<{name}> has content");

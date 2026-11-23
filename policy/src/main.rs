@@ -1,8 +1,11 @@
 //! The `trellis-policy` command.
 //!
-//! - `trellis-policy check [--manifest-path <Cargo.toml>]` runs every structure rule on the
-//!   workspace that holds `<Cargo.toml>`, or, without it, on the one Cargo finds from the current
-//!   directory, and prints each violation with its rule.
+//! - `trellis-policy check [--release] [--manifest-path <Cargo.toml>]` runs every structure rule
+//!   on the workspace that holds `<Cargo.toml>`, or, without it, on the one Cargo finds from the
+//!   current directory, and prints each violation with its rule. A violation that only a release
+//!   fails on, such as a prompt left in the readme, is printed as a notice and passes, unless
+//!   `--release` is given, which a release runs. A notice about what it can't check, such as a
+//!   Git LFS pointer in place of an image, never fails.
 //! - `trellis-policy rule-changes <base> [--head <commit>]` fails when the changes since the merge
 //!   base of `<base>` and the head change both the repository's rules and the code they check,
 //!   which must land in separate pull requests. The head is `<commit>`, or, without `--head`, the
@@ -31,7 +34,7 @@ use std::process::ExitCode;
 use std::{env, fs};
 
 use trellis_policy::{
-    AcceptedLicenses, ChangedFiles, Head, LicenseVerdict, NpmPackage, Rule, WebLicenses,
+    AcceptedLicenses, ChangedFiles, Fails, Head, LicenseVerdict, NpmPackage, Rule, WebLicenses,
     WebNotices, Workspace,
 };
 
@@ -39,7 +42,7 @@ use trellis_policy::{
 const USAGE_ERROR: u8 = 2;
 
 /// How to run the command.
-const USAGE: &str = "usage: trellis-policy check [--manifest-path <Cargo.toml>]\n       \
+const USAGE: &str = "usage: trellis-policy check [--release] [--manifest-path <Cargo.toml>]\n       \
                      trellis-policy rule-changes <base> [--head <commit>]\n       \
                      trellis-policy web-notices <about.toml> <web-licenses.toml> <node_modules> \
                      <output>\n       \
@@ -64,10 +67,10 @@ fn main() -> ExitCode {
 fn run(arguments: &[String]) -> io::Result<ExitCode> {
     let mut stdout = io::stdout().lock();
     match arguments {
-        [command] if command == "check" => check(None, &mut stdout),
-        [command, option, manifest] if command == "check" && option == "--manifest-path" => {
-            check(Some(Path::new(manifest)), &mut stdout)
-        }
+        [command, options @ ..] if command == "check" => match check_options(options) {
+            Some(CheckOptions { manifest, mode }) => check(manifest, mode, &mut stdout),
+            None => writeln!(io::stderr().lock(), "{USAGE}").map(|()| ExitCode::from(USAGE_ERROR)),
+        },
         [command, base] if command == "rule-changes" && !base.starts_with('-') => {
             rule_changes(base, &Head::WorkingTree, &mut stdout)
         }
@@ -119,10 +122,59 @@ fn error_prefix() -> &'static str {
     }
 }
 
+/// How a notice line starts: as a GitHub Actions notice annotation under GitHub Actions, and as
+/// `notice: ` elsewhere.
+fn notice_prefix() -> &'static str {
+    if env::var_os("GITHUB_ACTIONS").is_some() {
+        "::notice::"
+    } else {
+        "notice: "
+    }
+}
+
+/// Which violations fail `check`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Mode {
+    /// Every violation but the ones only a release fails on, which are notices.
+    Everyday,
+    /// Every violation, as a release checks.
+    Release,
+}
+
+/// What `trellis-policy check` runs on, and how.
+#[derive(Clone, Copy, Debug)]
+struct CheckOptions<'arguments> {
+    /// The manifest `--manifest-path` names, or `None` for the workspace Cargo finds.
+    manifest: Option<&'arguments Path>,
+    /// Which violations fail.
+    mode: Mode,
+}
+
+/// The options that `options`, the arguments after `check`, give, in any order, each at most
+/// once, or `None` if they don't parse.
+fn check_options(options: &[String]) -> Option<CheckOptions<'_>> {
+    let mut parsed = CheckOptions {
+        manifest: None,
+        mode: Mode::Everyday,
+    };
+    let mut rest = options.iter();
+    while let Some(option) = rest.next() {
+        match option.as_str() {
+            "--release" if parsed.mode == Mode::Everyday => parsed.mode = Mode::Release,
+            "--manifest-path" if parsed.manifest.is_none() => {
+                parsed.manifest = Some(Path::new(rest.next()?));
+            }
+            _ => return None,
+        }
+    }
+    Some(parsed)
+}
+
 /// Runs every rule on the workspace that holds `manifest_path`, or the one Cargo finds from the
-/// current directory, and writes each violation to `out`. A rule that can't read what it checks
-/// doesn't stop the others, but the run then exits with [`USAGE_ERROR`].
-fn check(manifest_path: Option<&Path>, out: &mut impl Write) -> io::Result<ExitCode> {
+/// current directory, and writes each violation to `out`: in [`Mode::Everyday`], one that only a
+/// release fails on as a notice. A rule that can't read what it checks doesn't stop the others,
+/// but the run then exits with [`USAGE_ERROR`].
+fn check(manifest_path: Option<&Path>, mode: Mode, out: &mut impl Write) -> io::Result<ExitCode> {
     let prefix = error_prefix();
     let workspace = match Workspace::load(manifest_path) {
         Ok(workspace) => workspace,
@@ -132,14 +184,26 @@ fn check(manifest_path: Option<&Path>, out: &mut impl Write) -> io::Result<ExitC
         }
     };
     let mut violations = 0_usize;
+    let mut notices = 0_usize;
     let mut failed = false;
     for rule in Rule::ALL {
         let name = rule.name();
         match rule.check(&workspace) {
             Ok(found) => {
-                violations += found.len();
                 for violation in found {
-                    writeln!(out, "{prefix}[{name}] {violation}")?;
+                    match (violation.fails(), mode) {
+                        (Fails::Always, _) | (Fails::Release, Mode::Release) => {
+                            violations += 1;
+                            writeln!(out, "{prefix}[{name}] {violation}")?;
+                        }
+                        (Fails::Release, Mode::Everyday) => {
+                            notices += 1;
+                            writeln!(out, "{}[{name}] {violation}", notice_prefix())?;
+                        }
+                        (Fails::Never, _) => {
+                            writeln!(out, "{}[{name}] {violation}", notice_prefix())?;
+                        }
+                    }
                 }
             }
             Err(error) => {
@@ -160,11 +224,17 @@ fn check(manifest_path: Option<&Path>, out: &mut impl Write) -> io::Result<ExitC
         )?;
         return Ok(ExitCode::FAILURE);
     }
-    writeln!(
-        out,
-        "All {} structure rules hold in {root}.",
-        Rule::ALL.len()
-    )?;
+    let holds = format!("All {} structure rules hold in {root}", Rule::ALL.len());
+    match (mode, notices) {
+        (Mode::Release, _) => writeln!(out, "{holds}, with the checks a release adds.")?,
+        (Mode::Everyday, 0) => writeln!(out, "{holds}.")?,
+        (Mode::Everyday, _) => writeln!(
+            out,
+            "{holds}, but {} above would fail a release. `just policy-release` checks as a \
+             release does.",
+            count(notices, "notice")
+        )?,
+    }
     Ok(ExitCode::SUCCESS)
 }
 

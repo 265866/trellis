@@ -178,7 +178,7 @@ release-test:
 #
 # Checks that every relative link and anchor in the Markdown files resolves.
 links:
-    lychee --offline --include-fragments --no-progress --exclude-path target --exclude-path lints/target --exclude-path template './**/*.md'
+    lychee --offline --include-fragments --no-progress --exclude-path target --exclude-path lints/target --exclude-path template --exclude-path policy/tests/readme './**/*.md'
 
 # Checks that the template pins the same toolchains as this repository and its lints, that the
 # config files and workflows both keep are the same apart from the Advisories workflow's web UI
@@ -707,6 +707,15 @@ update:
       git add --all
       commit commit --quiet --allow-empty --message "chore: publish the crate under $license"
       copier update --quiet --defaults --vcs-ref=:current: --data publish_crate=true --data "license=$license"
+      # The update leaves README.md alone, so the owner links the new license files there, which
+      # `trellis-policy check` requires.
+      dual='Released under either the [MIT License](LICENSE-MIT) or the [Apache License 2.0](LICENSE-APACHE), at'
+      if [ "$license" = MIT ]; then
+        swap README.md "$dual" 'Released under the [MIT License](LICENSE).'
+        swap README.md 'your option.' ''
+      else
+        swap README.md 'Released under the [MIT License](LICENSE).' "$dual\nyour option."
+      fi
       if [ "$license" = MIT ]; then
         delivered=(LICENSE) removed=(LICENSE-MIT LICENSE-APACHE)
       else
@@ -1701,7 +1710,7 @@ checker-install:
     cd "$out/trellis"
     git init --quiet --initial-branch main
     cp policy/src/main.rs "$out/main.rs"
-    line='        "All {} structure rules hold in {root}.",'
+    line='    let holds = format!("All {} structure rules hold in {root}", Rule::ALL.len());'
     awk -v old="$line" '!done && $0 == old { sub(/"All/, "\"The stale checker: all"); done = 1 } { print } END { exit !done }' \
       "$out/main.rs" > policy/src/main.rs || fail "policy/src/main.rs has no line $line"
     git add --all

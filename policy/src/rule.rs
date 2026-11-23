@@ -6,7 +6,7 @@ use crate::workspace::Workspace;
 use crate::{
     agent_files, build_scripts, config_files, deploy_scripts, docs_index, docs_layout,
     internal_dependencies, internal_dependency_versions, license_files, lints_tables,
-    member_manifests, member_sources, proc_macros, release_changelog, restricted_crates,
+    member_manifests, member_sources, proc_macros, readme, release_changelog, restricted_crates,
     workspace_shape,
 };
 
@@ -50,6 +50,11 @@ pub enum Rule {
     /// `Documentation` section in `CONTRIBUTING.md` is an index too, and every page in `docs/`
     /// opens with its title and a paragraph.
     DocsLayout,
+    /// The readme and the pages in `docs/` have what a stranger needs: the sections and license
+    /// links, images that exist, alt text on the images that link a page in `docs/`, PNG files of
+    /// image chunks alone and a linked gallery fail every check, and the outline's prompts, the
+    /// opening paragraph and the hero of a project with a UI fail only a release.
+    Readme,
     /// `release-plz.toml` exists, its main package's entry takes every other member into its
     /// changelog, and release-plz can write no changelog to a file that is code.
     ReleaseChangelog,
@@ -63,7 +68,7 @@ pub enum Rule {
 
 impl Rule {
     /// Every rule, in the order `trellis-policy check` runs them.
-    pub const ALL: [Self; 16] = [
+    pub const ALL: [Self; 17] = [
         Self::WorkspaceShape,
         Self::LintsTables,
         Self::MemberManifests,
@@ -78,6 +83,7 @@ impl Rule {
         Self::AgentFiles,
         Self::DocsIndex,
         Self::DocsLayout,
+        Self::Readme,
         Self::ReleaseChangelog,
         Self::DeployScripts,
     ];
@@ -99,6 +105,7 @@ impl Rule {
             Self::InternalDependencyVersions => "internal_dependency_versions",
             Self::DocsIndex => "docs_index",
             Self::DocsLayout => "docs_layout",
+            Self::Readme => "readme",
             Self::ReleaseChangelog => "release_changelog",
             Self::DeployScripts => "deploy_scripts",
             Self::RestrictedCrates => "restricted_crates",
@@ -125,6 +132,7 @@ impl Rule {
             Self::InternalDependencyVersions => Ok(internal_dependency_versions::check(workspace)),
             Self::DocsIndex => docs_index::check(workspace),
             Self::DocsLayout => docs_layout::check(workspace),
+            Self::Readme => readme::check(workspace),
             Self::ReleaseChangelog => release_changelog::check(workspace),
             Self::DeployScripts => deploy_scripts::check(workspace),
             Self::RestrictedCrates => Ok(restricted_crates::check(workspace)),

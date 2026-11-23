@@ -96,7 +96,7 @@ pub fn check(workspace: &Workspace) -> Result<Vec<Violation>, PolicyError> {
 /// expression doesn't parse as crates.io parses it or names a license the check doesn't know. So
 /// `MIT/Apache-2.0` reads as `MIT OR Apache-2.0`, and a `WITH` exception asks for no file beyond
 /// its license's.
-fn license_files(expression: &str) -> Option<Vec<&'static str>> {
+pub(crate) fn license_files(expression: &str) -> Option<Vec<&'static str>> {
     let parsed = Expression::parse_mode(expression, CRATES_IO).ok()?;
     let mut ids = Vec::new();
     for requirement in parsed.requirements() {

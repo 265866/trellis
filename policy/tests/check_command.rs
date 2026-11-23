@@ -38,7 +38,8 @@ libraries = {libraries}
 
 [workspace.metadata.policy]
 docs_files = ["README.md", "AGENTS.md", "docs/install.md"]
-readme_sections = ["Install", "Documentation"]
+interfaces = ["library"]
+readme_sections = ["Quick start", "Documentation"]
 
 [workspace.metadata.policy.internal_dependencies]
 demo = ["demo_core"]
@@ -95,7 +96,7 @@ const CONFIG_FILES: [(&str, &str); 14] = [
 
 /// The project's `README.md`, with the sections `readme_sections` lists and an index that links
 /// its one page.
-const README: &str = "# Demo\n\nThe demo.\n\n## Install\n\n\
+const README: &str = "# Demo\n\nThe demo.\n\n## Quick start\n\n\
                       See [the install guide](docs/install.md).\n\n## Documentation\n\n\
                       - [Install](docs/install.md#linux): install the demo.\n";
 
@@ -154,6 +155,26 @@ impl Project {
         self.write(
             "Cargo.toml",
             &root.replacen(table, &format!("{table}{setting}\n"), 1),
+        );
+    }
+
+    /// Gives the readme the `## License` section a licensed workspace's readme has, linking
+    /// `files`, and lists it in `readme_sections`.
+    fn license_section(&self, files: &[&str]) {
+        self.edit_root_manifest(
+            "readme_sections = [\"Quick start\", \"Documentation\"]",
+            "readme_sections = [\"Quick start\", \"Documentation\", \"License\"]",
+        );
+        let links: Vec<String> = files
+            .iter()
+            .map(|file| format!("[{file}]({file})"))
+            .collect();
+        self.write(
+            "README.md",
+            &format!(
+                "{README}\n## License\n\nReleased under {}.\n",
+                links.join(" or ")
+            ),
         );
     }
 
@@ -437,7 +458,7 @@ fn symbolic_link(target: impl AsRef<Path>, link: &Path) {
 fn a_generated_project_passes() {
     let run = Project::new().check();
     run.assert_passes();
-    run.assert_reports(0, "All 16 structure rules hold");
+    run.assert_reports(0, "All 17 structure rules hold");
 }
 
 #[test]
@@ -544,7 +565,7 @@ fn a_link_outside_the_index_doesnt_count() {
     let project = Project::new();
     project.write(
         "README.md",
-        "# Demo\n\nThe demo.\n\n## Install\n\nSee [the install guide](docs/install.md).\n",
+        "# Demo\n\nThe demo.\n\n## Quick start\n\nSee [the install guide](docs/install.md).\n",
     );
     let run = project.check();
     run.assert_reports(
@@ -554,8 +575,8 @@ fn a_link_outside_the_index_doesnt_count() {
     );
     run.assert_reports(
         1,
-        "[docs_layout] README.md: The readme's `##` sections are `Install`, but `readme_sections` \
-         in `[workspace.metadata.policy]` lists `Install`, `Documentation`.",
+        "[docs_layout] README.md: The readme's `##` sections are `Quick start`, but `readme_sections` \
+         in `[workspace.metadata.policy]` lists `Quick start`, `Documentation`.",
     );
     run.assert_reports(1, "2 structure rule violation(s)");
 }
@@ -630,12 +651,12 @@ fn readme_sections_must_match_in_order() {
     let index = "## Documentation\n\n- [Install](docs/install.md): install the demo.\n";
     for (readme, found) in [
         (
-            format!("# Demo\n\n{index}\n## Install\n\nRun it.\n"),
-            "`Documentation`, `Install`",
+            format!("# Demo\n\n{index}\n## Quick start\n\nRun it.\n"),
+            "`Documentation`, `Quick start`",
         ),
         (
-            format!("# Demo\n\n## Install\n\nRun it.\n\n{index}\n## Usage\n\nMore.\n"),
-            "`Install`, `Documentation`, `Usage`",
+            format!("# Demo\n\n## Quick start\n\nRun it.\n\n{index}\n## Usage\n\nMore.\n"),
+            "`Quick start`, `Documentation`, `Usage`",
         ),
         (
             format!("# Demo\n\n## Setup\n\nRun it.\n\n{index}"),
@@ -648,7 +669,7 @@ fn readme_sections_must_match_in_order() {
             1,
             &format!(
                 "[docs_layout] README.md: The readme's `##` sections are {found}, but \
-                 `readme_sections` in `[workspace.metadata.policy]` lists `Install`, \
+                 `readme_sections` in `[workspace.metadata.policy]` lists `Quick start`, \
                  `Documentation`. Give the readme exactly those sections, in that order, with \
                  the depth on pages in `docs/`, or change `readme_sections` in a rule change if \
                  the project's sections change."
@@ -659,8 +680,8 @@ fn readme_sections_must_match_in_order() {
     project.write(
         "README.md",
         &format!(
-            "# Demo\n\n```md\n## Not a section\n```\n\n## Install\n\nRun it.\n\n\
-             ### Linux\n\n{index}"
+            "# Demo\n\nThe demo.\n\n```md\n## Not a section\n```\n\n## Quick start\n\n\
+             Run it.\n\n### Linux\n\n{index}"
         ),
     );
     project.check().assert_passes();
@@ -671,7 +692,7 @@ fn a_setext_heading_in_the_readme_fails() {
     let project = Project::new();
     project.write(
         "README.md",
-        &README.replace("## Install\n", "Usage\n-----\n\n## Install\n"),
+        &README.replace("## Quick start\n", "Usage\n-----\n\n## Quick start\n"),
     );
     let run = project.check();
     run.assert_reports(
@@ -679,7 +700,7 @@ fn a_setext_heading_in_the_readme_fails() {
         "[docs_layout] README.md: Line 6 underlines the line above it, which makes that line a \
          heading. Write every heading as a `#` line",
     );
-    run.assert_reports(1, "The readme's `##` sections are `Usage`, `Install`");
+    run.assert_reports(1, "The readme's `##` sections are `Usage`, `Quick start`");
     run.assert_reports(1, "2 structure rule violation(s)");
 }
 
@@ -834,6 +855,7 @@ fn a_published_crate_without_its_license_files_fails() {
         "publish = false\n",
         "license = \"MIT OR Apache-2.0\"\npublish = true\n",
     );
+    project.license_section(&["LICENSE-MIT", "LICENSE-APACHE"]);
     for (name, dependencies) in [("demo", "demo_core.workspace = true\n"), ("demo_core", "")] {
         let manifest = member_manifest(name, dependencies).replace(
             "publish.workspace = true\n",
@@ -911,12 +933,75 @@ fn violations_are_annotations_under_github_actions() {
 }
 
 #[test]
+fn a_release_only_violation_is_a_notice_until_a_release() {
+    let project = Project::new();
+    project.write(
+        "README.md",
+        &README.replace(
+            "The demo.\n",
+            "The demo.\n\n> **To write:** the features.\n",
+        ),
+    );
+    let manifest = project.path().join("Cargo.toml");
+    let manifest = manifest
+        .to_str()
+        .expect("the temporary path should be UTF-8");
+    let prompt = "[readme] README.md: Line 5 holds a prompt of the outline trellis wrote";
+    let everyday = project.check();
+    everyday.assert_reports(0, &format!("notice: {prompt}"));
+    everyday.assert_reports(0, "All 17 structure rules hold in ");
+    everyday.assert_reports(
+        0,
+        ", but 1 notice above would fail a release. `just policy-release` checks as a release \
+         does.",
+    );
+    run(
+        &project.path(),
+        &["check", "--manifest-path", manifest],
+        Ci::GitHubActions,
+    )
+    .assert_reports(0, &format!("::notice::{prompt}"));
+    for arguments in [
+        &["check", "--release", "--manifest-path", manifest][..],
+        &["check", "--manifest-path", manifest, "--release"],
+    ] {
+        let release = project.run(arguments);
+        release.assert_reports(1, &format!("error: {prompt}"));
+        release.assert_reports(1, "1 structure rule violation(s)");
+    }
+    project.write("README.md", README);
+    let release = project.run(&["check", "--release", "--manifest-path", manifest]);
+    release.assert_passes();
+    release.assert_reports(0, ", with the checks a release adds.");
+}
+
+#[test]
+fn a_git_lfs_pointer_is_a_notice_that_no_check_fails_on() {
+    let project = Project::new();
+    project.write(
+        "docs/screenshots/main.png",
+        "version https://git-lfs.github.com/spec/v1\noid sha256:0123\nsize 42\n",
+    );
+    let manifest = project.path().join("Cargo.toml");
+    let manifest = manifest
+        .to_str()
+        .expect("the temporary path should be UTF-8");
+    let notice = "notice: [readme] docs/screenshots/main.png: It is a Git LFS pointer";
+    project.check().assert_reports(0, notice);
+    let release = project.run(&["check", "--release", "--manifest-path", manifest]);
+    release.assert_reports(0, notice);
+    release.assert_reports(0, ", with the checks a release adds.");
+}
+
+#[test]
 fn a_usage_or_load_error_exits_with_2() {
     let project = Project::new();
     let run_in_project = |arguments: &[&str]| run(&project.path(), arguments, Ci::Local);
     for arguments in [
         &["check", "--manifest-path"][..],
         &["check", "--bogus"],
+        &["check", "--release", "--release"],
+        &["check", "--release", "--manifest-path"],
         &["unknown-command"],
         &["rule-changes", "--help"],
         &[],
@@ -1486,8 +1571,8 @@ fn a_member_the_release_changelog_leaves_out_fails() {
     project.check().assert_passes();
 }
 
-/// The project's `README.md` with `extra` at the end of its `Install` section.
-fn readme_with_install(extra: &str) -> String {
+/// The project's `README.md` with `extra` at the end of its `Quick start` section.
+fn readme_with_quick_start(extra: &str) -> String {
     README.replace(
         "## Documentation\n",
         &format!("{extra}\n\n## Documentation\n"),
@@ -1508,6 +1593,12 @@ fn assert_readme_fails(project: &Project, readme: &str, text: &str) {
     );
 }
 
+/// A PNG of one black pixel, with only the `IHDR`, `IDAT` and `IEND` chunks.
+const PNG: &[u8] =
+    b"\x89PNG\r\n\x1a\n\0\0\0\x0dIHDR\0\0\0\x01\0\0\0\x01\x08\0\0\0\0\x3a\x7e\x9b\x55\
+                     \0\0\0\x0aIDAT\x78\x9c\x63\x60\0\0\0\x02\0\x01\x48\xaf\xa4\x71\
+                     \0\0\0\0IEND\xae\x42\x60\x82";
+
 /// The message for `##` sections other than `readme_sections`.
 const SECTIONS: &str = "The readme's `##` sections are";
 
@@ -1527,7 +1618,7 @@ const UNCLOSED: &str = "opens HTML that doesn't close";
 const MARKUP: &str = "Write the heading as plain text";
 
 /// README snippets that GitHub renders as a heading, or that hide what follows, each placed at
-/// the end of the `Install` section, with the message each must fail with.
+/// the end of the `Quick start` section, with the message each must fail with.
 const README_REGRESSIONS: [(&str, &str, &str); 60] = [
     ("setext in a list item", "- Extra\n  ---", NESTED),
     (
@@ -1591,7 +1682,7 @@ const README_REGRESSIONS: [(&str, &str, &str); 60] = [
     (
         "lowercase declaration",
         "<!a\n## Extra",
-        "`Install`, `Extra`, `Documentation`",
+        "`Quick start`, `Extra`, `Documentation`",
     ),
     (
         "lowercase declaration in an item",
@@ -1634,7 +1725,7 @@ const README_REGRESSIONS: [(&str, &str, &str); 60] = [
     (
         "empty item, then a heading",
         "-\n\n  ## Extra",
-        "`Install`, `Extra`, `Documentation`",
+        "`Quick start`, `Extra`, `Documentation`",
     ),
     (
         "comment ended by --!>",
@@ -1746,43 +1837,43 @@ const README_REGRESSIONS: [(&str, &str, &str); 60] = [
 const README_EDIT_REGRESSIONS: [(&str, &str, &str, &str); 10] = [
     (
         "comment hiding a section",
-        "## Install\n",
-        "<!--\n\n## Install\n\n-->\n",
+        "## Quick start\n",
+        "<!--\n\n## Quick start\n\n-->\n",
         SECTIONS,
     ),
     (
         "section in a quote",
-        "## Install\n",
-        "> ## Install\n",
+        "## Quick start\n",
+        "> ## Quick start\n",
         NESTED,
     ),
     (
         "section in a list",
-        "## Install\n",
-        "- ## Install\n",
+        "## Quick start\n",
+        "- ## Quick start\n",
         NESTED,
     ),
     (
         "emphasized section",
-        "## Install\n",
+        "## Quick start\n",
         "## *Install*\n",
         MARKUP,
     ),
     (
         "linked section",
-        "## Install\n",
+        "## Quick start\n",
         "## [Install](x.md)\n",
         MARKUP,
     ),
     (
         "section in a tag",
-        "## Install\n",
+        "## Quick start\n",
         "## <kbd>Install</kbd>\n",
         MARKUP,
     ),
     (
         "section as an image",
-        "## Install\n",
+        "## Quick start\n",
         "## ![Install](x.png)\n",
         MARKUP,
     ),
@@ -1800,8 +1891,8 @@ const README_EDIT_REGRESSIONS: [(&str, &str, &str, &str); 10] = [
     ),
     (
         "section inside details",
-        "## Install\n",
-        "<details>\n\n## Install\n\n</details>\n",
+        "## Quick start\n",
+        "<details>\n\n## Quick start\n\n</details>\n",
         "opens `<details>`, which doesn't close before the next section",
     ),
 ];
@@ -1916,7 +2007,7 @@ const INDEX_REGRESSIONS: [(&str, &str, &str); 21] = [
 ];
 
 /// README snippets that GitHub renders without an extra heading, each placed at the end of the
-/// `Install` section. Each must pass.
+/// `Quick start` section. Each must pass.
 const README_FALSE_POSITIVES: [(&str, &str); 22] = [
     ("comment over paragraphs", "<!--\n\n## Old section\n\n-->"),
     ("pre block", "<pre>\n\n# a comment\n</pre>"),
@@ -1960,7 +2051,7 @@ const README_FALSE_POSITIVES: [(&str, &str); 22] = [
     ),
     (
         "picture, image and break",
-        "<picture>\n<source srcset=\"a.png\">\n<img src=\"b.png\" alt=\"Logo\">\n</picture>\n\nLine one<br>line two.",
+        "<picture>\n<source srcset=\"a.png\">\n<img src=\"https://example.com/b.png\" alt=\"Logo\">\n</picture>\n\nLine one<br>line two.",
     ),
     (
         "centered badges",
@@ -2000,7 +2091,7 @@ fn assert_case_fails(project: &Project, name: &str, expected: &str) {
 fn readme_shapes_github_renders_as_headings_fail() {
     let project = Project::new();
     for (name, snippet, expected) in README_REGRESSIONS {
-        project.write("README.md", &readme_with_install(snippet));
+        project.write("README.md", &readme_with_quick_start(snippet));
         assert_case_fails(&project, name, expected);
     }
     for (name, from, to, expected) in README_EDIT_REGRESSIONS {
@@ -2019,8 +2110,10 @@ fn readme_shapes_github_renders_as_headings_fail() {
 #[test]
 fn readme_shapes_github_renders_without_a_heading_pass() {
     let project = Project::new();
+    fs::write(project.path().join("docs/header.png"), PNG)
+        .expect("the image a snippet shows should be written, since the readme rule needs it");
     for (name, snippet) in README_FALSE_POSITIVES {
-        project.write("README.md", &readme_with_install(snippet));
+        project.write("README.md", &readme_with_quick_start(snippet));
         let run = project.check();
         assert!(
             run.code == Some(0),
@@ -2045,7 +2138,7 @@ fn readme_shapes_github_renders_without_a_heading_pass() {
         ),
         (
             "closing `#` sequence",
-            README.replacen("## Install\n", "##  Install  ##\n", 1),
+            README.replacen("## Quick start\n", "##  Quick start  ##\n", 1),
         ),
         (
             "an SPDX comment before the title",
@@ -2136,7 +2229,7 @@ fn the_readme_has_one_title_first() {
     let project = Project::new();
     for (readme, text) in [
         (
-            readme_with_install("# Another title\n"),
+            readme_with_quick_start("# Another title\n"),
             "has 2 `#` headings",
         ),
         (
@@ -2196,7 +2289,7 @@ fn readme_sections_can_change_in_a_rule_change() {
     let project = Project::new();
     assert_readme_fails(
         &project,
-        &readme_with_install("## Usage\n"),
+        &readme_with_quick_start("## Usage\n"),
         "or change `readme_sections` in a rule change if the project's sections change.",
     );
 }
@@ -2346,7 +2439,7 @@ fn a_closing_tag_after_unclosed_html_isnt_reported_again() {
     let project = Project::new();
     project.write(
         "README.md",
-        &readme_with_install("<div title=\"\n\n</details>"),
+        &readme_with_quick_start("<div title=\"\n\n</details>"),
     );
     let run = project.check();
     run.assert_reports(1, UNCLOSED);
@@ -2379,6 +2472,7 @@ fn a_page_may_start_with_comments_before_its_title() {
 fn a_member_that_doesnt_inherit_the_workspace_license_fails() {
     let project = Project::new();
     project.edit_root_manifest("publish = false\n", "publish = false\nlicense = \"MIT\"\n");
+    project.license_section(&["LICENSE"]);
     project.check().assert_reports(
         1,
         "error: [member_manifests] crates/demo_core/Cargo.toml: `[package] license` is missing, \
