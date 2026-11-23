@@ -1886,13 +1886,20 @@ shape answers:
     #!/usr/bin/env bash
     set -euo pipefail
     name=demo-shape
+    description="A demo that trellis generates for its tests."
     case "{{ answers }}" in
       binary) data=(--data kind=binary) ;;
       binary-windows-macos-dual) data=(--data kind=binary --data 'platforms=[windows, macos]' --data 'license=MIT OR Apache-2.0') ;;
       library-published) data=(--data kind=library --data publish_crate=true --data 'license=MIT OR Apache-2.0') ;;
       library-unlicensed) data=(--data kind=library --data license=none) ;;
       service-unlicensed) data=(--data kind=service --data license=none) ;;
-      binary-private) data=(--data kind=binary --data visibility=private) name=demo-binary-with-the-longest-name-the-template-supports ;;
+      # A description GitHub gets without its backticks, and that a shell, JSON and just each
+      # quote, and topics that setup-github sets.
+      binary-private)
+        data=(--data kind=binary --data visibility=private --data 'topics=[rust, demo-topic]')
+        name=demo-binary-with-the-longest-name-the-template-supports
+        description="It's a \`Demo\` with \"quotes\" and {{ '{{' }} braces }}."
+        ;;
       service-private) data=(--data kind=service --data visibility=private) ;;
       library-private) data=(--data kind=library --data visibility=private) name=demo-library-with-the-longest-name-the-template-formats ;;
       *) echo "error: no answer set named {{ answers }}" >&2; exit 2 ;;
@@ -1905,7 +1912,7 @@ shape answers:
     has() { grep --quiet --fixed-strings -- "$2" <<< "$1"; }
     copied=$(uv tool run copier@9.19.1 copy --defaults --vcs-ref HEAD \
       --data "project_name=$name" \
-      --data "description=A demo that trellis generates for its tests." \
+      --data "description=$description" \
       "${data[@]}" "$trellis" "$project" 2>&1) || { echo "$copied" >&2; exit 1; }
     # With the default author, each MIT license file names 265866, and only 265866, as the copyright
     # holder, and an unlicensed project has no license file.
@@ -1928,6 +1935,32 @@ shape answers:
         --data "description=A demo that trellis generates for its tests." \
         "${data[@]}" "$trellis" "$out/longer" 2>&1) && fail "Copier took a name of 56 characters"
       has "$longer" 'Use at most 55 characters.' || fail "Copier refused a longer name for another reason: $longer"
+    fi
+    # GitHub's rules for topics: lowercase letters, numbers and hyphens, at most 50 characters, and
+    # at most 20 on a repository.
+    if [ "{{ answers }}" = binary ]; then
+      copy_topics() {
+        uv tool run copier@9.19.1 copy --defaults --vcs-ref HEAD --data "project_name=$name" \
+          --data "description=$description" "${data[@]}" --data "topics=$1" "$trellis" "$2" 2>&1
+      }
+      long=$(printf 'a%.0s' {1..50})
+      many=$(printf 't%s, ' {1..18})
+      accepted=$(copy_topics "[$long, '2024', ${many%, }]" "$out/topics") \
+        || { echo "$accepted" >&2; fail "Copier refused 20 topics, one of 50 characters and one of digits"; }
+      while IFS='|' read -r topics message; do
+        refused=$(copy_topics "$topics" "$out/refused") && fail "Copier took topics=$topics"
+        has "$refused" "$message" || fail "Copier refused topics=$topics for another reason: $refused"
+      done << EOF
+    rust|List the topics, such as
+    {}|List the topics, such as
+    [Rust]|\`Rust\` is not a topic
+    [rust_lang]|\`rust_lang\` is not a topic
+    [${long}a]|\`${long}a\` is not a topic
+    [-rust]|\`-rust\` is not a topic
+    [2024]|YAML reads \`2024\` as something other than text: quote it, as in \`['2024']\`.
+    [${many}t19, t20, t21]|GitHub takes at most 20 topics.
+    [rust, rust]|Name each topic once.
+    EOF
     fi
     has "$copied" "Follow \"Before the first push\" in docs/maintaining.md. It creates 265866/$name" \
       || fail "Copier didn't print the next steps"
@@ -1970,6 +2003,25 @@ shape answers:
       "POST repos/265866/$name/labels" '"name": "release"' "POST repos/265866/$name/rulesets"; do
       has "$dry_run" "$expected" || fail "the setup-github dry run lacks $expected"
     done
+    # GitHub gets the description as JSON, without its backticks, and the topics only from a topics
+    # answer.
+    case "{{ answers }}" in
+      binary-private)
+        set_description='{"description": "It\u0027s a Demo with \"quotes\" and {{ '{{' }} braces }}."}'
+        set_topics="PUT repos/265866/$name/topics"
+        ;;
+      *) set_description="{\"description\": \"$description\"}" set_topics='' ;;
+    esac
+    has "$dry_run" "PATCH repos/265866/$name --input - <<EOF"$'\n'"$set_description" \
+      || fail "the setup-github dry run doesn't set the description: $set_description"
+    if [ -n "$set_topics" ]; then
+      has "$dry_run" "$set_topics --input - <<EOF"$'\n''{"names": ["rust", "demo-topic"]}' \
+        || fail "the setup-github dry run doesn't set the topics"
+    else
+      ! has "$dry_run" "/topics" || fail "the setup-github dry run of a project without topics sets them"
+      has "$dry_run" "No topics answer, so the repository's topics on GitHub stay as they are." \
+        || fail "the setup-github dry run doesn't say it leaves the topics"
+    fi
     public=$(grep --quiet '^visibility: public$' .copier-answers.yml && echo yes || echo no)
     for public_only in "repos/265866/$name/actions/policies" "PUT repos/265866/$name/private-vulnerability-reporting"; do
       if has "$dry_run" "$public_only"; then

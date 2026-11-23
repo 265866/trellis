@@ -406,6 +406,8 @@ image: notices
 {%- endif %}
 {%- set repo = github_owner ~ '/' ~ project_name %}
 {%- set published = kind == 'library' and publish_crate %}
+{#- GitHub shows a description as plain text, so the backticks the crate docs need go. #}
+{%- set github_description = description | replace('`', '') %}
 
 # The owner's recipes are bash scripts, which run on Windows in Git Bash: what they check doesn't
 # fit on one PowerShell line, and only the owner runs them. They need `gh` signed in as an admin of
@@ -466,6 +468,17 @@ setup-github $dry_run="false":
     echo "Squash merging only, with the pull request's title and description as the commit."
     change PATCH "repos/$repo" '{"allow_squash_merge": true, "allow_merge_commit": false, "allow_rebase_merge": false,
      "squash_merge_commit_title": "PR_TITLE", "squash_merge_commit_message": "PR_BODY"}'
+
+    echo "The description from the description answer, without its backticks."
+    change PATCH "repos/$repo" '{"description": {{ github_description | tojson | replace('{{', '{{{{') }}}'
+    {%- if topics %}
+
+    echo "The topics from the topics answer: {{ topics | join(', ') }}."
+    change PUT "repos/$repo/topics" '{"names": {{ topics | tojson }}}'
+    {%- else %}
+
+    echo "No topics answer, so the repository's topics on GitHub stay as they are."
+    {%- endif %}
 
     echo "The release label that release-plz puts on its pull request."
     lookup label "repos/$repo/labels?per_page=100" '.[] | select(.name | ascii_downcase == "release") | .name'
@@ -571,6 +584,20 @@ check-github:
     { read -r visibility; read -r merging; } <<< "$settings"
     verdict "visibility" "$visibility" {{ visibility }}
     verdict "merge settings" "$merging" "squash true, merge commits false, rebase false, squash commit PR_TITLE and PR_BODY"
+    description=$(gh api "repos/$repo" --jq '.description // ""')
+    verdict "description" "$description" {{ "'" ~ (github_description | replace("'", "'\\''") | replace('{{', '{{{{')) ~ "'" }}
+    topics=$(gh api "repos/$repo" --jq '.topics // [] | sort | join(", ")')
+    {%- if topics %}
+    verdict "topics" "$topics" "{{ topics | sort | join(', ') }}"
+    {%- else %}
+    if [ -n "$topics" ]; then
+      # JSON, which YAML reads as it is, keeps a topic such as 2024 a string.
+      quoted=$(gh api "repos/$repo" --jq '.topics // [] | sort | tojson')
+      echo "note: topics: GitHub has $topics, and with no topics answer setup-github leaves them; to keep them in the answers, run uvx copier update --defaults --vcs-ref=:current: --data 'topics=$quoted'"
+    else
+      echo "ok: topics: none, and no topics answer"
+    fi
+    {%- endif %}
     label=$(gh api --paginate "repos/$repo/labels?per_page=100" --jq '.[] | select(.name | ascii_downcase == "release") | "present"')
     verdict "release label" "${label:-missing}" present
     {%- if visibility == 'public' %}

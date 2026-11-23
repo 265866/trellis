@@ -6,6 +6,31 @@ part lists what a project's owner must do around the update: a rule that can fla
 a setting to change, or a step to do by hand. [CONTRIBUTING.md](CONTRIBUTING.md#release-trellis)
 has the versioning rule.
 
+## Unreleased
+
+### Action required in projects
+
+- **Run `just check-github` after the update.** It now compares the repository's description on
+  GitHub with the `description` answer, without its backticks. If it reports the description
+  wrong, run `just setup-github`, which sets it.
+- **To keep your repository's topics in the answers, record them.** Without a `topics` answer,
+  nothing changes on GitHub, and `just check-github` notes the topics the repository has, with the
+  command that records them, such as
+  `uvx copier update --defaults --vcs-ref=:current: --data 'topics=[rust, self-hosted]'`. From
+  then on, `just setup-github` sets exactly that list and `just check-github` reports any
+  difference.
+
+### Added
+
+- **Descriptions and topics on GitHub, so people can find a repository.** `just setup-github` sets
+  the repository's description from the `description` answer, without the backticks the crate docs
+  need, since GitHub shows them as typed. A new optional `topics` answer, a list such as `[rust,
+  cli]`, gives the repository's topics. trellis takes only what GitHub allows: lowercase letters,
+  numbers and hyphens, starting with a letter or number, at most 50 characters each, and at most 20.
+  `just setup-github` sets exactly that list, and without the answer it leaves GitHub's topics
+  alone. `just check-github` reports a description or topics that differ from the answers. The
+  update changes `.copier-answers.yml`, `justfile` and `docs/maintaining.md`.
+
 ## v0.20.2
 
 ### Fixed

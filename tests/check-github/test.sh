@@ -4,7 +4,9 @@
 # one whose ruleset main is disabled or in evaluate mode, lets an actor bypass it, leaves rules
 # to another ruleset or applies no rule to main, and one without it must each fail and say why. A
 # private repository whose plan GitHub says lacks rulesets must pass with main's protection
-# unavailable, though gh writes the refusal's body to stdout.
+# unavailable, though gh writes the refusal's body to stdout. A description other than the
+# answer's, without its backticks, is wrong, and so are topics other than a topics answer's, in any
+# order. Without a topics answer, topics on GitHub are a note that doesn't fail.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 cd "$1"
@@ -15,11 +17,16 @@ cp "$here/gh" "$out/bin/gh"
 fail() { echo "error: check-github: $1" >&2; exit 1; }
 
 # The fixtures in public/ describe a correct public repository. A private one differs in its
-# visibility, and the checks skip what only a public repository has.
+# visibility, and the checks skip what only a public repository has. The description and topics
+# come from the project's answers, the topics in reverse order.
+answers=$(uv run --quiet --no-project --with pyyaml==6.0.3 python -I -c \
+  'import json, yaml; print(json.dumps(yaml.safe_load(open(".copier-answers.yml", encoding="utf-8"))))')
+description=$(jq --raw-output '.description | gsub("`"; "")' <<< "$answers")
+topics=$(jq --raw-output '.topics // [] | sort | join(", ")' <<< "$answers")
 cp -R "$here/public" "$out/correct"
-if grep --quiet '^visibility: private$' .copier-answers.yml; then
-  jq '.visibility = "private"' "$here/public/repository.json" > "$out/correct/repository.json"
-fi
+jq --argjson answers "$answers" '.visibility = $answers.visibility
+  | .description = ($answers.description | gsub("`"; "")) | .topics = ($answers.topics // [] | reverse)' \
+  "$here/public/repository.json" > "$out/correct/repository.json"
 
 # Copies the correct fixtures to $out/$1 and applies the jq program $3 to the fixture named $2.
 variant() {
@@ -38,6 +45,22 @@ expect() {
 }
 
 expect correct 0 "ok: main's required checks and rules"
+expect correct 0 "ok: description"
+variant other-description repository '.description = "Another project."'
+expect other-description 1 "wrong: description: \"Another project.\", expected \"$description\""
+variant no-description repository '.description = null'
+expect no-description 1 "wrong: description: \"nothing\", expected \"$description\""
+if [ -n "$topics" ]; then
+  expect correct 0 "ok: topics"
+  variant other-topics repository '.topics = ["rust"]'
+  expect other-topics 1 "wrong: topics: \"rust\", expected \"$topics\""
+  variant no-topics repository '.topics = []'
+  expect no-topics 1 "wrong: topics: \"nothing\", expected \"$topics\""
+else
+  expect correct 0 "ok: topics: none, and no topics answer"
+  variant own-topics repository '.topics = ["sms", "rust", "2024"]'
+  expect own-topics 0 "note: topics: GitHub has 2024, rust, sms, and with no topics answer setup-github leaves them; to keep them in the answers, run uvx copier update --defaults --vcs-ref=:current: --data 'topics=[\"2024\",\"rust\",\"sms\"]'"
+fi
 variant merge-commits repository '.allow_merge_commit = true'
 expect merge-commits 1 'wrong: merge settings: "squash true, merge commits true, rebase false, squash commit PR_TITLE and PR_BODY", expected "squash true, merge commits false, rebase false, squash commit PR_TITLE and PR_BODY"'
 # GitHub's rules for a branch leave out a ruleset that isn't active.
