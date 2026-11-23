@@ -1375,6 +1375,7 @@ release-extras:
     {files: {x86_64-pc-windows-msvc: ["d-{version}.zip"]}, installer: {x86_64-pc-windows-msvc: {app_id: EBAC94F7-A24E-431F-B4F6-8E9D669E9E53, file: "d-{version}.zip"}}}|ending in `.exe`
     {files: {x86_64-pc-windows-msvc: ["d-{version}.exe"]}, installer: {x86_64-pc-windows-msvc: {app_id: EBAC94F7-A24E-431F-B4F6-8E9D669E9E53, file: "d-{version}.exe", icon: a.ico}}}|`icon` in `installer`'s `x86_64-pc-windows-msvc` is not a key it takes
     {files: {x86_64-pc-windows-msvc: ["d-{version}.exe"]}, installer: {x86_64-pc-windows-msvc: {app_id: EBAC94F7-A24E-431F-B4F6-8E9D669E9E53, file: "d-{version}.exe", name: "A/B"}}}|has a `name` of up to 64 letters
+    {files: {x86_64-pc-windows-msvc: ["d-{version}.exe"], aarch64-pc-windows-msvc: ["d-{version}-arm64.exe"]}, installer: {x86_64-pc-windows-msvc: {app_id: EBAC94F7-A24E-431F-B4F6-8E9D669E9E53, file: "d-{version}.exe"}, aarch64-pc-windows-msvc: {app_id: C882D75D-CDF1-4F35-91C7-8D8A7A01A810, file: "d-{version}-arm64.exe"}}}|takes the same `app_id`
     EOF
     if refusal=$(uv tool run copier@9.19.1 copy --quiet --defaults --vcs-ref HEAD --data project_name=demo-service \
       --data "description=A demo service." --data kind=service --data 'release={checksums: SUMS}' "$trellis" "$out/service" 2>&1); then
@@ -1437,22 +1438,25 @@ release-extras:
     grep --quiet --fixed-strings "steps.attest.outcome == 'success' && steps.attest.outputs.bundle-path || steps.attest-again.outcome == 'success' && steps.attest-again.outputs.bundle-path || steps.attest-last.outputs.bundle-path" <<< "$publish_job" \
       || fail "the release doesn't publish the bundle of the attempt that worked"
     grep --quiet '^    timeout-minutes: 20$' <<< "$publish_job" || fail "a public binary's publish job doesn't take 20 minutes for the attest retries"
-    # The update contract docs/stability.md states: attestation.json is one bundle whose statement
-    # names every release file by its name and SHA-256, which installed copies' updaters verify.
-    # The check must fail on a change to that shape: a subject other than the checksums file, a
-    # checksums file without digests, or a bundle per file.
-    attestation() { uv run --quiet --no-project --with pyyaml==6.0.3 python -I "$trellis/tests/release/attestation.py" "$@"; }
-    release_yml="$out/attested/.github/workflows/release.yml"
-    attestation "$release_yml" demo-binary-0.1.0-x86_64-unknown-linux-musl.tar.gz
-    for mutation in 's|subject-checksums: dist/SHA256SUMS$|subject-path: dist/*|' \
-      's|run: sha256sum -- \* > SHA256SUMS$|run: ls > SHA256SUMS|' \
-      's|cp "\$BUNDLE" dist/attestation.json|for file in dist/*; do cp "$BUNDLE" "$file.json"; done|'; do
-      sed "$mutation" "$release_yml" > "$out/mutated.yml"
-      ! cmp --quiet "$release_yml" "$out/mutated.yml" || fail "the attestation mutation $mutation changed nothing"
-      if attestation "$out/mutated.yml" demo-binary-0.1.0-x86_64-unknown-linux-musl.tar.gz 2> /dev/null; then
-        fail "the attestation check passed a release changed by $mutation"
+    # The update contract docs/stability.md states, which installed copies' updaters rely on: the
+    # vX.Y.Z tag, and attestation.json as one bundle whose statement names every release file by
+    # its name and SHA-256. The check must fail on each change tests/release/mutate.py makes.
+    contract() { uv run --quiet --no-project --with pyyaml==6.0.3 python -I "$trellis/tests/release/contract.py" "$@"; }
+    mutate() { uv run --quiet --no-project --with pyyaml==6.0.3 python -I "$trellis/tests/release/mutate.py" "$@"; }
+    archive=demo-binary-0.1.0-x86_64-unknown-linux-musl.tar.gz
+    contract "$out/attested" "$archive"
+    mutations=$(mutate --list)
+    [ -n "$mutations" ] || fail "tests/release/mutate.py lists no mutations"
+    while IFS= read -r mutation; do
+      rm -rf "$out/mutated"
+      cp -R "$out/attested" "$out/mutated"
+      mutate "$out/mutated" "$mutation"
+      if contract "$out/mutated" "$archive" 2> "$out/contract.txt"; then
+        fail "the update contract check passed this mutation: $mutation"
       fi
-    done
+      echo "the update contract check fails as it should on: $mutation"
+    done <<< "$mutations"
+    rm -rf "$out/mutated"
     rm -rf "$out/attested"
     # A private binary's release attests nothing, so its publish job keeps the limit without the
     # retries' waits, and a hung job stops before it spends more of the account's Actions usage.
@@ -1514,7 +1518,7 @@ release-extras:
       cat "$out/actionlint.txt" >&2
       fail "just actionlint passed a release/package.sh that shellcheck faults"
     fi
-    attestation .github/workflows/release.yml demo-binary-0.1.0-linux.tar.gz demo-binary-0.1.0-linux
+    contract . demo-binary-0.1.0-linux.tar.gz demo-binary-0.1.0-linux
     [ ! -e release/installer.iss ] && [ ! -e release/installer-custom.iss ] \
       || fail "a release answer without an installer got installer files"
     # An installer answer gets release/installer.iss and release/installer-custom.iss, and the
@@ -1533,7 +1537,9 @@ release-extras:
     uv tool run copier@9.19.1 copy --quiet --defaults --vcs-ref HEAD --data project_name=demo-binary \
       --data "description=A demo binary that trellis generates for its tests." --data kind=binary \
       --data 'platforms=[linux, windows]' --data 'architectures=[x86_64]' \
-      --data "$(installer_answer "$app_id" "")" "$out/trellis" "$out/installer"
+      --data "$(installer_answer "$app_id" "")" "$out/trellis" "$out/installer" > "$out/copy.txt" 2>&1 \
+      || { cat "$out/copy.txt" >&2; fail "a binary with an installer answer didn't generate"; }
+    ! grep --quiet Warning "$out/copy.txt" || fail "a new project with an installer warned: $(cat "$out/copy.txt")"
     cd "$out/installer"
     workflow=.github/workflows/build-release.yml
     [ "$(grep --count '^            installer: demo-binary-{version}-setup.exe$' "$workflow")" -eq 1 ] \
@@ -1546,6 +1552,7 @@ release-extras:
       || fail "release/installer.iss doesn't name the installer as the answer's file"
     grep --quiet --line-regexp 'AppPublisher=265866' release/installer.iss || fail "release/installer.iss doesn't name the author as its publisher"
     grep --quiet --line-regexp '#include "installer-custom.iss"' release/installer.iss || fail "release/installer.iss doesn't include the custom file"
+    contract . demo-binary-0.1.0-setup.exe demo-binary-0.1.0.zip
     printf '#!/usr/bin/env bash\nset -euo pipefail\ncp "$BINARY" "$STAGING/$NAME.exe"\n' > release/package.sh
     git init --quiet --initial-branch main
     git add --all
@@ -1572,6 +1579,32 @@ release-extras:
       || { cat "$out/update.txt" >&2; fail "an update without answers failed"; }
     ! grep --quiet Warning "$out/update.txt" || fail "an installer update warned: $(cat "$out/update.txt")"
     [ -z "$(git status --porcelain)" ] || fail "an update without answers changed files: $(git status --porcelain)"
+    # A new app_id typed at the update's prompt is refused as a passed one is.
+    typed=$(installer_answer C882D75D-CDF1-4F35-91C7-8D8A7A01A810 ", name: Demo App")
+    outcome=$(uv run --quiet --no-project --with pexpect==4.9.0 python -I "$trellis/tests/release/interactive-update.py" \
+      "${typed#release=}") || fail "an interactive update $outcome a new app_id"
+    [ -z "$(git status --porcelain)" ] || fail "the refused interactive update changed files"
+    # An update that passes another answer keeps the app_id and reads the answers file silently.
+    uv tool run copier@9.19.1 update --quiet --defaults --vcs-ref=:current: \
+      --data 'description=Another demo binary that trellis generates for its tests.' > "$out/update.txt" 2>&1 \
+      || { cat "$out/update.txt" >&2; fail "an update passing another answer failed"; }
+    ! grep --quiet Warning "$out/update.txt" || fail "an installer update warned: $(cat "$out/update.txt")"
+    grep --quiet --fixed-strings "#define AppId \"$app_id\"" release/installer.iss || fail "an update passing another answer changed the app_id"
+    git add --all
+    commit commit --quiet --message "docs: describe it again"
+    # An update to a later trellis renders this one's answers with its checks, silently too.
+    (cd "$out/trellis" && commit commit --quiet --allow-empty --message v2)
+    uv tool run copier@9.19.1 update --quiet --defaults --vcs-ref HEAD > "$out/update.txt" 2>&1 \
+      || { cat "$out/update.txt" >&2; fail "an update to a later trellis failed"; }
+    ! grep --quiet Warning "$out/update.txt" || fail "an update to a later trellis warned: $(cat "$out/update.txt")"
+    git add --all
+    commit commit --quiet --message "chore: update trellis"
+    # An update that drops the installer deletes both files, the owner's custom file too.
+    uv tool run copier@9.19.1 update --quiet --defaults --vcs-ref=:current: \
+      --data 'release={files: {x86_64-pc-windows-msvc: ["demo-binary-{version}-setup.exe", "demo-binary-{version}.zip"]}}' \
+      > "$out/update.txt" 2>&1 || { cat "$out/update.txt" >&2; fail "an update dropping the installer failed"; }
+    [ ! -e release/installer.iss ] && [ ! -e release/installer-custom.iss ] \
+      || fail "an update dropping the installer left its files"
 
 # Generates a library as a user gets it, with its checker fetched from a scratch copy of this
 # checkout in place of GitHub, and checks that `just install-policy` installs the pinned checker
