@@ -649,9 +649,9 @@ fn readme_sections_must_match_in_order() {
             &format!(
                 "[docs_layout] README.md: The readme's `##` sections are {found}, but \
                  `readme_sections` in `[workspace.metadata.policy]` lists `Install`, \
-                 `Documentation`. Give the readme exactly those sections, in that order, and \
-                 move anything longer than a few commands to a page in `docs/`, or change \
-                 `readme_sections` in a rule change if the project's sections change."
+                 `Documentation`. Give the readme exactly those sections, in that order, with \
+                 the depth on pages in `docs/`, or change `readme_sections` in a rule change if \
+                 the project's sections change."
             ),
         );
         run.assert_reports(1, "1 structure rule violation(s)");

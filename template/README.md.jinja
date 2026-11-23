@@ -1,3 +1,8 @@
+{%- set primary = interfaces[0] %}
+{%- set others = interfaces[1:] %}
+{%- set ui = interfaces | select('in', ['web', 'desktop', 'terminal']) | list %}
+{%- set label = {'web': 'web app', 'desktop': 'desktop app', 'terminal': 'terminal app', 'cli': 'command-line tool', 'service': 'service', 'library': 'library'} %}
+{%- set noun = {'web': 'page', 'desktop': 'window', 'terminal': 'screen'} -%}
 # {{ project_name }}
 
 [![CI](https://github.com/{{ github_owner }}/{{ project_name }}/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/{{ github_owner }}/{{ project_name }}/actions/workflows/ci.yml?query=branch%3Amain)
@@ -6,66 +11,163 @@
 {%- endif %}
 
 {{ description | wordwrap(100, break_long_words=False, break_on_hyphens=False) }}
-{% if kind == 'binary' %}
-## Install
-{%- if release.files %}
 
-Download the file you want for your platform from the
-[latest release](https://github.com/{{ github_owner }}/{{ project_name }}/releases/latest), check it
-as [Verify a release](docs/verifying-releases.md) shows, and install it.
+> **To write:** the opening, in a paragraph or two that start from the sentence above. A stranger
+> reads it to decide whether this is for them, so say:
+>
+{%- if primary == 'library' %}
+> - the problem it solves, and for whom;
+> - how it differs from the crates people use for that now, named;
+> - its limits: what it leaves to the caller, and what it never does.
 {%- else %}
-
-Download the archive for your platform from the
-[latest release](https://github.com/{{ github_owner }}/{{ project_name }}/releases/latest), check it
-as [Verify a release](docs/verifying-releases.md) shows, and unpack it.
+> - who it's for, and what it does for them, in their words rather than the code's;
+> - how it differs from what they'd use instead, named;
+{%- if primary == 'terminal' or primary == 'desktop' %}
+> - whether it runs beside something else, such as a game or an editor;
 {%- endif %}
-[Install](docs/install.md) has the details.
-{%- elif kind == 'service' %}
-## Run it
+> - its limits: what it doesn't do, and what it never sends, stores or shows.
+{%- endif %}
 
-```sh
-docker run --rm ghcr.io/{{ github_owner | lower }}/{{ project_name }}:latest
-```
+> **To write:** the features, as a list: a bullet for each thing a person can do with it, most
+> important first. One suggestion, not a rule: a bold lead, a sentence, and a link to the page or
+> section that says more. Write the list this project needs.
+{%- if primary == 'library' %}
+> A library can leave it out when the example below says enough.
+{%- endif %}
+{%- for other in others %}
+>
+> Its {{ label[other] }}: {{ {'web': 'a bullet for what its pages show or do.', 'desktop': 'a bullet for what its window adds.', 'terminal': 'a bullet for what its screens add.', 'cli': 'a bullet for what its commands add, such as scripting or setup.', 'service': 'a bullet for what it serves or produces in the background.'}[other] }}
+{%- endfor %}
 
-{% if visibility == 'private' -%}
-The image is private, so sign in to `ghcr.io` first. [Install](docs/install.md) shows how and has
-the details.
+{% if primary == 'web' -%}
+> **To write:** the picture: a screenshot of the page that best shows the main promise, which may
+> not be the home page, at a desktop width, in dark mode if the app has one, with invented data.
+{%- elif primary == 'desktop' -%}
+> **To write:** the picture: a screenshot of the window in the state that best shows the main
+> promise, at its default size, in dark mode if the app has one, with invented data.
+{%- elif primary == 'terminal' -%}
+> **To write:** the picture: an SVG capture of the screen that best shows the main promise, in
+> dark mode if the app has one, with invented data, such as from a demo mode.
+{%- endif %}
+{%- if primary in ui %}
+> Save it in `docs/screenshots/`, and put it here as an image whose alt text says what the
+> {{ noun[primary] }} shows and that the data is invented. Link the image to
+> [Screenshots](docs/usage.md#screenshots), and follow it with a sentence that links there too,
+> such as "See every {{ noun[primary] }} in Screenshots." [Screenshots](CONTRIBUTING.md#screenshots)
+> in CONTRIBUTING.md says how to capture it.
+{%- elif primary == 'cli' -%}
+> **To write:** the sample: the one command that best shows the main promise, and its real
+> output, in a fenced code block. Run it on invented input, and trim long output, but don't edit
+> what's left.
+{%- elif primary == 'service' -%}
+> **To write:** the sample: what it produces, such as a request and its response, a message it
+> sends or a file it writes, in a fenced code block, from a real run on invented data.
 {%- else -%}
-[Install](docs/install.md) has the details.
+> **To write:** the sample: the smallest example that does the main thing, in a fenced `rust`
+> block, with what it prints or returns. Make it the first example in the crate docs too, so
+> `cargo test` keeps it working.
+{%- endif %}
+{%- for other in others if other in ui %}
+>
+> Its {{ label[other] }} gets no picture here: give each of its {{ noun[other] }}s a row in
+> [Screenshots](docs/usage.md#screenshots).
+{%- endfor %}
+
+## Quick start
+
+> **To write:** the shortest path from nothing to {{ 'a program that uses it' if primary == 'library' else 'it working' }}, as numbered steps with
+> commands to copy. Start with what the reader needs, and end at something they can see work.
+> Depth, such as every option or platform, goes on a page under `docs/`, with an entry under
+> Documentation. For this {{ label[primary] }}, cover:
+>
+{%- if primary == 'web' %}
+> - where it listens, and how a stranger reaches the UI: the bind address, a proxy or tunnel, and
+>   any feature that needs HTTPS;
+> - how the first account is made, if it has accounts;
+> - the outside systems its pages need;
+{%- elif primary == 'desktop' %}
+> - the supported OS versions, and the install form: an installer, a zip or a dmg;
+> - whether it's signed, and the warning a user sees if not, such as SmartScreen or Gatekeeper;
+> - first-run steps, such as permissions and sign-ins;
+> - where it keeps settings and data, and what uninstalling leaves;
+> - whether it updates itself, and how a user learns it did;
+> - tray or background behaviour, and the shortcuts that matter;
+{%- elif primary == 'terminal' %}
+> - the system and the shell the commands are for;
+> - the minimum terminal size, and the terminals it's tested in;
+> - where its window goes if it runs beside something else;
+> - outside accounts or profiles its data depends on;
+> - a demo or offline mode, if it has one, as the first check that it runs;
+> - whether it's signed, and the warning a user sees if not;
+> - whether it updates itself;
+> - the keys that matter in the first minute;
+{%- elif primary == 'cli' %}
+> - the install forms, and the shell the commands are for;
+> - what it needs first, such as a token or a config file, and where that lives;
+> - whether it's signed, and the warning a user sees if not;
+> - output for scripts, such as exit codes or JSON, if a page doesn't cover it;
+{%- elif primary == 'service' %}
+> - how it's reached: its port, its authentication, and any proxy in front;
+> - the configuration that matters: the environment variables, and where its data persists;
+> - what it needs to run, such as memory, disk or outside services;
+{%- else %}
+> - the dependency line, below;
+> - the minimum Rust version, which `rust-version` in `Cargo.toml` sets, and any `no_std` or
+>   async runtime needs;
+> - a whole program that calls it, if the example above isn't one;
+> - what [Stability](docs/stability.md) promises, and what 1.0 would mean;
+{%- endif %}
+{%- for other in others %}
+> - its {{ label[other] }}: {{ {'web': 'where its UI listens, how to reach it, and the page the reader sees first;', 'desktop': 'how to start it, and its first window;', 'terminal': 'how to start it, and its first screen;', 'cli': 'the command a person runs first, and what it prints;', 'service': 'how to start it in the background, and how to check that it runs;'}[other] }}
+{%- endfor %}
+> - the last step: {{ {'web': 'open the page, and what the reader sees there.', 'desktop': 'the first window, and what the reader sees in it.', 'terminal': 'the first screen, and what the reader sees on it.', 'cli': 'the first command, and what it prints.', 'service': 'a health check, or a request and its response.', 'library': 'run the program, and what it prints.'}[primary] }}
+{%- if kind == 'binary' %}
+>
+> [Install](docs/install.md) lists each release's files and how to build from source, and
+> [Verify a release](docs/verifying-releases.md) checks a download. Link them rather than repeat
+> them.
+{%- elif kind == 'service' %}
+>
+> [Container image](docs/install.md) has the image's name, tags and digest, and
+> [Verify a release](docs/verifying-releases.md) checks it. Link them rather than repeat them.
+{%- if visibility == 'private' %} The
+> image is private, so a reader signs in to `ghcr.io` first, as that page shows.
 {%- endif %}
 {%- else %}
-## Use it
-
-```toml
-[dependencies]
+>
+> The dependency line:
+>
+> ```toml
+> [dependencies]
 {%- if publish_crate %}
-{{ crate_name }} = "<version>"
+> {{ crate_name }} = "<version>"
 {%- else %}
-{{ crate_name }} = { git = "https://github.com/{{ github_owner }}/{{ project_name }}", tag = "<tag>" }
+> {{ crate_name }} = { git = "https://github.com/{{ github_owner }}/{{ project_name }}", tag = "<tag>" }
 {%- endif %}
-```
+> ```
+>
 {%- if publish_crate %}
-
-`cargo add {{ crate_name }}` writes the latest version.
+> `cargo add {{ crate_name }}` writes the latest version.
 {%- else %}
-
-Replace `<tag>` with a release tag, such as the
-[latest](https://github.com/{{ github_owner }}/{{ project_name }}/releases/latest).
-{%- if visibility == 'private' %}
-The repository is private, so have Cargo fetch it with your Git credentials. Add this to your
-`~/.cargo/config.toml`:
-
-```toml
-[net]
-git-fetch-with-cli = true
-```
+> `<tag>` is a release tag, such as the
+> [latest](https://github.com/{{ github_owner }}/{{ project_name }}/releases/latest).
+{%- if visibility == 'private' %} The
+> repository is private, so Cargo fetches it with the reader's Git credentials once
+> `~/.cargo/config.toml` sets `git-fetch-with-cli = true` under `[net]`.
 {%- endif %}
 {%- endif %}
 {%- endif %}
 
 ## Documentation
-{% if kind != 'library' %}
-- [Install](docs/install.md): every way to install and update it.
+{% if ui %}
+- [Use {{ project_name }}](docs/usage.md): what each {{ noun[ui[0]] }} does, with screenshots.
+{%- endif %}
+{%- if kind == 'binary' %}
+- [Install](docs/install.md): each release's files, installing one by hand, and building from source.
+{%- elif kind == 'service' %}
+- [Container image](docs/install.md): the image's tags and digest, and running it with Docker.
+{%- endif %}
+{%- if kind != 'library' %}
 {%- if visibility == 'public' %}
 - [Verify a release](docs/verifying-releases.md): check that a download came from this repository.
 {%- elif kind == 'binary' %}
@@ -76,9 +178,7 @@ git-fetch-with-cli = true
 {%- endif %}
 - [Design](docs/design.md): the goals, the architecture, and the decisions behind them.
 - [Stability](docs/stability.md): what a release can change, and what to read before you upgrade.
-- [Code style](docs/style.md): the style rules a tool checks, and the review checklist for the rest.
 - [Contributing](CONTRIBUTING.md): set up, run the checks, and send a change.
-- [Maintain](docs/maintaining.md): the owner's repository settings, releases and trellis updates.
 - [Security policy](SECURITY.md): how to report a vulnerability.
 - [Changelog](CHANGELOG.md): what changed in each release.
 {%- if license != 'none' or kind != 'library' %}

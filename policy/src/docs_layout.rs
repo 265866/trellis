@@ -106,7 +106,7 @@ pub fn check(workspace: &Workspace) -> Result<Vec<Violation>, PolicyError> {
         violations.push(unset(
             "readme_sections",
             "which sections the root `README.md` has. Set it to the readme's `##` headings in \
-             order, such as `readme_sections = [\"Install\", \"Documentation\", \"License\"]`.",
+             order, such as `readme_sections = [\"Quick start\", \"Documentation\", \"License\"]`.",
         ));
     }
     match docs_index::read_readme(workspace.root())? {
@@ -224,9 +224,8 @@ fn readme_problems(readme: &Markdown<'_>, sections: Option<&[String]>) -> Vec<St
             problems.push(format!(
                 "The readme's `##` sections are {}, but `readme_sections` in \
                  `[workspace.metadata.policy]` lists {}. Give the readme exactly those sections, \
-                 in that order, and move anything longer than a few commands to a page in \
-                 `docs/`, or change `readme_sections` in a rule change if the project's sections \
-                 change.",
+                 in that order, with the depth on pages in `docs/`, or change `readme_sections` \
+                 in a rule change if the project's sections change.",
                 heading_list(&found),
                 heading_list(required)
             ));

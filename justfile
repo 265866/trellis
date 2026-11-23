@@ -488,17 +488,18 @@ lints-test:
     cargo test --locked
 
 # Runs `template` for each kind, then `shapes`, `dependencies`, `update` and the extras checks.
-templates: (template "binary") (template "binary" "ci" "false" "true") (template "service") (template "service" "ci" "false" "true") (template "library") shapes dependencies update build-extras image-extras release-extras checker-install
+templates: (template "binary") (template "binary" "ci" "false" "false" "" "false" "[desktop]") (template "binary" "ci" "false" "false" "" "false" "[terminal]") (template "binary" "ci" "false" "true" "" "false" "[web,cli]") (template "service") (template "service" "ci" "false" "true") (template "library") (template "library" "ci" "true") shapes outlines dependencies update build-extras image-extras release-extras checker-install
 
 # Checks that every exclusion in copier.yml renders with only the answers an older trellis asked,
 # as Copier renders them when a project updates from it. Then copies the working tree into a
 # scratch repository as two tagged trellis versions, generates a library from the first, and
 # edits it the way an owner would: its code and changelog, and a new crate and docs page with their
 # lines in CONTRIBUTING.md, Cargo.toml, release-plz.toml and README.md.
-# Then it changes the template's scaffold, a rule file, a docs page and lines near the owner's,
-# and runs `copier update` to the second. The update must merge each file with no conflict
-# markers, keep the owner's lines, bring v2's, and pass `trellis-policy check`; the owner's code
-# and changelog must not move. Then it makes the project private and public again with
+# Then it changes the template's scaffold, a rule file, a docs page, the README and lines near the
+# owner's, and runs `copier update` to the second. The update must merge each file with no conflict
+# markers, keep the owner's lines, bring v2's, and pass `trellis-policy check`; the owner's code,
+# changelog and README must not move. A terminal app generated from the first, whose owner edits
+# its README and screenshots page, updates to the second with both byte for byte the same. Then it makes the project private and public again with
 # `--vcs-ref=:current:`, which must keep v2 and the owner's edits, and publishes the crate under
 # each license, which must deliver only that license's files to the crate's directory and fail
 # `trellis-policy check` on the owner's crate until the owner swaps in the root's there too, from
@@ -580,8 +581,10 @@ update:
     swap Cargo.toml 'demo = []' 'demo = []\ndemo_text = []'
     swap release-plz.toml 'changelog_include = []' 'changelog_include = ["demo_text"]'
     swap README.md "$design" "$index\n$design"
+    printf '\nThe owner writes the README.\n' >> README.md
     git add --all
     commit commit --quiet --message "feat: add demo_text and a formats page"
+    cp README.md "$out/README.md"
     owner=(CONTRIBUTING.md "$row" CONTRIBUTING.md "$boundary" Cargo.toml '    "docs/formats.md",' Cargo.toml 'demo_text = []'
       release-plz.toml 'changelog_include = ["demo_text"]' README.md "$index")
     kept() {
@@ -603,13 +606,16 @@ update:
     edges='# crates, is a rule change. A later trellis says more here.'
     release='# A line a later trellis adds.'
     added='- [Added](docs/added.md): what a later trellis adds.'
+    maintain='- [Maintain](docs/maintaining.md): the owner'"'"'s repository settings, releases and trellis updates.'
     swap template/CONTRIBUTING.md.jinja \
       'Add a row for each crate you add, in the same pull request as the rule change that allows it.' "$rows"
     swap template/CONTRIBUTING.md.jinja "$boundaries" "$asking"
     swap template/Cargo.toml.jinja '    "docs/design.md",' '    "docs/added.md",\n    "docs/design.md",'
     swap template/Cargo.toml.jinja '# crates, is a rule change.' "$edges"
     swap template/release-plz.toml.jinja 'changelog_update = true' "$release\nchangelog_update = true"
-    swap template/README.md.jinja "$design" "$design\n$added"
+    swap template/README.md.jinja "$design" "$design\n- [Stray](docs/stray.md): a line the README never gets."
+    swap template/CONTRIBUTING.md.jinja "$maintain" "$maintain\n$added"
+    echo "A line a later trellis adds." >> template/docs/usage.md.jinja
     git add --all
     commit commit --quiet --message v2
     commit tag --annotate --message v2 v2
@@ -621,12 +627,13 @@ update:
     fi
     kept "the update"
     trellis_lines=(CONTRIBUTING.md "$rows" CONTRIBUTING.md "$asking" Cargo.toml '    "docs/added.md",' Cargo.toml "$edges"
-      release-plz.toml "$release" README.md "$added")
+      release-plz.toml "$release" CONTRIBUTING.md "$added")
     for ((i = 0; i < ${#trellis_lines[@]}; i += 2)); do
       has "${trellis_lines[i]}" "${trellis_lines[i + 1]}" \
         || fail "the update didn't bring v2's line to ${trellis_lines[i]}: ${trellis_lines[i + 1]}"
     done
     ! has CONTRIBUTING.md "$boundaries" || fail "the update kept v1's Product boundaries sentence"
+    cmp --quiet README.md "$out/README.md" || fail "the update changed the owner's README.md"
     policy check
     grep --quiet '^_commit: v2$' .copier-answers.yml || fail "the answers don't record v2"
     tail -n 1 rustfmt.toml | grep --quiet 'A rule a later trellis adds' || fail "rustfmt.toml didn't move"
@@ -635,6 +642,26 @@ update:
     [ ! -e "$lib/greeting.rs" ] || fail "the deleted greeting.rs came back"
     [ ! -e "$lib/added.rs" ] || fail "a new scaffold file was added to the owner's crate"
     tail -n 1 CHANGELOG.md | grep --quiet "An owner's line" || fail "CHANGELOG.md was rewritten"
+    # A terminal app's screenshots page is its owner's too.
+    copier copy --quiet --defaults --vcs-ref v1 --data project_name=screens \
+      --data "description=A demo terminal app." --data kind=binary --data 'interfaces=[terminal]' \
+      "$out/trellis" "$out/screens"
+    (
+      cd "$out/screens"
+      git init --quiet --initial-branch main
+      printf '\nThe owner writes the README.\n' >> README.md
+      printf '\nThe owner writes the screenshots page.\n' >> docs/usage.md
+      git add --all
+      commit commit --quiet --message "docs: write the README and the screenshots page"
+      mkdir "$out/screens-before"
+      cp README.md docs/usage.md "$out/screens-before/"
+      copier update --quiet --defaults --vcs-ref v2
+      if grep --recursive --quiet '^<<<<<<<' --exclude-dir=.git .; then fail "the terminal app's update left conflict markers"; fi
+      for file in README.md docs/usage.md; do
+        cmp --quiet "$file" "$out/screens-before/${file##*/}" || fail "the update changed the owner's $file"
+      done
+      has CONTRIBUTING.md "$added" || fail "the terminal app's update didn't bring v2's line to CONTRIBUTING.md"
+    )
     for visibility in private public; do
       git add --all
       commit commit --quiet --allow-empty --message "chore: make the repository $visibility"
@@ -712,6 +739,9 @@ update:
       [ ! -e "$file" ] || fail "unlicensing it left $file"
     done
     kept "unlicensing it"
+    # The README is the owner's, so its License section goes by hand, as readme_sections did.
+    awk '/^## License$/ { skip = 1 } !skip { print }' README.md > README.md.new && mv README.md.new README.md
+    printf '%s\n' "$(cat README.md)" > README.md.new && mv README.md.new README.md
     sed -i.bak '/^license.workspace = true$/d' crates/demo/Cargo.toml crates/demo_text/Cargo.toml
     rm crates/demo/Cargo.toml.bak crates/demo_text/Cargo.toml.bak crates/demo_text/LICENSE
     policy check
@@ -733,6 +763,7 @@ update:
     grep --quiet 'license.workspace = true' "$out/unlicensed.txt" \
       || fail "trellis-policy check failed for another reason: $(cat "$out/unlicensed.txt")"
     swap crates/unlicensed/Cargo.toml 'publish.workspace = true' 'publish.workspace = true\nlicense.workspace = true'
+    printf '\n## License\n\nReleased under the [MIT License](LICENSE).\n' >> README.md
     policy check
     policy rule-changes HEAD
     echo "copier update moved the rules and kept the owner's code and edits."
@@ -740,9 +771,10 @@ update:
 # Generates a project of one kind, `binary`, `service` or `library`, from the working tree, with
 # the lints and checker from this checkout, and runs `recipes` in it, `ci` by default. `true` as
 # `publish` makes a library a published one, and `true` as `web` gives a binary or service a web UI.
-# After `ci`, a binary on Linux runs its release build's steps for this machine's target, whose
-# archive must hold the program, its license files and notices, and a web UI's build and notices
-# only when it has one. After `ci`, a service also builds and runs its image when Docker is
+# `interfaces`, such as `[desktop]`, answers `interfaces` in place of its default. After `ci`, a
+# binary on Linux runs its release build's steps for this machine's target, whose archive must hold
+# the program, its license files and notices, and a web UI's build and notices only when it has
+# one. After `ci`, a service also builds and runs its image when Docker is
 # installed, under umask 077 with its license files 0600, and the image's user must be able to read
 # them. A web UI's build and license notices must be in it too, and its install must refuse a
 # missing bun.lock and a package that provides a `bun` command, and read the app's bunfig.toml. A
@@ -761,7 +793,7 @@ update:
 # that target, as a project's CI does for the target a release ships.
 #
 # Generates a project of one kind and runs its checks.
-template kind recipes="ci" publish="false" web="false" target="" installer="false":
+template kind recipes="ci" publish="false" web="false" target="" installer="false" interfaces="":
     #!/usr/bin/env bash
     set -euo pipefail
     trellis="{{ replace(justfile_directory(), '\', '/') }}"
@@ -772,6 +804,10 @@ template kind recipes="ci" publish="false" web="false" target="" installer="fals
       out=$(cygpath --mixed "$out")
     fi
     project="$out/demo-{{ kind }}"
+    interfaces_answer=""
+    if [ -n "{{ interfaces }}" ]; then
+      interfaces_answer="interfaces={{ interfaces }}"
+    fi
     installer_answer=""
     if [ "{{ installer }}" = true ]; then
       # The release answer tests/installer/run.sh expects: an installer and a portable program for
@@ -787,6 +823,7 @@ template kind recipes="ci" publish="false" web="false" target="" installer="fals
       $( [ "{{ publish }}" = true ] && echo "--data publish_crate=true --data license=MIT" ) \
       $( [ "{{ web }}" = true ] && echo "--data web_ui=true" ) \
       ${installer_answer:+--data "$installer_answer"} \
+      ${interfaces_answer:+--data "$interfaces_answer"} \
       "$trellis" "$project"
     cd "$project"
     git init --quiet --initial-branch main
@@ -1890,3 +1927,32 @@ shape answers:
       just package
     fi
     cargo run --locked --quiet --manifest-path "$trellis/Cargo.toml" --package trellis-policy -- check
+
+# Generates a project for each primary interface and for a web app with a command-line tool, and
+# checks its README outline with `tests/outlines/check.py`: a prompt in each part the owner writes,
+# shaped by the interfaces, and no image. A web, desktop or terminal interface must get
+# `docs/usage.md` with its screenshots prompts, CONTRIBUTING.md's Screenshots rules and the pull
+# request template's line about images, and any other none of them. Each outline, untouched, must
+# pass `trellis-policy check` and `just links`.
+#
+# Checks the README outline each interface gets.
+outlines:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    trellis="{{ justfile_directory() }}"
+    out=$(mktemp -d)
+    trap 'rm -rf "$out"' EXIT
+    for spec in binary:web:web_ui=true binary:desktop binary:terminal binary:cli service:service \
+      library:library binary:web,cli:web_ui=true service:web:web_ui=true; do
+      IFS=: read -r kind interfaces web <<< "$spec"
+      project="$out/$kind-${interfaces/,/-}"
+      uv tool run copier@9.19.1 copy --quiet --defaults --vcs-ref HEAD \
+        --data project_name=demo --data "description=A demo that trellis generates." \
+        --data kind="$kind" --data "interfaces=[$interfaces]" ${web:+--data "$web"} \
+        --data trellis_path="$trellis" "$trellis" "$project"
+      uv run --quiet --no-project python -I tests/outlines/check.py "$project" "$interfaces"
+      (cd "$project" && just links)
+      cargo run --locked --quiet --manifest-path "$trellis/Cargo.toml" --package trellis-policy -- \
+        check --manifest-path "$project/Cargo.toml"
+    done
+    echo "Each interface's README outline holds its prompts and no image, and passes the docs checks."

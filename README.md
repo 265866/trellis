@@ -21,8 +21,9 @@ generates starts with:
 - **CI and releases.** Checks on Linux, macOS and Windows; release-plz versions and changelogs;
   release archives or a container image, attested and signed when the repository is public;
   Renovate for updates.
-- **The same docs layout.** A short README with a docs index, task pages under `docs/`,
-  `CONTRIBUTING.md`, `SECURITY.md`, and one `AGENTS.md` for coding agents.
+- **The same docs layout.** A README that starts as an outline with a prompt under each part,
+  shaped by what the project is, and that the project then owns; a docs index; task pages under
+  `docs/`; `CONTRIBUTING.md`, `SECURITY.md`, and one `AGENTS.md` for coding agents.
 
 The rules are written for code that coding agents write and that nobody reads line by line. So a
 rule lives in the types or in a check wherever one can hold it, and review is the last resort. An

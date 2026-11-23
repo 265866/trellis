@@ -1,0 +1,55 @@
+{%- set ui = interfaces | select('in', ['web', 'desktop', 'terminal']) | list %}
+{%- set noun = {'web': 'page', 'desktop': 'window', 'terminal': 'screen'} -%}
+# Use {{ project_name }}
+
+Read this page once {{ project_name }} runs. It shows what each {{ noun[ui[0]] }} does, with
+screenshots. The [README](../README.md)'s Quick start gets it running.
+{% for interface in ui %}
+{%- if interface == 'web' %}
+> **To write:** a section for each part of the web app a person uses, such as a `## Pages` section
+> that says what each page shows and what a person does there. Also say:
+>
+> - which pages need an outside system, and what a page shows while it's unreachable;
+> - how a demo stands in for those systems without product code, and what makes its data look
+>   live, such as times relative to now;
+> - which pages can't be captured honestly, and what the Screenshots section says instead.
+{%- elif interface == 'desktop' %}
+> **To write:** a section for each part of the desktop app a person uses, such as its windows and
+> what each does, its settings, and its shortcuts. Also say:
+>
+> - what it does in the tray or the background, and how to quit it;
+> - how it updates, and where it keeps settings and data.
+{%- elif interface == 'terminal' %}
+> **To write:** a section for each part of the terminal app a person uses, such as a `## Keys`
+> section with every key and what it does, its options, and how it updates. Also say:
+>
+> - which terminals draw it fully, and what others show instead;
+> - what it shows while it waits for an outside system.
+{%- endif %}
+{% endfor %}
+## Screenshots
+{% for interface in ui %}
+{%- if interface == 'web' %}
+> **To write:** the web app's screenshots. Start with a line that says the data is invented, such
+> as "The screenshots show invented data from a demo run, not a real installation." Then a table
+> with one row per page and a column each for a desktop and a phone capture: a bold page name and
+> what the page shows, then each image linked to itself, such as
+> `[<img src="screenshots/<page>.png" width="480" alt="<page>, desktop">](screenshots/<page>.png)`
+> for the desktop and `width="160"` for the phone. Capture the desktop at a width such as 1440×900
+> and the phone at a phone width, such as 390×844 CSS pixels at 2×.
+{%- elif interface == 'desktop' %}
+> **To write:** the desktop app's screenshots. Start with a line that says the data is invented.
+> Then a table with one row per window or state: a bold name and what it shows, then the image
+> linked to itself, such as
+> `[<img src="screenshots/<window>.png" width="480" alt="<what it shows>">](screenshots/<window>.png)`.
+> Capture each window at its default size.
+{%- elif interface == 'terminal' %}
+> **To write:** the terminal app's screenshots. Start with a line that says the data is invented,
+> such as "Each screenshot is a screen of the demo mode, so every name and number in it is made
+> up." Then a table with one row per screen: a bold name and what it shows, then the image linked
+> to itself, such as
+> `[<img src="screenshots/<screen>.svg" width="480" alt="<what it shows>">](screenshots/<screen>.svg)`.
+{%- endif %}
+{% endfor %}
+> [Screenshots](../CONTRIBUTING.md#screenshots) in CONTRIBUTING.md says how to capture them, and
+> the privacy check each one needs before it's committed.

@@ -52,9 +52,8 @@ docs_files = [
 {%- endif %}
 ]
 # The `##` headings of README.md, exactly and in order.
-{%- set usage_section = {'binary': 'Install', 'service': 'Run it', 'library': 'Use it'}[kind] %}
 {%- set license_section = ', "License"' if license != 'none' or kind != 'library' else '' %}
-readme_sections = ["{{ usage_section }}", "Documentation"{{ license_section }}]
+readme_sections = ["Quick start", "Documentation"{{ license_section }}]
 
 # The workspace crates each member may depend on directly. A new crate, or a new edge between
 # crates, is a rule change.

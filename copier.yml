@@ -44,6 +44,7 @@ _exclude:
   - "{% if kind == 'library' %}/about.toml{% endif %}"
   - "{% if kind == 'library' %}/docs/install.md{% endif %}"
   - "{% if kind == 'library' %}/docs/verifying-releases.md{% endif %}"
+  - "{% if not (interfaces | default([]) | select('in', ['web', 'desktop', 'terminal']) | list) %}/docs/usage.md{% endif %}"
   - "{% if license != 'MIT' %}/LICENSE{% endif %}"
   - "{% if license != 'MIT OR Apache-2.0' %}/LICENSE-MIT{% endif %}"
   - "{% if license != 'MIT OR Apache-2.0' %}/LICENSE-APACHE{% endif %}"
@@ -60,6 +61,9 @@ _exclude:
   - "{% if _copier_operation == 'update' %}Cargo.lock{% endif %}"
   - "{% if _copier_operation == 'update' %}CHANGELOG.md{% endif %}"
   - "{% if _copier_operation == 'update' %}docs/design.md{% endif %}"
+  # The README and the screenshots page start as outlines the owner writes.
+  - "{% if _copier_operation == 'update' %}README.md{% endif %}"
+  - "{% if _copier_operation == 'update' %}docs/usage.md{% endif %}"
 
 project_name:
   type: str
