@@ -198,11 +198,24 @@ MUTATIONS = {
         "number=$(git log -1 --format=%s | sed -nE 's/.* \\(#([0-9]+)\\)$/\\1/p')", "number="
     ),
     "release-find-step-pull-lookup-fails-open": replace_in_find(
-        "--jq .head.ref)", "--jq .head.ref || true)"
+        "| @tsv')", "| @tsv' || true)"
+    ),
+    "release-find-step-trusts-the-subject": replace_in_find(
+        '[ "$merged" = true ] && [ "$merge_sha" = "$GITHUB_SHA" ]', "true"
+    ),
+    "release-find-step-ignores-the-merge-commit": replace_in_find(
+        ' && [ "$merge_sha" = "$GITHUB_SHA" ]', ""
+    ),
+    "release-find-step-ignores-merged": replace_in_find('[ "$merged" = true ] && ', ""),
+    "release-find-step-first-number": replace_in_find(
+        "s/.* \\(#([0-9]+)\\)$/\\1/p", "s/^[^(]* \\(#([0-9]+)\\).*/\\1/p"
     ),
     "release-find-step-other-pull": replace_in_find("pulls/$number", "pulls/1"),
     "release-job-failure-ignored": ignore_release_failure,
-    "release-find-step-skips-direct-pushes": replace_in_find(' || [ -z "$number" ]', ""),
+    "release-find-step-skips-direct-pushes": replace_in_find(
+        ' || { [ -z "$number" ] && [ "$CREATED" != true ]; }', ""
+    ),
+    "release-find-step-checks-the-creating-push": replace_in_find(' && [ "$CREATED" != true ]', ""),
     "release-after-check-removed": lambda document: release_steps(document).remove(
         after_step(release_steps(document))
     ),
@@ -234,7 +247,10 @@ TAG_MUTATIONS = {
     "release-after-install-removed",
 }
 
-LIBRARY_MUTATIONS = {"release-find-step-skips-direct-pushes"}
+LIBRARY_MUTATIONS = {
+    "release-find-step-skips-direct-pushes",
+    "release-find-step-checks-the-creating-push",
+}
 
 
 def reads_tag(path):

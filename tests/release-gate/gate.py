@@ -13,8 +13,10 @@ write. This checks in <project> that both release routes run it:
   finds a pull request from a `release-plz-` branch, which is when release-plz releases, or, in a
   project whose release job reads a `v*` tag on the commit to build and publish, when the commit
   has one. The step asks GitHub which pull requests the commit belongs to, and also which branch
-  the pull request whose number ends the commit's subject, ` (#N)`, came from, since the first
-  answer can lag just after the merge. A library also checks a push whose subject has no number.
+  the pull request whose number ends the commit's subject, ` (#N)`, came from, counting it only
+  when that pull request was merged as this commit, since the first answer can lag just after
+  the merge and a subject can be edited. A library also checks a push without a number that
+  counts, apart from the push that creates the branch.
   In a project whose release job reads the tag, a second check runs after release-plz whenever
   release-plz released or a tag is left to publish and the first check didn't run; the test
   evaluates both checks' conditions against those outputs. Each check installs just before it,
@@ -239,12 +241,21 @@ def check_conditions(before, after):
             )
 
 
-def run_find_step(branches, subject, pull=None, gh_status=0, tag=None):
+SHA = "0123abcd"
+
+
+def merged(branch, sha=SHA):
+    """What `gh` says of a pull request from `branch` merged as the commit `sha`."""
+    return f"{branch}\ttrue\t{sha}"
+
+
+def run_find_step(branches, subject, pull=None, gh_status=0, tag=None, created=False):
     """Runs the finding step's script as GitHub runs it, in a git repository whose commit has the
-    subject `subject` and the tag `tag`, if any, with a `gh` that answers the pull requests of the
-    commit with `branches`, exiting with `gh_status`, and a pull request's branch with `pull`,
-    failing when that is None. Returns its exit code, what it wrote to GITHUB_OUTPUT and the
-    command line of each call of `gh`."""
+    subject `subject` and the tag `tag`, if any, on a push that created the branch if `created`,
+    with a `gh` that answers the pull requests of the commit with `branches`, exiting with
+    `gh_status`, and a pull request with `pull`, its branch, whether it was merged and its merge
+    commit separated by tabs, failing when that is None. Returns its exit code, what it wrote to
+    GITHUB_OUTPUT and the command line of each call of `gh`."""
     script = subprocess.run(
         [sys.executable, "-I", str(STEP_SCRIPT), str(workflows / "release.yml"), "release", FIND_STEP],
         check=True,
@@ -281,8 +292,9 @@ def run_find_step(branches, subject, pull=None, gh_status=0, tag=None):
             os.environ,
             PATH=f"{directory}{os.pathsep}{os.environ['PATH']}",
             GITHUB_REPOSITORY="owner/demo",
-            GITHUB_SHA="0123abcd",
+            GITHUB_SHA=SHA,
             GITHUB_OUTPUT=str(output),
+            CREATED="true" if created else "false",
         )
         result = subprocess.run(
             ["bash", "-e", "-c", script],
@@ -299,38 +311,49 @@ def run_find_step(branches, subject, pull=None, gh_status=0, tag=None):
 def check_find_step(reads_tag):
     """Checks what the finding step's script does with each answer `gh` can give, with the
     commit's subject, and with a tag on the commit, which releases only in a project whose release
-    job reads one (`reads_tag`). A subject without a pull request's number is a push straight to
-    `main`: a library checks it, since it has no later check, and a binary or service leaves it
-    to the check after release-plz."""
+    job reads one (`reads_tag`). A subject's number counts only for a pull request merged as this
+    commit. A subject without a number that counts is a push straight to `main` or an edited
+    one: a library checks it, unless the push created `main`, since it has no later check, and a
+    binary or service leaves it to the check after release-plz."""
     release_pr = "release-plz-2026-11-23T10-00-00Z"
     commits = "api repos/owner/demo/commits/0123abcd/pulls --jq .[].head.ref"
-    for branches, subject, pull, tag, releases in [
-        (f"{release_pr}\n", "chore: release v0.2.0 (#7)", release_pr, None, True),
-        (f"feat/readme\n{release_pr}\n", "feat: write it (#7)", "feat/readme", None, True),
-        ("feat/readme\nrenovate/toml-1.x\n", "feat: write it (#7)", "feat/readme", None, False),
-        ("my-release-plz-x\nrelease-notes\n", "feat: write it (#7)", "release-notes", None, False),
-        ("", "chore: release v0.2.0 (#7)", release_pr, None, True),
-        ("", "feat: write it (#7)", "feat/readme", None, False),
-        ("", "feat: write it (#7)", "feat/readme", "v0.2.0", reads_tag),
-        ("feat/readme\n", "feat: write it (#7)", "feat/readme", "nightly", False),
-        ("", "a push straight to main", None, None, not reads_tag),
-        ("", "fix: what #7 found (#7) and more", None, None, not reads_tag),
+    library = not reads_tag
+    for branches, subject, pull, tag, created, releases in [
+        (f"{release_pr}\n", "chore: release v0.2.0 (#7)", merged(release_pr), None, False, True),
+        (f"feat/a\n{release_pr}\n", "feat: write it (#7)", merged("feat/a"), None, False, True),
+        ("feat/a\nrenovate/toml-1.x\n", "feat: write it (#7)", merged("feat/a"), None, False, False),
+        ("my-release-plz-x\nrelease-notes\n", "feat: a (#7)", merged("release-notes"), None, False, False),
+        ("", "chore: release v0.2.0 (#7)", merged(release_pr), None, False, True),
+        ("", "feat: write it (#7)", merged("feat/a"), None, False, False),
+        ("", "feat: write it (#7)", merged("feat/a"), "v0.2.0", False, reads_tag),
+        ("feat/a\n", "feat: write it (#7)", merged("feat/a"), "nightly", False, False),
+        ("", "fix: x (#3) (#7)", merged(release_pr), None, False, True),
+        ("", "a push straight to main", None, None, False, library),
+        ("", "fix: what #7 found (#7) and more", None, None, False, library),
+        ("", "chore: generate from trellis", None, None, True, False),
+        ("", "chore: release v0.2.0 (#7)", merged(release_pr, "fedcba98"), None, False, library),
+        ("", "chore: release v0.2.0 (#7)", merged("feat/a", "fedcba98"), None, False, library),
+        ("", "chore: release v0.2.0 (#7)", f"{release_pr}\tfalse\t{SHA}", None, False, library),
+        ("", "chore: release v0.2.0 (#7)", f"feat/a\tfalse\t{SHA}", None, False, library),
     ]:
-        code, output, calls = run_find_step(branches, subject, pull=pull, tag=tag)
+        code, output, calls = run_find_step(branches, subject, pull, tag=tag, created=created)
         found = "releases=true" in output.split("\n")
         if code != 0 or found != releases:
             problems.append(
                 f"the finding step exits {code} and {'finds' if found else 'finds no'} release "
                 f"for the merged branches {branches.split()}, the subject {subject!r}, the pull "
-                f"request's branch {pull} and the tag {tag}, but should exit 0 and "
+                f"request {pull!r}, the tag {tag} and a push that "
+                f"{'created' if created else 'updated'} the branch, but should exit 0 and "
                 f"{'find one' if releases else 'find none'}"
             )
         expected = [commits]
         if pull is not None:
-            expected.append("api repos/owner/demo/pulls/7 --jq .head.ref")
+            expected.append(
+                "api repos/owner/demo/pulls/7 --jq [.head.ref, .merged, .merge_commit_sha] | @tsv"
+            )
         if calls != expected:
             problems.append(f"the finding step asks gh {calls}, not {expected}")
-    code, _, _ = run_find_step(f"{release_pr}\n", "chore: release (#7)", release_pr, gh_status=1)
+    code, _, _ = run_find_step(f"{release_pr}\n", "chore: release (#7)", merged(release_pr), 1)
     if code == 0:
         problems.append("the finding step passes when gh fails, so an error would skip the check")
     code, _, _ = run_find_step("", "chore: release v0.2.0 (#7)", pull=None)

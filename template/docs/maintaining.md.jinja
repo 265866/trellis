@@ -175,25 +175,41 @@ a change that ships joins it. To ship:
    or a README without an opening paragraph.
 {%- endif %}
    So the first release fails until the README is written. Run `just policy-release` to see
-   what is left. The release workflow runs it again before it tags or publishes anything. If it
-   fails there, after the merge, nothing is released: write what it names on a branch whose name
-   starts with `release-plz-`, such as `release-plz-readme`, and merge its pull request, which
-   releases the version the release pull request set. The check runs on the pushes release-plz
-   releases as `release-plz.toml` sets it up: from a pull request whose branch starts with
-   release-plz's default `pr_branch_prefix`, `release-plz-`, with `release_always = false`.
-   Changing either there is a rule change that must change the condition in
-   `.github/workflows/ci.yml` and `.github/workflows/release.yml` with it. The workflow finds that
-   pull request from both GitHub's list of a commit's pull requests and the ` (#12)` the squash
-   merge ends the commit's subject with, since the list can lag just after a merge; a lookup that
-   fails stops the release.
-{%- if kind == 'library' %} A push without a number, straight to `main`, runs the check
-   too.
-{%- else %} If release-plz releases a push the check missed, the check runs
-   after it, before anything is built or published.
+   what is left. The release workflow runs it again before it tags or publishes anything, on the
+   pushes release-plz releases as `release-plz.toml` sets it up: from a pull request whose branch
+   starts with release-plz's default `pr_branch_prefix`, `release-plz-`, with
+   `release_always = false`. Changing either there is a rule change that must change the
+   condition in `.github/workflows/ci.yml` and `.github/workflows/release.yml` with it. The
+   workflow finds that pull request from both GitHub's list of a commit's pull requests and the
+   ` (#12)` that ends the squash merge's subject, when that pull request was merged as that very
+   commit, since the list can lag just after a merge. A lookup that fails stops the release.
+
+   If the check fails before release-plz, nothing is released: write what it names on a branch
+   whose name starts with `release-plz-`, such as `release-plz-readme`, and merge its pull
+   request, which releases the version the release pull request set.
+{%- if kind == 'library' %} A push to `main` whose
+   subject has no pull request's number that counts, such as one pushed straight to it, runs the
+   check too, apart from the push that creates `main`. Until `just policy-release` passes, such
+   a push fails the Release job, and the release pull request waits, since its job needs the
+   Release job.
+{%- else %}
+
+   If release-plz releases a push the check missed, the check runs after it, before anything is
+   built or published. If it fails there, release-plz has already pushed the `vX.Y.Z` tag, and
+   neither a re-run, which checks the same commit, nor a later merge, which release-plz skips
+   because the tag exists, releases it. Either delete the tag,
+   `git push origin :refs/tags/vX.Y.Z`, and merge the fix from a `release-plz-` branch, which
+   releases that version again; or merge the fix as usual, move the tag to its commit,
+   `git push --force origin <commit>:refs/tags/vX.Y.Z`, and re-run that commit's Release
+   workflow, which builds and publishes the tag.
 {%- endif %}
-   Merge no other pull request until the release workflow's
-   **{{ 'Release' if kind == 'library' else 'Tag' }}** job finishes. A pull request merged before
-   then can get no release pull request until the next push to `main`.
+{% if kind == 'library' %}
+   Merge no other pull request until the release workflow's **Release** job finishes. A pull
+   request merged before then can get no release pull request until the next push to `main`.
+{%- else %}
+   Merge no other pull request until the release workflow's **Tag** job finishes. A pull request
+   merged before then can get no release pull request until the next push to `main`.
+{%- endif %}
 {%- if kind != 'library' %}
 4. If a later job fails, re-run the failed jobs. They pick up from the same tag.
 
