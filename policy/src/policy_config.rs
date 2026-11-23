@@ -32,7 +32,7 @@ pub(crate) struct PolicyConfig {
     /// (`docs_layout`).
     readme_sections: Option<Vec<String>>,
     /// What a person who uses the project sees, the primary interface first, or `None` if the key
-    /// is missing.
+    /// is missing (`readme`).
     interfaces: Option<Vec<Interface>>,
     /// Each restricted package, by its key, mapped to its pattern and the members that may reach
     /// it (`restricted_crates`).
@@ -118,7 +118,6 @@ impl PolicyConfig {
 
     /// What a person who uses the project sees, the primary interface first, or `None` if
     /// `interfaces` isn't set.
-    #[cfg_attr(not(test), expect(dead_code, reason = "the readme rule will read it"))]
     pub(crate) fn interfaces(&self) -> Option<&[Interface]> {
         self.interfaces.as_deref()
     }

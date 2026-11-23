@@ -2,5 +2,11 @@
 extend-exclude = [
     "Cargo.lock",
     "lints/Cargo.lock",
+    # Other projects' readmes, copied verbatim as the readme rule's fixtures.
+    "policy/tests/readme",
     "template/LICENSE-APACHE",
 ]
+
+[default.extend-identifiers]
+# The PNG chunk that holds an image's histogram, which the readme rule allows.
+hIST = "hIST"

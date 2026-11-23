@@ -2,8 +2,9 @@
 //! [The style guide](https://github.com/265866/trellis/blob/main/template/docs/style.md#checked-by-tools)
 //! lists them under Checked by tools and Docs checked by just policy.
 //!
-//! The `trellis-policy check [--manifest-path <Cargo.toml>]` command runs every [`Rule`] on a
-//! workspace. The `trellis-policy rule-changes <base> [--head <commit>]` command keeps changes to
+//! The `trellis-policy check [--release] [--manifest-path <Cargo.toml>]` command runs every
+//! [`Rule`] on a workspace; a [`Violation`] that only a release fails on is a notice without
+//! `--release`. The `trellis-policy rule-changes <base> [--head <commit>]` command keeps changes to
 //! the rules and changes to the code they check in separate pull requests. The
 //! `trellis-policy web-notices <about.toml> <web-licenses.toml> <node_modules> <output>` command
 //! writes the license notices of the npm packages a web UI installs, as [`WebNotices`], and fails
@@ -38,6 +39,7 @@ mod npm_package;
 mod policy_config;
 mod policy_error;
 pub mod proc_macros;
+pub mod readme;
 pub mod release_changelog;
 mod repository_files;
 mod restricted_crate;
@@ -62,7 +64,7 @@ pub use npm_package::NpmPackage;
 pub use policy_error::PolicyError;
 pub use rule::Rule;
 pub use unidentified_package::UnidentifiedPackage;
-pub use violation::Violation;
+pub use violation::{Fails, Violation};
 pub use web_licenses::WebLicenses;
 pub use web_notices::WebNotices;
 pub use workspace::Workspace;

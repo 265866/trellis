@@ -349,7 +349,7 @@ fn is_image(node: Node<'_>) -> bool {
 }
 
 /// The HTML `node` holds, if it is an HTML block or inline HTML.
-fn html(node: Node<'_>) -> Option<String> {
+pub(crate) fn html(node: Node<'_>) -> Option<String> {
     let value = &node.data.borrow().value;
     if let NodeValue::HtmlBlock(block) = value {
         Some(block.literal.clone())
@@ -361,7 +361,7 @@ fn html(node: Node<'_>) -> Option<String> {
 }
 
 /// How many line breaks `text` holds: `\n`, `\r\n` or a lone `\r`.
-fn line_breaks(text: &str) -> usize {
+pub(crate) fn line_breaks(text: &str) -> usize {
     text.replace("\r\n", "\n").matches(['\n', '\r']).count()
 }
 

@@ -178,7 +178,7 @@ release-test:
 #
 # Checks that every relative link and anchor in the Markdown files resolves.
 links:
-    lychee --offline --include-fragments --no-progress --exclude-path target --exclude-path lints/target --exclude-path template './**/*.md'
+    lychee --offline --include-fragments --no-progress --exclude-path target --exclude-path lints/target --exclude-path template --exclude-path policy/tests/readme './**/*.md'
 
 # Checks that the template pins the same toolchains as this repository and its lints, that the
 # config files and workflows both keep are the same apart from the Advisories workflow's web UI
@@ -487,8 +487,9 @@ lints-comments:
 lints-test:
     cargo test --locked
 
-# Runs `template` for each kind, then `shapes`, `dependencies`, `update` and the extras checks.
-templates: (template "binary") (template "binary" "ci" "false" "false" "" "false" "desktop") (template "binary" "ci" "false" "false" "" "false" "terminal") (template "binary" "ci" "false" "true" "" "false" "web,cli") (template "service") (template "service" "ci" "false" "true") (template "library") (template "library" "ci" "true") shapes outlines dependencies update build-extras image-extras release-extras checker-install
+# Runs `template` for each kind, then `shapes`, `outlines`, `release-gate`, `dependencies`, `update`
+# and the extras checks.
+templates: (template "binary") (template "binary" "ci" "false" "false" "" "false" "desktop") (template "binary" "ci" "false" "false" "" "false" "terminal") (template "binary" "ci" "false" "true" "" "false" "web,cli") (template "service") (template "service" "ci" "false" "true") (template "library") (template "library" "ci" "true") shapes outlines release-gate dependencies update build-extras image-extras release-extras checker-install
 
 # Checks that every exclusion in copier.yml renders with only the answers an older trellis asked,
 # as Copier renders them when a project updates from it. Then copies the working tree into a
@@ -707,6 +708,15 @@ update:
       git add --all
       commit commit --quiet --allow-empty --message "chore: publish the crate under $license"
       copier update --quiet --defaults --vcs-ref=:current: --data publish_crate=true --data "license=$license"
+      # The update leaves README.md alone, so the owner links the new license files there, which
+      # `trellis-policy check` requires.
+      dual='Released under either the [MIT License](LICENSE-MIT) or the [Apache License 2.0](LICENSE-APACHE), at'
+      if [ "$license" = MIT ]; then
+        swap README.md "$dual" 'Released under the [MIT License](LICENSE).'
+        swap README.md 'your option.' ''
+      else
+        swap README.md 'Released under the [MIT License](LICENSE).' "$dual\nyour option."
+      fi
       if [ "$license" = MIT ]; then
         delivered=(LICENSE) removed=(LICENSE-MIT LICENSE-APACHE)
       else
@@ -792,8 +802,9 @@ update:
 # the lints and checker from this checkout, and runs `recipes` in it, `ci` by default. `true` as
 # `publish` makes a library a published one, and `true` as `web` gives a binary or service a web UI.
 # `interfaces`, such as `desktop` or `web,cli`, answers `interface` with the first and
-# `other_interfaces` with the rest, in place of their defaults. After `ci`, a
-# binary on Linux runs its release build's steps for this machine's target, whose archive must hold
+# `other_interfaces` with the rest, in place of their defaults. After `ci`,
+# `just policy-release` must fail on the README outline's prompts. After `ci`, a binary on Linux
+# runs its release build's steps for this machine's target, whose archive must hold
 # the program, its license files and notices, and a web UI's build and notices only when it has
 # one. After `ci`, a service also builds and runs its image when Docker is
 # installed, under umask 077 with its license files 0600, and the image's user must be able to read
@@ -868,6 +879,14 @@ template kind recipes="ci" publish="false" web="false" target="" installer="fals
       "$trellis/tests/installer/run.sh" "$project" "{{ target }}"
     fi
     if [ "{{ recipes }}" = ci ]; then
+      # `ci` passed with the README an outline, but a release must fail on its prompts.
+      if just policy-release > "$out/release.txt" 2>&1; then
+        cat "$out/release.txt" >&2
+        echo "error: just policy-release passed a README outline that still holds its prompts" >&2
+        exit 1
+      fi
+      grep --quiet --extended-regexp '^(error: |::error::)\[readme\] README.md: Lines [0-9, ]* hold prompts of the outline' "$out/release.txt" \
+        || { cat "$out/release.txt" >&2; echo "error: just policy-release failed, but not on the README's prompts" >&2; exit 1; }
       # `ci` ran as a new project's first run does, with no remote branch to compare with. With
       # one, the checks must have left no change behind.
       git update-ref refs/remotes/origin/main HEAD
@@ -1701,7 +1720,7 @@ checker-install:
     cd "$out/trellis"
     git init --quiet --initial-branch main
     cp policy/src/main.rs "$out/main.rs"
-    line='        "All {} structure rules hold in {root}.",'
+    line='    let holds = format!("All {} structure rules hold in {root}", Rule::ALL.len());'
     awk -v old="$line" '!done && $0 == old { sub(/"All/, "\"The stale checker: all"); done = 1 } { print } END { exit !done }' \
       "$out/main.rs" > policy/src/main.rs || fail "policy/src/main.rs has no line $line"
     git add --all
@@ -1959,7 +1978,10 @@ shape answers:
 # over 100 characters. A web, desktop or terminal interface must get `docs/usage.md` with its
 # screenshots prompts, CONTRIBUTING.md's Screenshots rules and the pull request template's line
 # about images, and any other none of them. Each outline, untouched, must pass
-# `trellis-policy check` and `just links`.
+# `trellis-policy check` and `just links`, printing its prompts as notices, and fail
+# `trellis-policy check --release` on them, and on the missing picture where the first interface
+# is web, desktop or terminal. Written by `tests/outlines/answer.py`, as an owner would, with the
+# picture where one is needed, it must pass `--release` and `just links`.
 #
 # Checks the README outline each interface gets.
 outlines:
@@ -1986,7 +2008,74 @@ outlines:
         --data trellis_path="$trellis" "$trellis" "$project"
       uv run --quiet --no-project python -I tests/outlines/check.py "$project" "$interfaces"
       (cd "$project" && just links)
-      cargo run --locked --quiet --manifest-path "$trellis/Cargo.toml" --package trellis-policy -- \
-        check --manifest-path "$project/Cargo.toml"
+      policy() {
+        cargo run --locked --quiet --manifest-path "$trellis/Cargo.toml" --package trellis-policy -- \
+          check --manifest-path "$project/Cargo.toml" "$@"
+      }
+      policy > "$out/everyday.txt" || { cat "$out/everyday.txt" >&2; exit 1; }
+      prompts='\[readme\] README.md: Lines [0-9, ]* hold prompts of the outline'
+      picture='\[readme\] README.md: The readme has no picture before its first `##`'
+      grep --quiet --extended-regexp "^(notice: |::notice::)$prompts" "$out/everyday.txt" \
+        || { cat "$out/everyday.txt" >&2; echo "error: $project: just policy doesn't note the prompts" >&2; exit 1; }
+      if policy --release > "$out/release.txt"; then
+        cat "$out/release.txt" >&2
+        echo "error: $project: the release check passed an outline" >&2
+        exit 1
+      fi
+      grep --quiet --extended-regexp "^(error: |::error::)$prompts" "$out/release.txt" \
+        || { cat "$out/release.txt" >&2; echo "error: $project: the release check doesn't fail on the prompts" >&2; exit 1; }
+      case "${interfaces%%,*}" in
+        web | desktop | terminal) want_picture=true ;;
+        *) want_picture=false ;;
+      esac
+      if [ "$want_picture" = true ] && ! grep --quiet --extended-regexp "^(error: |::error::)$picture" "$out/release.txt"; then
+        cat "$out/release.txt" >&2
+        echo "error: $project: the release check doesn't ask a UI's README for its picture" >&2
+        exit 1
+      elif [ "$want_picture" = false ] && grep --quiet "$picture" "$out/release.txt"; then
+        cat "$out/release.txt" >&2
+        echo "error: $project: the release check asks a README without a UI for a picture" >&2
+        exit 1
+      fi
+      uv run --quiet --no-project python -I tests/outlines/answer.py "$project" "$interfaces"
+      policy --release > "$out/release.txt" || { cat "$out/release.txt" >&2; echo "error: $project: the written README fails the release check" >&2; exit 1; }
+      (cd "$project" && just links)
     done
-    echo "Each interface's README outline holds its prompts and no image, and passes the docs checks."
+    echo "Each interface's README outline holds its prompts and no image, passes the docs checks with notices, fails the release check until it is written, and passes it after."
+
+# Generates a binary, a service, a library and a published library, and checks with
+# `tests/release-gate/gate.py` that the release pull request's CI and the release workflow both run
+# `just policy-release`, the second before anything is tagged or published, so a release can't
+# publish while a README prompt is left. gate.py must fail on each change
+# `tests/release-gate/mutate.py` makes.
+#
+# Checks that the release routes run the release check of the docs.
+release-gate:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    trellis="{{ justfile_directory() }}"
+    out=$(mktemp -d)
+    trap 'rm -rf "$out"' EXIT
+    fail() { echo "error: release-gate: $1" >&2; exit 1; }
+    python() { uv run --quiet --no-project --with pyyaml==6.0.3 python -I "$@"; }
+    for answers in kind=binary kind=service kind=library "kind=library publish_crate=true license=MIT"; do
+      project="$out/demo"
+      rm -rf "$project"
+      data=()
+      for answer in $answers; do data+=(--data "$answer"); done
+      uv tool run copier@9.19.1 copy --quiet --defaults --vcs-ref HEAD --data project_name=demo \
+        --data "description=A demo that trellis generates." "${data[@]}" \
+        --data trellis_path="$trellis" "$trellis" "$project"
+      python "$trellis/tests/release-gate/gate.py" "$project" || fail "the release gate is open for $answers"
+      mutations=$(python "$trellis/tests/release-gate/mutate.py" --list "$project")
+      [ -n "$mutations" ] || fail "tests/release-gate/mutate.py lists no mutations for $answers"
+      while IFS= read -r mutation; do
+        rm -rf "$out/mutated"
+        cp -R "$project" "$out/mutated"
+        python "$trellis/tests/release-gate/mutate.py" "$out/mutated" "$mutation"
+        if python "$trellis/tests/release-gate/gate.py" "$out/mutated" 2> "$out/gate.txt"; then
+          fail "gate.py passed this mutation for $answers: $mutation"
+        fi
+        echo "gate.py fails as it should for $answers on: $mutation"
+      done <<< "$mutations"
+    done

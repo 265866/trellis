@@ -317,6 +317,7 @@ jobs:
 
       - run: just shapes
       - run: just outlines
+      - run: just release-gate
       - run: just update
       - run: just build-extras
       - run: just image-extras

@@ -343,7 +343,10 @@ these rules:
   screen's text in `<desc>`. GitHub renders it in both themes, and it keeps its columns with any
   font.
 {%- endif %}
-- **Metadata.** A PNG carries no metadata: no text, EXIF or time chunks.
+- **Metadata.** A PNG carries only image data: no text, EXIF, time or other metadata chunks, and
+  nothing after its end, where some cropping tools leave the uncropped original. `just policy`
+  rejects a PNG under `docs/`, or one the README or a page shows, that has any, and says how to
+  strip it.
 - **Privacy check.** Before you commit an image, look at it, and search an SVG's text, for any
   real name, account, address, number or key, and any value this project's domain keeps private.
   A PNG holds no text to search, so read each one by eye or with OCR.
