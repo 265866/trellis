@@ -6,7 +6,7 @@ part lists what a project's owner must do around the update: a rule that can fla
 a setting to change, or a step to do by hand. [CONTRIBUTING.md](CONTRIBUTING.md#release-trellis)
 has the versioning rule.
 
-## Unreleased
+## v0.20.1
 
 ### Changed
 
@@ -29,14 +29,13 @@ has the versioning rule.
   release anyway. The job now also reads the release pull request's number from the end of the
   squash-merged commit's subject, ` (#12)`, and counts it only if that pull request was merged as
   this very commit. A number with no pull request, such as an issue's, doesn't count; the job fails
-  if GitHub can't answer otherwise. A binary or service also runs
-  `just policy-release` after release-plz whenever release-plz released or a tag is left to
-  publish and the check hadn't run, so nothing is built or published until it passes;
-  `docs/maintaining.md` says how to release the tag after a fix. A library, whose release
-  release-plz tags and publishes in the same step, runs the check on any push to `main` without a
-  pull request's number that counts, such as one pushed straight to it, except the push that
-  creates `main`. `docs/maintaining.md` says the release check depends on squash merges titled
-  from the pull request, which `just setup-github` sets.
+  if GitHub can't answer otherwise. A binary or service also runs `just policy-release` after
+  release-plz whenever release-plz released or a tag is left to publish and the check hadn't run, so
+  nothing is built or published until it passes; `docs/maintaining.md` says how to release the tag
+  after a fix. A library, whose release release-plz tags and publishes in the same step, runs the
+  check on any push to `main` without a pull request's number that counts, such as one pushed
+  straight to it, except the push that creates `main`. `docs/maintaining.md` says the release check
+  depends on squash merges titled from the pull request, which `just setup-github` sets.
 
 ## v0.20.0
 
