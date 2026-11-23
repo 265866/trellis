@@ -54,7 +54,7 @@ jobs:
 {%- endraw %}
     name: {{ 'Release' if kind == 'library' else 'Tag' }}
 {%- raw %}
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     permissions:
       contents: write
@@ -168,7 +168,7 @@ jobs:
     name: {{ 'Attest and publish' if visibility == 'public' else 'Publish' }}
 {%- raw %}
     needs: [release, build]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
 {%- endraw %}
 {%- if visibility == 'public' %}
     # The attest retries can wait four minutes, so the limit is 20, where a private repository,
@@ -292,7 +292,7 @@ jobs:
     name: {{ 'Build, attest and sign the image' if visibility == 'public' else 'Build and push the image' }}
     needs: release
     if: needs.release.outputs.tag != ''
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
 {%- if visibility == 'public' %}
     # The attest and sign retries can wait 16 minutes in all, so the limit is 60, where a private
     # repository, which runs neither, has 45.
@@ -471,7 +471,7 @@ jobs:
   release-pr:
     name: Update the release PR
     needs: release
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     permissions:
       contents: write
