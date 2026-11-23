@@ -28,7 +28,8 @@ has the versioning rule.
   just after the merge; the check was then skipped, and release-plz, asking seconds later, could
   release anyway. The job now also reads the release pull request's number from the end of the
   squash-merged commit's subject, ` (#12)`, and counts it only if that pull request was merged as
-  this very commit; it fails if GitHub can't say. A binary or service also runs
+  this very commit. A number with no pull request, such as an issue's, doesn't count; the job fails
+  if GitHub can't answer otherwise. A binary or service also runs
   `just policy-release` after release-plz whenever release-plz released or a tag is left to
   publish and the check hadn't run, so nothing is built or published until it passes;
   `docs/maintaining.md` says how to release the tag after a fix. A library, whose release

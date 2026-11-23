@@ -96,19 +96,32 @@ jobs:
       # release-plz asks it again seconds later. So the step also reads the pull request's number
       # from the commit's subject, which ends in ` (#N)` because the repository only squash-merges
       # with the pull request's title, as `just setup-github` sets it, and asks GitHub for that
-      # pull request; if it can't, the step fails rather than skip the check. The number counts
-      # only if that pull request was merged as this very commit, since whoever merges can edit
-      # the subject to end in another's number.
-{%- if kind == 'library' %} A subject
-      # without a number that counts is a push straight to `main`, or an edited one, so the check
-      # runs then too: release-plz tags and publishes the release{{ ', and the crate on crates.io,' if publish_crate else '' }}
-      # in its own step, and no later step can stop it. The ruleset from `just setup-github` lets
-      # the push that creates `main` through, and a private repository on a plan without rulesets
-      # has none, so a push can reach `main` without a pull request. The push that creates `main`
-      # merged nothing and releases nothing, so it alone isn't checked.
-{%- else %} A push it
-      # misses anyway, such as one straight to `main`, is caught after release-plz: "Check the docs
-      # as a release does, after release-plz released" runs before the build and publish jobs.
+      # pull request. The number counts only if that pull request was merged as this very commit,
+      # since whoever merges can edit the subject to end in another's number, and not if GitHub
+      # finds no such pull request, as for an issue's number; any other failure fails the step
+      # rather than skip the check.
+{%- if kind == 'library' %}
+      #
+{%- if publish_crate %}
+      # A push without a number that counts, such as one straight to `main` or with an edited
+      # subject, runs the check too, since release-plz tags and publishes the release, and the
+      # crate on crates.io, in its own step, and no later step can stop it. The ruleset from
+      # `just setup-github` lets the push that creates `main` through, and a private repository on
+      # a plan without rulesets has none, so a push can reach `main` without a pull request. The
+      # push that creates `main` merged nothing and releases nothing, so it alone isn't checked.
+{%- else %}
+      # A push without a number that counts, such as one straight to `main` or with an edited
+      # subject, runs the check too, since release-plz tags and publishes the release in its own
+      # step, and no later step can stop it. The ruleset from `just setup-github` lets the push
+      # that creates `main` through, and a private repository on a plan without rulesets has none,
+      # so a push can reach `main` without a pull request. The push that creates `main` merged
+      # nothing and releases nothing, so it alone isn't checked.
+{%- endif %}
+{%- else %}
+      #
+      # A push it misses anyway, such as one straight to `main`, is caught after release-plz:
+      # "Check the docs as a release does, after release-plz released" runs before the build and
+      # publish jobs.
 {%- endif %}
 {%- raw %}
       - name: Find whether this push releases
@@ -124,9 +137,16 @@ jobs:
           branches=$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls" --jq '.[].head.ref')
           number=$(git log -1 --format=%s | sed -nE 's/.* \(#([0-9]+)\)$/\1/p')
           if [ -n "$number" ]; then
-            pull=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$number" \
-              --jq '[.head.ref, .merged, .merge_commit_sha] | @tsv')
-            IFS=$'\t' read -r branch merged merge_sha <<< "$pull"
+            error=$(mktemp)
+            if pull=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$number" \
+              --jq '[.head.ref, .merged, .merge_commit_sha] | @tsv' 2> "$error"); then
+              IFS=$'\t' read -r branch merged merge_sha <<< "$pull"
+            elif grep --quiet 'HTTP 404' "$error"; then
+              merged=false
+            else
+              cat "$error" >&2
+              exit 1
+            fi
             if [ "$merged" = true ] && [ "$merge_sha" = "$GITHUB_SHA" ]; then
               branches="$branches"$'\n'"$branch"
             else

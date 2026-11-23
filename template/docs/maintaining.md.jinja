@@ -182,7 +182,8 @@ a change that ships joins it. To ship:
    condition in `.github/workflows/ci.yml` and `.github/workflows/release.yml` with it. The
    workflow finds that pull request from both GitHub's list of a commit's pull requests and the
    ` (#12)` that ends the squash merge's subject, when that pull request was merged as that very
-   commit, since the list can lag just after a merge. A lookup that fails stops the release.
+   commit, since the list can lag just after a merge. A number GitHub has no pull request for,
+   such as an issue's, doesn't count; any other failed lookup stops the release.
 
    If the check fails before release-plz, nothing is released: write what it names on a branch
    whose name starts with `release-plz-`, such as `release-plz-readme`, and merge its pull
@@ -195,13 +196,15 @@ a change that ships joins it. To ship:
 {%- else %}
 
    If release-plz releases a push the check missed, the check runs after it, before anything is
-   built or published. If it fails there, release-plz has already pushed the `vX.Y.Z` tag, and
-   neither a re-run, which checks the same commit, nor a later merge, which release-plz skips
-   because the tag exists, releases it. Either delete the tag,
-   `git push origin :refs/tags/vX.Y.Z`, and merge the fix from a `release-plz-` branch, which
-   releases that version again; or merge the fix as usual, move the tag to its commit,
-   `git push --force origin <commit>:refs/tags/vX.Y.Z`, and re-run that commit's Release
-   workflow, which builds and publishes the tag.
+   built or published. If it fails there, release-plz has already pushed the `vX.Y.Z` tag. A
+   re-run checks the same commit, and a later merge releases nothing, since release-plz skips a
+   version whose tag exists. Release it one of two ways:
+
+   - Delete the tag, `git push origin :refs/tags/vX.Y.Z`, then merge the fix from a
+     `release-plz-` branch, which releases that version again.
+   - Merge the fix as usual, move the tag to its commit,
+     `git push --force origin <commit>:refs/tags/vX.Y.Z`, then re-run that commit's Release
+     workflow, which builds and publishes the tag.
 {%- endif %}
 {% if kind == 'library' %}
    Merge no other pull request until the release workflow's **Release** job finishes. A pull

@@ -198,7 +198,10 @@ MUTATIONS = {
         "number=$(git log -1 --format=%s | sed -nE 's/.* \\(#([0-9]+)\\)$/\\1/p')", "number="
     ),
     "release-find-step-pull-lookup-fails-open": replace_in_find(
-        "| @tsv')", "| @tsv' || true)"
+        'cat "$error" >&2\n    exit 1', 'cat "$error" >&2\n    merged=false'
+    ),
+    "release-find-step-not-found-fatal": replace_in_find(
+        "then\n    merged=false\n  else", "then\n    exit 1\n  else"
     ),
     "release-find-step-trusts-the-subject": replace_in_find(
         '[ "$merged" = true ] && [ "$merge_sha" = "$GITHUB_SHA" ]', "true"
@@ -216,6 +219,12 @@ MUTATIONS = {
         ' || { [ -z "$number" ] && [ "$CREATED" != true ]; }', ""
     ),
     "release-find-step-checks-the-creating-push": replace_in_find(' && [ "$CREATED" != true ]', ""),
+    "release-find-step-created-dropped": lambda document: find_step(release_steps(document))[
+        "env"
+    ].pop("CREATED"),
+    "release-find-step-created-rebound": lambda document: find_step(release_steps(document))[
+        "env"
+    ].update({"CREATED": "${{ github.event.forced }}"}),
     "release-after-check-removed": lambda document: release_steps(document).remove(
         after_step(release_steps(document))
     ),
@@ -250,6 +259,8 @@ TAG_MUTATIONS = {
 LIBRARY_MUTATIONS = {
     "release-find-step-skips-direct-pushes",
     "release-find-step-checks-the-creating-push",
+    "release-find-step-created-dropped",
+    "release-find-step-created-rebound",
 }
 
 

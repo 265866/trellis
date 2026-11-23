@@ -15,8 +15,9 @@ write. This checks in <project> that both release routes run it:
   has one. The step asks GitHub which pull requests the commit belongs to, and also which branch
   the pull request whose number ends the commit's subject, ` (#N)`, came from, counting it only
   when that pull request was merged as this commit, since the first answer can lag just after
-  the merge and a subject can be edited. A library also checks a push without a number that
-  counts, apart from the push that creates the branch.
+  the merge and a subject can be edited, and not when GitHub finds no such pull request, as for
+  an issue's number. A library also checks a push without a number that counts, apart from the
+  push that creates the branch, which `CREATED`, bound to `github.event.created`, tells it.
   In a project whose release job reads the tag, a second check runs after release-plz whenever
   release-plz released or a tag is left to publish and the first check didn't run; the test
   evaluates both checks' conditions against those outputs. Each check installs just before it,
@@ -168,6 +169,15 @@ def check_release():
             status in condition for status in ("always()", "failure()", "cancelled()")
         ):
             problems.append(f"release.yml's {name} job runs even when the release job's check fails")
+    if find is not None:
+        created = steps[find].get("env", {}).get("CREATED")
+        if reads_tag and created is not None:
+            problems.append("release.yml's finding step reads `CREATED`, which only a library's needs")
+        if not reads_tag and created != CREATED:
+            problems.append(
+                f"a library's finding step sets `CREATED` to {created!r}, not `{CREATED}`, so it "
+                "can't tell the push that creates `main`"
+            )
     if find is not None and steps[find].get("name") == FIND_STEP:
         check_find_step(reads_tag)
 
@@ -244,6 +254,11 @@ def check_conditions(before, after):
 SHA = "0123abcd"
 
 
+NOT_FOUND = "gh: Not Found (HTTP 404)"
+SERVER_ERROR = "gh: Server Error (HTTP 500)"
+CREATED = "${{ github.event.created }}"
+
+
 def merged(branch, sha=SHA):
     """What `gh` says of a pull request from `branch` merged as the commit `sha`."""
     return f"{branch}\ttrue\t{sha}"
@@ -265,7 +280,10 @@ def run_find_step(branches, subject, pull=None, gh_status=0, tag=None, created=F
     with tempfile.TemporaryDirectory() as directory:
         directory = pathlib.Path(directory)
         (directory / "branches").write_text(branches, encoding="utf-8")
-        if pull is not None:
+        if pull in (None, NOT_FOUND):
+            failure = SERVER_ERROR if pull is None else NOT_FOUND
+            (directory / "pull-error").write_text(f"{failure}\n", encoding="utf-8")
+        else:
             (directory / "pull").write_text(f"{pull}\n", encoding="utf-8")
         gh = directory / "gh"
         gh.write_text(
@@ -273,7 +291,8 @@ def run_find_step(branches, subject, pull=None, gh_status=0, tag=None, created=F
             f'printf "%s\\n" "$*" >> "{directory}/calls"\n'
             'case "$2" in\n'
             f'  */commits/*/pulls) cat "{directory}/branches"; exit {gh_status} ;;\n'
-            f'  */pulls/*) cat "{directory}/pull" ;;\n'
+            f'  */pulls/*) cat "{directory}/pull" 2> /dev/null'
+            f' || {{ cat "{directory}/pull-error" >&2; exit 1; }} ;;\n'
             "  *) exit 1 ;;\n"
             "esac\n",
             encoding="utf-8",
@@ -335,6 +354,7 @@ def check_find_step(reads_tag):
         ("", "chore: release v0.2.0 (#7)", merged("feat/a", "fedcba98"), None, False, library),
         ("", "chore: release v0.2.0 (#7)", f"{release_pr}\tfalse\t{SHA}", None, False, library),
         ("", "chore: release v0.2.0 (#7)", f"feat/a\tfalse\t{SHA}", None, False, library),
+        ("", "fix: what an issue reported (#7)", NOT_FOUND, None, False, library),
     ]:
         code, output, calls = run_find_step(branches, subject, pull, tag=tag, created=created)
         found = "releases=true" in output.split("\n")
@@ -359,8 +379,9 @@ def check_find_step(reads_tag):
     code, _, _ = run_find_step("", "chore: release v0.2.0 (#7)", pull=None)
     if code == 0:
         problems.append(
-            "the finding step passes when gh can't read the pull request the subject names, so "
-            "a lagging answer would skip the check"
+            "the finding step passes when gh fails to read the pull request the subject names "
+            "for a reason other than its absence, such as HTTP 500, so an error would skip the "
+            "check"
         )
 
 
