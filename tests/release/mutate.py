@@ -93,6 +93,30 @@ def rewriting_wait(steps):
     steps.insert(first + 1, {"name": "Wait a moment", "run": f"sed -i 1d dist/{checksums(steps)}"})
 
 
+def publish_script(change):
+    """A change that rewrites the Publish the release step's script with `change`."""
+
+    def apply(steps):
+        step = next(step for step in steps if step.get("name") == "Publish the release")
+        step["run"] = change(step["run"])
+
+    return apply
+
+
+def publish_key(key, value):
+    """A change that sets `key` on the Publish the release step."""
+
+    def apply(steps):
+        next(step for step in steps if step.get("name") == "Publish the release")[key] = value
+
+    return apply
+
+
+def last_attest_tolerates_failure(steps):
+    """Lets the last attest attempt fail without failing the job."""
+    attests(steps)[-1]["continue-on-error"] = True
+
+
 def edit_text(path, old, new):
     """Replaces `old` with `new` in the file at `path`, which must hold it."""
     with open(path, encoding="utf-8") as file:
@@ -117,6 +141,27 @@ MUTATIONS = {
     ),
     "E: delete files before the checksums": lambda: edit_steps(delete_before_checksums),
     "G: a step named Wait that rewrites the checksums": lambda: edit_steps(rewriting_wait),
+    "publish: copy a file to a versionless name": lambda: edit_steps(
+        publish_script(lambda run: 'cp dist/demo-binary-0.1.0-linux.tar.gz dist/demo-binary-linux.tar.gz\n' + run)
+    ),
+    "publish: download another file into dist": lambda: edit_steps(
+        publish_script(lambda run: "curl -fsSL -o dist/extra.zip https://example.com/extra.zip\n" + run)
+    ),
+    "publish: rename a file with python": lambda: edit_steps(
+        publish_script(lambda run: "python3 -c 'import os; os.rename(\"dist/a\", \"dist/b\")'\n" + run)
+    ),
+    "publish: give gh release create another file": lambda: edit_steps(
+        publish_script(lambda run: run.replace('dist/* --repo "$GITHUB_REPOSITORY" --verify-tag', 'dist/* "$RUNNER_TEMP/notes.md" --repo "$GITHUB_REPOSITORY" --verify-tag'))
+    ),
+    "publish: upload another file to a resumed release": lambda: edit_steps(
+        publish_script(lambda run: run.replace("--clobber\n", '--clobber\n  gh release upload "$TAG" "$RUNNER_TEMP/sbom.json" --repo "$GITHUB_REPOSITORY"\n'))
+    ),
+    "publish: upload a file with a label": lambda: edit_steps(
+        publish_script(lambda run: run.replace('create "$TAG" dist/*', 'create "$TAG" "dist/*#Installer"'))
+    ),
+    "publish: run only on some condition": lambda: edit_steps(publish_key("if", "github.ref == 'refs/heads/release'")),
+    "publish: pass the job when publishing fails": lambda: edit_steps(publish_key("continue-on-error", True)),
+    "attest: pass the job when the last attempt fails": lambda: edit_steps(last_attest_tolerates_failure),
     "tag the workspace {{ package }}-v{{ version }}": lambda: edit_text(
         release_plz, 'git_tag_name = "v{{ version }}"', 'git_tag_name = "{{ package }}-v{{ version }}"'
     ),

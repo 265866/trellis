@@ -420,9 +420,12 @@ An update leaves them alone.
   the installed program by it. Give every Windows target the same one, which the answer's check
   requires: the x64 installer also runs on ARM64 Windows, and two AppIds would give one user two
   installs and two uninstall entries. `copier update` refuses an answer, passed or typed at its
-  prompt, whose `app_id` differs from the one `.copier-answers.yml` holds, unless the update also
-  passes `project_name`; it can't catch an edit to that file, or an installer removed and later
-  added back with another AppId. `file` names one of the target's `files`, ending in `.exe`, and
+  prompt, whose `app_id` differs from the one `.copier-answers.yml` holds for that target. It
+  doesn't compare when the update also passes `project_name`, as `--data-file .copier-answers.yml`
+  does, and it can't catch an edit to that file, an installer moved to another target with a new
+  AppId in one update, or one removed and later added back with another AppId. A first `copier copy`
+  that asks for the project's name and gets an installer answer typed at the prompt may print a
+  harmless `MissingFileWarning`. `file` names one of the target's `files`, ending in `.exe`, and
   `name`, optional, is the name the installer shows, the answer's `name` by default:
 
   ```sh

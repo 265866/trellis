@@ -12,9 +12,11 @@ statement names every release file by its name and SHA-256. This checks both in 
   files into `dist`, then at once writes the checksums of every file there, then only attests that
   checksums file, as each attempt's only subject, with plain `sleep`s between the attempts, then at
   once publishes the bundle of the attempt that worked as `dist/attestation.json` beside the files,
-  as its last step. No other step can touch `dist` between the download and the upload. It then runs
-  the job's own checksums step on stand-ins for the <file name>s and checks each line names one
-  file with a SHA-256, every file once.
+  as its last step, with exactly the script trellis writes apart from the release's title, so it
+  uploads `dist/*` and nothing else. No step between the download and the upload adds to `dist`,
+  and none of the attest or publish steps gets a condition or `continue-on-error` the workflow
+  doesn't give it. It then runs the job's own checksums step on stand-ins for the <file name>s and
+  checks each line names one file with a SHA-256, every file once.
 
 It prints each break and exits with 1 when there is one.
 """
@@ -68,6 +70,26 @@ if "--match 'v[0-9]*'" not in scripts and any("release-plz" in str(step.get("use
     errors.append("the release job must find the last release by a v[0-9]* tag")
 
 steps = jobs["publish"]["steps"]
+PUBLISH_SCRIPT = """cp "$BUNDLE" dist/attestation.json
+if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+gh release upload "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --clobber
+gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest
+else
+gh release create "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --verify-tag \\
+--title "<title>" --notes-file "$RUNNER_TEMP/notes.md" --latest
+fi"""
+ATTEMPT_CONDITIONS = [
+    (None, True),
+    ("steps.attest.outcome == 'failure'", True),
+    ("steps.attest-again.outcome == 'failure'", None),
+]
+
+
+def script_shape(script):
+    """`script` without comments, blank lines or indentation, with the release's title elided."""
+    lines = [line.strip() for line in script.splitlines()]
+    text = "\n".join(line for line in lines if line and not line.startswith("#"))
+    return re.sub(r'--title "[^"$]*\$\{TAG#v\}"', '--title "<title>"', text)
 downloads = [step for step in steps if uses(step, "actions/download-artifact")]
 checksums_steps = named("Write the checksums")
 attests = [step for step in steps if uses(step, "actions/attest-build-provenance")]
@@ -91,6 +113,12 @@ if len(attests) != 3:
 for step in attests:
     if checksums and step.get("with") != {"subject-checksums": f"dist/{checksums}"}:
         errors.append(f"{step.get('name')} must take dist/{checksums} as its only input, so its one statement names every file: {step.get('with')}")
+for step, (condition, tolerated) in zip(attests, ATTEMPT_CONDITIONS):
+    if step.get("if") != condition or step.get("continue-on-error") != tolerated:
+        errors.append(f"{step.get('name')} must run if {condition}, continue on error {tolerated}: if {step.get('if')}, continue on error {step.get('continue-on-error')}")
+for step in downloads + checksums_steps + publishes:
+    if "if" in step or "continue-on-error" in step:
+        errors.append(f"{step.get('name', step.get('uses'))} must always run, and fail the job when it fails")
 if checksums_steps and attests:
     first, last = steps.index(checksums_steps[0]), steps.index(attests[-1])
     if steps.index(attests[0]) != first + 1:
@@ -115,8 +143,10 @@ else:
         errors.append("Publish the release must copy one bundle, $BUNDLE, to dist/attestation.json")
     if not ids or any(f"steps.{name}.outputs.bundle-path" not in bundle for name in ids):
         errors.append(f"BUNDLE must be the bundle-path of the attest attempt that worked: {bundle}")
-    if script.count("dist/*") != 2 or re.search(r"\b(mv|rm|sed|tee|truncate|ln)\b|>", script.replace("> /dev/null 2>&1", "")):
-        errors.append("Publish the release must upload dist/* as it is, every file with the attestation, both when it creates the release and when it resumes one")
+    if script_shape(script) != PUBLISH_SCRIPT:
+        errors.append("Publish the release must run trellis's script, apart from the title, which uploads dist/* as it is, every file with the attestation, and nothing else")
+    if set(step.get("env", {})) != {"GH_TOKEN", "TAG", "BUNDLE"} or set(step) != {"name", "env", "run"}:
+        errors.append(f"Publish the release must take only GH_TOKEN, TAG and BUNDLE, and nothing but its name, env and run: {sorted(step)}, env {sorted(step.get('env', {}))}")
 if checksums:
     with tempfile.TemporaryDirectory() as dist:
         for name in files:

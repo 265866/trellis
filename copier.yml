@@ -360,9 +360,11 @@ release:
   # installed program, so an answer, passed or typed, can't change the one the answers file holds,
   # and every target shares it. Copier also renders into empty directories during an update, with
   # every answer passed, `project_name` among them, where reading the missing answers file would
-  # warn, so a run that passes `project_name` doesn't compare: a new project, which has no answers
-  # file, passes it. Copier runs this even when it doesn't ask, so a `--data` answer can't reach
-  # another kind.
+  # warn, so a run that passes `project_name` doesn't compare. A new project made with `--data`
+  # passes it too, but one whose owner types `project_name` and an installer answer at the prompts
+  # reads the missing file and prints a harmless MissingFileWarning; Copier doesn't tell a check
+  # which operation runs. Copier runs this even when it doesn't ask, so a `--data` answer can't
+  # reach another kind.
   validator: >-
     {%- set ns = namespace(error='', names=[]) -%}
     {%- if release is not mapping -%}
