@@ -64,10 +64,10 @@ has the versioning rule.
   part is there, never its wording. `just policy` fails on a missing `interfaces`, a
   `readme_sections` without `Quick start`, `Documentation` and `License` in that order (no
   `License` for a library without a license), a `## License` section that doesn't link each license
-  file with a relative link, a local image that doesn't exist, a PNG under `docs/` with a chunk
-  other than the ones that draw the image, such as `tEXt`, `eXIf` or `tIME`, or with data after its
-  `IEND` chunk, where a cropping tool can leave the uncropped image, a file there named `.png` that
-  isn't a PNG, an image above the README's first `##` that links a page in `docs/` without alt
+  file with a relative link, a local image that doesn't exist, a PNG under `docs/`, or one the
+  README or a page shows, with a chunk other than the ones that draw the image, such as `tEXt`,
+  `eXIf` or `tIME`, or with data after its `IEND` chunk, where a cropping tool can leave the
+  uncropped image, a file named `.png` that isn't a PNG, an image above the README's first `##` that links a page in `docs/` without alt
   text, and a gallery, a page titled `# Screenshots` or with a `## Screenshots` section, that the
   README's index doesn't link. A Git LFS pointer named `.png` only gets a notice. The prompts, the
   opening paragraph and a UI's picture are notices there, and fail only

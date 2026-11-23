@@ -36,9 +36,9 @@ const PROMPT: &str = "To write:";
 /// The PNG chunks a screenshot may carry: the ones that draw the image, its colours and its
 /// animation. Any other, such as `tEXt`, `eXIf`, `tIME`, `caBX` or a private chunk, can carry
 /// metadata such as the software, the author, the time or a place.
-const IMAGE_CHUNKS: [&str; 20] = [
+const IMAGE_CHUNKS: [&str; 19] = [
     "IHDR", "PLTE", "IDAT", "IEND", "tRNS", "cHRM", "gAMA", "iCCP", "sBIT", "sRGB", "cICP", "mDCV",
-    "cLLI", "bKGD", "hIST", "pHYs", "sPLT", "acTL", "fcTL", "fdAT",
+    "cLLI", "bKGD", "hIST", "pHYs", "acTL", "fcTL", "fdAT",
 ];
 
 /// What a Git LFS pointer file starts with, which a checkout without Git LFS holds in place of
@@ -73,15 +73,16 @@ const RELEASE: &str = "`just policy` only notes this, but a release fails on it;
 ///   `LICENSE-APACHE`.
 /// - A local image that the readme or a page shows, as a Markdown image or an HTML `<img src>`,
 ///   doesn't exist. A path is relative to the file that shows it; URLs aren't checked.
-/// - A PNG under `docs/` carries a chunk other than the ones that draw the image, its colours and
-///   its animation, as `IMAGE_CHUNKS` lists them, since another, such as `tEXt`, `eXIf`, `tIME`
-///   or a private chunk, can hold private values; or it holds data after its `IEND` chunk, where a
-///   cropping tool can leave the uncropped image (CVE-2023-21036); or a file there named `.png`
-///   isn't a whole PNG. A Git LFS pointer named `.png` gets a notice that it can't be checked,
-///   which no check fails on, since CI's checkout doesn't fetch Git LFS files.
+/// - A PNG under `docs/`, or one that the readme or a page shows wherever it is, carries a chunk
+///   other than the ones that draw the image, its colours and its animation, as `IMAGE_CHUNKS`
+///   lists them, since another, such as `tEXt`, `eXIf`, `tIME`, `sPLT` or a private chunk, can
+///   hold private values; or it holds data after its `IEND` chunk, where a cropping tool can leave
+///   the uncropped image (CVE-2023-21036); or a file named `.png` isn't a whole PNG. A Git LFS
+///   pointer named `.png` gets a notice that it can't be checked, which no check fails on, since
+///   CI's checkout doesn't fetch Git LFS files.
 /// - An image before the readme's first `##` that links a page under `docs/`, a hero candidate,
-///   has no alt text. Other images there, such as a decorative logo with `alt=""` or a badge, may
-///   leave it empty.
+///   has no alt text. Other images there, such as a decorative logo with `alt=""` or a badge that
+///   links outside `docs/`, may leave it empty.
 /// - A gallery page, a page under `docs/` titled `# Screenshots` or with a `## Screenshots`
 ///   section, isn't linked from the readme's `## Documentation` section, with or without an
 ///   anchor.
@@ -148,14 +149,6 @@ pub fn check(workspace: &Workspace) -> Result<Vec<Violation>, PolicyError> {
         };
         violations.extend(sections_problem(sections, license_section));
     }
-    let pngs = files
-        .iter()
-        .filter(|file| docs_index::is_under_docs(file) && is_png(file));
-    for file in pngs {
-        let path = root.join(file);
-        let bytes = fs::read(&path).map_err(|source| PolicyError::Read { path, source })?;
-        violations.extend(png_problem(file, &bytes));
-    }
     let readme_text = docs_index::read_readme(root)?;
     let mut page_texts = Vec::new();
     let pages = files.iter().filter(|file| docs_index::is_page(file));
@@ -177,9 +170,20 @@ pub fn check(workspace: &Workspace) -> Result<Vec<Violation>, PolicyError> {
         .iter()
         .map(|readme| (README, readme))
         .chain(pages.iter().map(|(page, markdown)| (*page, markdown)));
+    let mut pngs: BTreeSet<String> = files
+        .iter()
+        .filter(|file| docs_index::is_under_docs(file) && is_png(file))
+        .cloned()
+        .collect();
     for (file, markdown) in documents {
         violations.extend(missing_images(file, markdown, &present));
         violations.extend(prompts(file, markdown));
+        pngs.extend(shown_pngs(file, markdown, &present));
+    }
+    for file in &pngs {
+        let path = root.join(file);
+        let bytes = fs::read(&path).map_err(|source| PolicyError::Read { path, source })?;
+        violations.extend(png_problem(file, &bytes));
     }
     if let Some(readme) = &readme {
         let readme = Readme {
@@ -304,9 +308,17 @@ fn png_problem(file: &str, bytes: &[u8]) -> Option<Violation> {
         else {
             return not_png("a chunk runs past the end of the file");
         };
-        let name = String::from_utf8_lossy(kind).into_owned();
-        if !IMAGE_CHUNKS.contains(&name.as_str()) && !found.contains(&name) {
-            found.push(name);
+        let Some(name) = str::from_utf8(kind)
+            .ok()
+            .filter(|name| name.bytes().all(|byte| byte.is_ascii_alphabetic()))
+        else {
+            return not_png(&format!(
+                "a chunk's type, `{}`, isn't four ASCII letters",
+                kind.escape_ascii()
+            ));
+        };
+        if !IMAGE_CHUNKS.contains(&name) && !found.iter().any(|other| other == name) {
+            found.push(name.to_owned());
         }
         if kind == PNG_END {
             break rest.len();
@@ -314,27 +326,34 @@ fn png_problem(file: &str, bytes: &[u8]) -> Option<Violation> {
         chunks = rest;
     };
     let mut problems = Vec::new();
-    if !found.is_empty() {
-        let noun = if found.len() == 1 { "chunk" } else { "chunks" };
+    if let [one] = found.as_slice() {
         problems.push(format!(
-            "It carries the {} {noun}, which aren't image data and can carry metadata such as \
+            "It carries the `{one}` chunk, which isn't image data and can carry metadata such as \
+             the software, the author, the time or a place."
+        ));
+    } else if !found.is_empty() {
+        problems.push(format!(
+            "It carries the {} chunks, which aren't image data and can carry metadata such as \
              the software, the author, the time or a place.",
             code_list(&found)
         ));
     }
     if after_end > 0 {
+        let bytes = if after_end == 1 { "byte" } else { "bytes" };
         problems.push(format!(
-            "It holds {after_end} bytes after its `IEND` chunk, where a cropping tool can leave \
+            "It holds {after_end} {bytes} after its `IEND` chunk, where a cropping tool can leave \
              the image before it was cropped (CVE-2023-21036, \"aCropalypse\")."
         ));
     }
-    if problems.is_empty() {
-        return None;
-    }
+    let strip = match (found.len(), after_end) {
+        (0, 0) => return None,
+        (1, 0) | (0, _) => "Strip it",
+        _ => "Strip them",
+    };
     Some(Violation::new(
         file.to_owned(),
         format!(
-            "{} Strip it, such as with `oxipng --strip safe {file}`, which keeps only the image.",
+            "{} {strip}, such as with `oxipng --strip safe {file}`, which keeps only the image.",
             problems.join(" ")
         ),
     ))
@@ -490,6 +509,23 @@ fn missing_images(file: &str, markdown: &Markdown<'_>, present: &BTreeSet<&str>)
         }
     }
     violations
+}
+
+/// The local PNG files that `file`, parsed as `markdown`, shows and that are among the
+/// repository's files, `present`, relative to the root.
+fn shown_pngs(file: &str, markdown: &Markdown<'_>, present: &BTreeSet<&str>) -> Vec<String> {
+    let mut pngs = Vec::new();
+    for block in markdown.blocks() {
+        for image in images(block) {
+            if let Target::File { path, .. } = target(directory(file), &image.source)
+                && is_png(&path)
+                && present.contains(path.as_str())
+            {
+                pngs.push(path);
+            }
+        }
+    }
+    pngs
 }
 
 /// The violation of `file`, parsed as `markdown`, if a prompt of the readme outline remains in
@@ -696,7 +732,7 @@ impl Readme<'_, '_> {
 
     /// The violations for the images before the first `##` that link a page under `docs/`, the
     /// hero candidates, and have no alt text. Other images, such as a decorative logo with
-    /// `alt=""` or a badge, may leave it empty.
+    /// `alt=""` or a badge that links outside `docs/`, may leave it empty.
     fn alt_text_problems(&self) -> Vec<Violation> {
         let mut violations = Vec::new();
         let candidates = links(&self.head)
@@ -824,14 +860,13 @@ impl Readme<'_, '_> {
 }
 
 /// Whether `page` is a gallery: its `#` title, or one of its top-level `##` headings, is
-/// `Screenshots` in any case, after any emoji or other symbols before it, such as
-/// `## 📸 Screenshots`.
+/// `Screenshots` in any case, with any emoji or other symbols before or after it, such as
+/// `## 📸 Screenshots` or `## Screenshots 📸`.
 fn is_gallery(page: &Markdown<'_>) -> bool {
     page.headings().iter().any(|heading| {
         let text = heading
             .text
-            .trim_start_matches(|character: char| !character.is_alphanumeric())
-            .trim_end();
+            .trim_matches(|character: char| !character.is_alphanumeric());
         matches!(heading.level, 1 | 2)
             && heading.top_level
             && text.eq_ignore_ascii_case(SCREENSHOTS)
@@ -911,7 +946,7 @@ mod tests {
     #[test]
     fn each_other_chunk_is_named_once() {
         for name in [
-            "tEXt", "iTXt", "zTXt", "eXIf", "tIME", "caBX", "zxIf", "prVt",
+            "tEXt", "iTXt", "zTXt", "eXIf", "tIME", "sPLT", "caBX", "zxIf", "prVt",
         ] {
             let other: &[u8; 4] = name.as_bytes().try_into().unwrap();
             let bytes = png(&[
@@ -922,7 +957,9 @@ mod tests {
             ]);
             let problem = png_message(&bytes).unwrap();
             assert!(
-                problem.contains(&format!("carries the `{name}` chunk,"))
+                problem.contains(&format!(
+                    "carries the `{name}` chunk, which isn't image data"
+                )) && problem.contains("Strip it,")
                     && problem.contains("oxipng --strip safe docs/a.png"),
                 "{name} should be named once, with how to strip it: {problem}"
             );
@@ -935,7 +972,7 @@ mod tests {
         assert!(
             png_message(&bytes)
                 .unwrap()
-                .contains("carries the `tIME` and `tEXt` chunks"),
+                .contains("carries the `tIME` and `tEXt` chunks, which aren't image data"),
             "two chunks are named in the order the file holds them"
         );
     }
@@ -963,14 +1000,51 @@ mod tests {
     #[test]
     fn data_after_the_end_fails() {
         let whole = png(&[chunk(b"IHDR", &[0; 13]), chunk(b"IEND", b"")]);
-        let after_end = [whole, b"the uncropped image".to_vec()].concat();
+        let after_end = [whole.clone(), b"the uncropped image".to_vec()].concat();
         let problem = png_message(&after_end).unwrap();
         assert!(
             problem.contains("It holds 19 bytes after its `IEND` chunk")
                 && problem.contains("CVE-2023-21036")
-                && problem.contains("oxipng --strip safe docs/a.png"),
+                && problem.contains("Strip it, such as with `oxipng --strip safe docs/a.png`"),
             "bytes after IEND can be the image before it was cropped: {problem}"
         );
+        let one_byte = [whole, b"x".to_vec()].concat();
+        assert!(
+            png_message(&one_byte)
+                .unwrap()
+                .contains("It holds 1 byte after its `IEND` chunk"),
+            "one byte is a byte"
+        );
+        let both = [
+            png(&[
+                chunk(b"IHDR", &[0; 13]),
+                chunk(b"tIME", b"t"),
+                chunk(b"IEND", b""),
+            ]),
+            b"x".to_vec(),
+        ]
+        .concat();
+        assert!(
+            png_message(&both).unwrap().contains("Strip them,"),
+            "a chunk and data after the end are two things to strip"
+        );
+    }
+
+    #[test]
+    fn a_chunk_type_that_isnt_four_letters_isnt_a_whole_png() {
+        for kind in [b"tE\xfft", b"IH1R", b"    "] {
+            let bytes = png(&[
+                chunk(b"IHDR", &[0; 13]),
+                chunk(kind, b""),
+                chunk(b"IEND", b""),
+            ]);
+            let problem = png_message(&bytes).unwrap();
+            assert!(
+                problem.contains("isn't a whole PNG file: a chunk's type")
+                    && problem.contains("isn't four ASCII letters"),
+                "{kind:?} isn't a chunk type: {problem}"
+            );
+        }
     }
 
     #[test]

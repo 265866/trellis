@@ -777,8 +777,9 @@ hold need more than the update, and two can't change this way at all:
 {%- endif %}
   A crate's license line is a rule setting, so the pull request stays a rule change.
 {%- endif %}
-  It leaves `README.md` alone, so link the new license files from its `## License` section, with
-  relative links, in the update's pull request; `just policy` fails until it does.
+  It leaves `README.md` alone, so make its `## License` section match in the update's pull
+  request. Under a license, `just policy` fails until the section links each of its files with a
+  relative link.
 {%- if kind != 'library' %}
 {%- if web_ui %}
 - **Web UI.** Turning `web_ui` off leaves `crates/{{ crate_name }}/web` in place, and

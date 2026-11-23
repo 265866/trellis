@@ -421,6 +421,45 @@ fn a_gallery_heading_with_an_emoji_counts() {
     );
 }
 
+/// A symbol after the heading counts as one before it does, as `## Screenshots 📸`.
+#[test]
+fn a_gallery_heading_with_an_emoji_after_it_counts() {
+    let pilot = Pilot::teamdiff();
+    pilot.replace("docs/usage.md", "## Screenshots\n", "## Screenshots 📸\n");
+    pilot.replace(
+        "README.md",
+        "](docs/usage.md#screenshots)\n\nEvery",
+        "](docs/usage.md)\n\nEvery",
+    );
+    assert!(
+        pilot.readme().is_empty(),
+        "`## Screenshots 📸` makes the page a gallery: {:#?}",
+        pilot.readme()
+    );
+}
+
+/// A PNG the readme shows outside `docs/`, such as `assets/hero.png`, is checked as one under
+/// `docs/` is, so it can't carry metadata or the uncropped image either.
+#[test]
+fn a_png_the_readme_shows_outside_docs_is_checked() {
+    let pilot = Pilot::spareline();
+    let real = fs::read(pilot.path().join("docs/screenshots/sign-in.png")).unwrap();
+    pilot.write(
+        "assets/hero.png",
+        [real.as_slice(), b"the uncropped image"].concat(),
+    );
+    pilot.replace(
+        "README.md",
+        "(docs/screenshots/messages.png)",
+        "(assets/hero.png)",
+    );
+    pilot.assert_breaks(
+        "assets/hero.png",
+        Fails::Always,
+        &["It holds 19 bytes after its `IEND` chunk"],
+    );
+}
+
 #[test]
 fn a_hero_linking_a_page_that_doesnt_exist_fails_only_a_release() {
     let pilot = Pilot::spareline();

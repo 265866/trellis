@@ -452,13 +452,14 @@ These fail `just policy`:
   `LICENSE`, or `LICENSE-MIT` and `LICENSE-APACHE`.
 - Every local image the README or a page shows exists, as a Markdown image or an HTML
   `<img src>`, with its path relative to the file that shows it.
-- Every PNG under `docs/` carries only the chunks that draw the image, its colours and its
-  animation, and nothing after its `IEND` chunk, where a cropping tool can leave the uncropped
-  image. Any other chunk, such as `tEXt`, `eXIf`, `tIME` or a private one, fails, and so does a
-  file there named `.png` that isn't a PNG. `oxipng --strip safe <file>` strips them. A Git LFS
-  pointer gets a notice instead, since CI's checkout doesn't fetch Git LFS files.
+- Every PNG under `docs/`, and every PNG the README or a page shows wherever it is, carries only
+  the chunks that draw the image, its colours and its animation, and nothing after its `IEND`
+  chunk, where a cropping tool can leave the uncropped image. Any other chunk, such as `tEXt`,
+  `eXIf`, `tIME`, `sPLT` or a private one, fails, and so does a file named `.png` that isn't a
+  PNG. `oxipng --strip safe <file>` strips them. A Git LFS pointer gets a notice instead, since
+  CI's checkout doesn't fetch Git LFS files.
 - Every image before the README's first `##` that links a page in `docs/` has alt text. A
-  decorative image may have `alt=""`, and a badge an empty one.
+  decorative image may have `alt=""`, and so may a badge that links outside `docs/`.
 - Every gallery, a page titled `# Screenshots` or with a `## Screenshots` section, in any case and
   after any emoji, is linked from the README's `## Documentation` section.
 
