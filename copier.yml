@@ -149,6 +149,36 @@ web_ui:
   default: false
   when: "{{ kind != 'library' }}"
 
+# After `kind` and `web_ui`, which its default reads: on a copy, Copier renders a default when it
+# asks the question.
+interfaces:
+  type: str
+  help: >-
+    What a person who uses it sees, most important first. The first is the primary one: it shapes
+    the README outline's hero and quick start, and a project with web, desktop or terminal gets a
+    screenshots page. The others add their own prompts under the same parts.
+  multiselect: true
+  choices:
+    "web: pages in a browser": web
+    "desktop: a window": desktop
+    "terminal: a full-screen terminal app": terminal
+    "cli: commands that print and exit": cli
+    "service: no UI, it serves or produces": service
+    library: library
+  default: "{{ ['library'] if kind == 'library' else (['web'] if web_ui else (['service'] if kind == 'service' else ['cli'])) }}"
+  validator: >-
+    {%- if not interfaces -%}
+    Pick at least one.
+    {%- elif interfaces | unique | list | length != interfaces | length -%}
+    Name each one once.
+    {%- elif kind == 'library' and interfaces != ['library'] -%}
+    A library's only interface is `library`.
+    {%- elif kind != 'library' and 'library' in interfaces -%}
+    Only a library has the `library` interface.
+    {%- elif web_ui and 'web' not in interfaces -%}
+    A project with a web UI has the `web` interface.
+    {%- endif -%}
+
 build:
   type: yaml
   help: >-
