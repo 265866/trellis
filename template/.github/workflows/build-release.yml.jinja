@@ -249,8 +249,9 @@ jobs:
             # Git Bash would rewrite ISCC's `/` options as paths, so Windows paths go in as defines.
             MSYS_NO_PATHCONV=1 "$ISCC" /Qp "/DTarget=$TARGET" "/DAppVersion=$version" \
               "/DStaging=$(cygpath -w "$STAGING")" "/O$(cygpath -w "$DIST")" "$(cygpath -w release/installer.iss)"
-            # Signing: the installer ships unsigned. Signing it would go here, before the checks
-            # below and the attestation, with SignTool in release/installer.iss.
+            # Signing: the installer ships unsigned. Signing it would need a trellis change here,
+            # passing the sign tool to ISCC with /S, before the checks below and the attestation,
+            # with SignTool in release/installer-custom.iss.
           fi
 {%- endraw %}
 {%- endif %}

@@ -84,7 +84,8 @@ CloseApplications={#CloseApplications}
 RestartApplications=no
 SetupMutex={#SetupMutex}
 ; Signing: the release ships the installer unsigned. Signing it would set SignTool and
-; SignedUninstaller=yes here, with the signing step in .github/workflows/build-release.yml.
+; SignedUninstaller=yes in installer-custom.iss, since an update rewrites this file, and the
+; release build's ISCC call would need a trellis change to pass the sign tool with /S.
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
