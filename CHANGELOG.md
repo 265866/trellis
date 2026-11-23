@@ -6,6 +6,13 @@ part lists what a project's owner must do around the update: a rule that can fla
 a setting to change, or a step to do by hand. [CONTRIBUTING.md](CONTRIBUTING.md#release-trellis)
 has the versioning rule.
 
+## Unreleased
+
+### Fixed
+
+- A service's `docs/stability.md` calls its links to `docs/install.md` "Container image", the
+  page's title since v0.20.0, not "Install".
+
 ## v0.20.1
 
 ### Changed
