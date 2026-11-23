@@ -289,7 +289,39 @@ jobs:
           stem="$NAME-$version-$TARGET"
           mkdir -p "dist/$stem"
 {%- endraw %}
-          cp {{ {'MIT': 'LICENSE ', 'MIT OR Apache-2.0': 'LICENSE-MIT LICENSE-APACHE '}.get(license, '') }}README.md target/THIRD-PARTY-LICENSES.html{{ ' target/THIRD-PARTY-LICENSES-WEB.txt' if web_ui else '' }} "dist/$stem/"
+          cp {{ {'MIT': 'LICENSE ', 'MIT OR Apache-2.0': 'LICENSE-MIT LICENSE-APACHE '}.get(license, '') }}target/THIRD-PARTY-LICENSES.html{{ ' target/THIRD-PARTY-LICENSES-WEB.txt' if web_ui else '' }} "dist/$stem/"
+{%- raw %}
+          # The README's relative links and images lead nowhere in the archive, so its copy says
+          # where they work: under its title, or at the top when it doesn't open with a `# ` title.
+          # Taking out the line and the blank line beside it gives back the README, line endings
+          # and a leading byte order mark included. `just release-extras` runs these lines.
+          note="> This file's links and images are relative to $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/tree/v$version."
+          bom=$'\xef\xbb\xbf'
+          first=$(head -n 1 README.md)
+          second=$(sed -n 2p README.md)
+          eol=$'\n'
+          if [[ $first == *$'\r' ]]; then eol=$'\r\n'; fi
+          {
+            if [[ ${first#"$bom"} == '# '* ]]; then
+              printf '%s\n' "$first"
+              if (($(tail -n +2 README.md | wc -c) == 0)); then
+                printf '%s%s%s' "$eol" "$note" "$eol"
+              elif [ -z "${second%$'\r'}" ]; then
+                printf '%s\n%s%s%s' "$second" "$note" "$eol" "$eol"
+                tail -n +3 README.md
+              else
+                printf '%s%s%s' "$note" "$eol" "$eol"
+                tail -n +2 README.md
+              fi
+            elif [[ $first == "$bom"* ]]; then
+              printf '%s%s%s%s' "$bom" "$note" "$eol" "$eol"
+              tail -c +4 README.md
+            else
+              printf '%s%s%s' "$note" "$eol" "$eol"
+              cat README.md
+            fi
+          } > "dist/$stem/README.md"
+{%- endraw %}
 {%- if web_ui %}
           cp -R crates/{{ crate_name }}/web/dist "dist/$stem/web"
 {%- endif %}

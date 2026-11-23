@@ -1058,7 +1058,9 @@ template kind recipes="ci" publish="false" web="false" target="" installer="fals
     if [ "{{ recipes }}" = ci ] && [ "{{ kind }}" = binary ] && [ "$(uname -s)" = Linux ]; then
       # The release build's own steps, run for this machine's target, must archive the program, its
       # license files and notices, and a web UI's build and notices only when it has one.
+      cp README.md "$out/README.md"
       "$trellis/tests/release-build/run.sh" "$project" > "$out/dist.txt"
+      cmp --quiet README.md "$out/README.md" || { echo "error: the release build changed the repository's README.md" >&2; exit 1; }
       [ "$(wc -l < "$out/dist.txt")" -eq 1 ] || { echo "error: the release build left other than one archive:" >&2; cat "$out/dist.txt" >&2; exit 1; }
       tar --list --gzip --file "$(cat "$out/dist.txt")" | sed 's|^[^/]*/||' | sort > "$out/archive.txt"
       expected="demo-binary README.md THIRD-PARTY-LICENSES.html LICENSE"
@@ -1069,6 +1071,19 @@ template kind recipes="ci" publish="false" web="false" target="" installer="fals
       done
       if [ "{{ web }}" != true ] && grep --quiet '^web/' "$out/archive.txt"; then
         echo "error: the release archive of a binary without a web UI has web/" >&2; exit 1
+      fi
+      # The archive's README is the repository's, with a line under its title, which is its first
+      # line, and a blank line after that, saying the links work at the tag of the repository the
+      # answers name.
+      archive=$(cat "$out/dist.txt")
+      tar --extract --gzip --to-stdout --file "$archive" "$(basename "$archive" .tar.gz)/README.md" > "$out/archive-readme.md"
+      note="> This file's links and images are relative to https://github.com/265866/demo-binary/tree/v0.1.0."
+      if [ "$(sed -n 1p README.md)" != '# demo-binary' ] || [ -n "$(sed -n 2p README.md)" ] \
+        || [ "$(sed -n 3p "$out/archive-readme.md")" != "$note" ] || [ -n "$(sed -n 4p "$out/archive-readme.md")" ] \
+        || ! sed '3,4d' "$out/archive-readme.md" | cmp --quiet - README.md; then
+        echo "error: the release archive's README.md isn't the repository's with this line and a blank line under its title: $note" >&2
+        diff README.md "$out/archive-readme.md" | head -n 20 >&2
+        exit 1
       fi
       if [ "{{ web }}" = true ]; then
         mkdir "$out/archive"
@@ -1513,6 +1528,8 @@ release-extras:
     # A public binary's release tries attesting its archives three times and publishes the bundle of
     # the attempt that worked.
     generate "$out/attested"
+    # The Archive step's lines that write the archive's README, over READMEs of each shape.
+    "$trellis/tests/release-build/readme-note.sh" "$out/attested"
     publish_job=$(awk '/^  publish:$/ { inside = 1; next } /^  [a-z-]+:$/ { inside = 0 } inside' "$out/attested/.github/workflows/release.yml")
     [ "$(grep --count 'uses: actions/attest-build-provenance' <<< "$publish_job")" -eq 3 ] \
       || fail "the release doesn't try attesting the archives three times"

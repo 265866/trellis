@@ -10,6 +10,13 @@ has the versioning rule.
 
 ### Fixed
 
+- A binary's release archive says where its README's links work. Its `README.md` keeps the
+  repository's relative links and images, which lead nowhere once unpacked, so the archive's copy
+  has one line, a link to the repository at the release's tag, where they work: under its title,
+  or at the top when the README doesn't open with a `# ` title. It changes only those first lines
+  of `README.md` in the archive of a binary without a `release` answer's `files`; nothing else in
+  a release changes, and the repository's `README.md` doesn't. Every such binary's update changes
+  `.github/workflows/build-release.yml`, which writes the line.
 - A service's `docs/stability.md` calls its links to `docs/install.md` "Container image", the
   page's title since v0.20.0, not "Install".
 
