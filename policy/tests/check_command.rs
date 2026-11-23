@@ -3980,7 +3980,7 @@ fn a_contributing_index_hidden_in_html_fails() {
     );
     project
         .check()
-        .assert_reports(1, "[docs_layout] CONTRIBUTING.md: ");
+        .assert_reports(1, "[docs_layout] CONTRIBUTING.md: Line 5 opens `<details>`");
 }
 
 #[test]

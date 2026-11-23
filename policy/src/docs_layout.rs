@@ -57,13 +57,14 @@ const UNCLOSED_HTML: &str = "opens HTML that doesn't close: a comment, a tag or 
 ///   held to the HTML and byte order mark checks below, like the readme;
 /// - every page, a `.md` file at any depth under `docs/`, starts with a `#` line with text in
 ///   it, after any comments, then a blank line and a paragraph with words in it outside images;
-/// - neither the readme nor a page has an HTML block with a comment, a tag or a quoted
+/// - neither the readme, a page nor a `CONTRIBUTING.md` with an index has an HTML block with a comment, a tag or a quoted
 ///   attribute value that doesn't close in it, or an HTML element whose tags don't balance
 ///   between one top-level heading of level 1 or 2 and the next, which can hide what follows or
 ///   render it inside the element;
 /// - no file under `docs/` has another Markdown extension, such as `.markdown`, which the checks
 ///   would skip;
-/// - neither the readme nor a page starts with a byte order mark. The other checks read past
+/// - neither the readme, a page nor a `CONTRIBUTING.md` with an index starts with a byte order
+///   mark. The other checks read past
 ///   it, so a file gets one message for it.
 ///
 /// A missing setting is a violation rather than a default, since no default could say which

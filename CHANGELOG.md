@@ -8,6 +8,14 @@ has the versioning rule.
 
 ## Unreleased
 
+### Action required in projects
+
+- If your `CONTRIBUTING.md` has a `## Documentation` section of your own, `just policy` now holds
+  it to the index form: one-line entries such as `- [Title](path): what the reader does with it.`,
+  and nothing else. With that section, the whole file is also held to the README's checks for HTML
+  left open and for a byte order mark. A generated `CONTRIBUTING.md` has no such section. Rewrite
+  yours as entries, or rename it.
+
 ### Changed
 
 - A page directly under `docs/` may be indexed from a `## Documentation` section in
@@ -15,13 +23,6 @@ has the versioning rule.
   need, such as the code style or the maintaining guide, needn't sit in the index a stranger
   reads. `just policy` holds that section to the same entry form. Every page is still indexed
   from one of the two.
-
-### Action required in projects
-
-- If your `CONTRIBUTING.md` has a `## Documentation` section of your own, `just policy` now holds
-  it to the index form: one-line entries such as `- [Title](path): what the reader does with it.`,
-  and nothing else, with no HTML left open around it. A generated `CONTRIBUTING.md` has no such
-  section. Rewrite yours as entries, or rename it.
 
 ### Fixed
 
