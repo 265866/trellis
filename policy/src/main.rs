@@ -190,9 +190,9 @@ fn rule_changes(base: &str, head: &Head, out: &mut impl Write) -> io::Result<Exi
     if !changed.mixes_rules_and_code() {
         writeln!(
             out,
-            "Rule changes stand alone: {} rule files and {} code files changed.",
-            changed.rules().len(),
-            changed.code().len()
+            "Rule changes stand alone: {} and {} changed.",
+            count(changed.rules().len(), "rule file"),
+            count(changed.code().len(), "code file")
         )?;
         return Ok(ExitCode::SUCCESS);
     }
@@ -212,6 +212,15 @@ fn rule_changes(base: &str, head: &Head, out: &mut impl Write) -> io::Result<Exi
         writeln!(out, "  {path}")?;
     }
     Ok(ExitCode::FAILURE)
+}
+
+/// `n` and `noun`, plural unless `n` is 1, such as "1 rule file" or "2 rule files".
+fn count(n: usize, noun: &str) -> String {
+    if n == 1 {
+        format!("{n} {noun}")
+    } else {
+        format!("{n} {noun}s")
+    }
 }
 
 /// Writes the license notices of the npm packages installed under `node_modules` to `output`, or,
