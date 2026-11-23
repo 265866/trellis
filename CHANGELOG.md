@@ -6,7 +6,7 @@ part lists what a project's owner must do around the update: a rule that can fla
 a setting to change, or a step to do by hand. [CONTRIBUTING.md](CONTRIBUTING.md#release-trellis)
 has the versioning rule.
 
-## Unreleased
+## v0.19.3
 
 ### Fixed
 
