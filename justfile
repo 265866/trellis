@@ -487,8 +487,9 @@ lints-comments:
 lints-test:
     cargo test --locked
 
-# Runs `template` for each kind, then `shapes`, `dependencies`, `update` and the extras checks.
-templates: (template "binary") (template "binary" "ci" "false" "false" "" "false" "desktop") (template "binary" "ci" "false" "false" "" "false" "terminal") (template "binary" "ci" "false" "true" "" "false" "web,cli") (template "service") (template "service" "ci" "false" "true") (template "library") (template "library" "ci" "true") shapes outlines dependencies update build-extras image-extras release-extras checker-install
+# Runs `template` for each kind, then `shapes`, `outlines`, `release-gate`, `dependencies`, `update`
+# and the extras checks.
+templates: (template "binary") (template "binary" "ci" "false" "false" "" "false" "desktop") (template "binary" "ci" "false" "false" "" "false" "terminal") (template "binary" "ci" "false" "true" "" "false" "web,cli") (template "service") (template "service" "ci" "false" "true") (template "library") (template "library" "ci" "true") shapes outlines release-gate dependencies update build-extras image-extras release-extras checker-install
 
 # Checks that every exclusion in copier.yml renders with only the answers an older trellis asked,
 # as Copier renders them when a project updates from it. Then copies the working tree into a
@@ -801,8 +802,9 @@ update:
 # the lints and checker from this checkout, and runs `recipes` in it, `ci` by default. `true` as
 # `publish` makes a library a published one, and `true` as `web` gives a binary or service a web UI.
 # `interfaces`, such as `desktop` or `web,cli`, answers `interface` with the first and
-# `other_interfaces` with the rest, in place of their defaults. After `ci`, a
-# binary on Linux runs its release build's steps for this machine's target, whose archive must hold
+# `other_interfaces` with the rest, in place of their defaults. After `ci`,
+# `just policy-release` must fail on the README outline's prompts. After `ci`, a binary on Linux
+# runs its release build's steps for this machine's target, whose archive must hold
 # the program, its license files and notices, and a web UI's build and notices only when it has
 # one. After `ci`, a service also builds and runs its image when Docker is
 # installed, under umask 077 with its license files 0600, and the image's user must be able to read
@@ -877,6 +879,14 @@ template kind recipes="ci" publish="false" web="false" target="" installer="fals
       "$trellis/tests/installer/run.sh" "$project" "{{ target }}"
     fi
     if [ "{{ recipes }}" = ci ]; then
+      # `ci` passed with the README an outline, but a release must fail on its prompts.
+      if just policy-release > "$out/release.txt" 2>&1; then
+        cat "$out/release.txt" >&2
+        echo "error: just policy-release passed a README outline that still holds its prompts" >&2
+        exit 1
+      fi
+      grep --quiet --extended-regexp '^(error: |::error::)\[readme\] README.md: Lines [0-9, ]* hold prompts of the outline' "$out/release.txt" \
+        || { cat "$out/release.txt" >&2; echo "error: just policy-release failed, but not on the README's prompts" >&2; exit 1; }
       # `ci` ran as a new project's first run does, with no remote branch to compare with. With
       # one, the checks must have left no change behind.
       git update-ref refs/remotes/origin/main HEAD
@@ -1999,3 +2009,40 @@ outlines:
         check --manifest-path "$project/Cargo.toml"
     done
     echo "Each interface's README outline holds its prompts and no image, and passes the docs checks."
+
+# Generates a binary, a service, a library and a published library, and checks with
+# `tests/release-gate/gate.py` that the release pull request's CI and the release workflow both run
+# `just policy-release`, the second before anything is tagged or published, so a release can't
+# publish while a README prompt is left. gate.py must fail on each change
+# `tests/release-gate/mutate.py` makes.
+#
+# Checks that the release routes run the release check of the docs.
+release-gate:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    trellis="{{ justfile_directory() }}"
+    out=$(mktemp -d)
+    trap 'rm -rf "$out"' EXIT
+    fail() { echo "error: release-gate: $1" >&2; exit 1; }
+    python() { uv run --quiet --no-project --with pyyaml==6.0.3 python -I "$@"; }
+    for answers in kind=binary kind=service kind=library "kind=library publish_crate=true license=MIT"; do
+      project="$out/demo"
+      rm -rf "$project"
+      data=()
+      for answer in $answers; do data+=(--data "$answer"); done
+      uv tool run copier@9.19.1 copy --quiet --defaults --vcs-ref HEAD --data project_name=demo \
+        --data "description=A demo that trellis generates." "${data[@]}" \
+        --data trellis_path="$trellis" "$trellis" "$project"
+      python "$trellis/tests/release-gate/gate.py" "$project" || fail "the release gate is open for $answers"
+      mutations=$(python "$trellis/tests/release-gate/mutate.py" --list "$project")
+      [ -n "$mutations" ] || fail "tests/release-gate/mutate.py lists no mutations for $answers"
+      while IFS= read -r mutation; do
+        rm -rf "$out/mutated"
+        cp -R "$project" "$out/mutated"
+        python "$trellis/tests/release-gate/mutate.py" "$out/mutated" "$mutation"
+        if python "$trellis/tests/release-gate/gate.py" "$out/mutated" 2> "$out/gate.txt"; then
+          fail "gate.py passed this mutation for $answers: $mutation"
+        fi
+        echo "gate.py fails as it should for $answers on: $mutation"
+      done <<< "$mutations"
+    done

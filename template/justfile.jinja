@@ -176,12 +176,19 @@ links:
 {%- raw %}
 
 # The structure rules: workspace lints, manifests, a published crate's license files, build
-# scripts, config files, crate dependencies, the release changelog, the docs index, and the docs
-# layout that `docs_files` and `readme_sections` in Cargo.toml set.
+# scripts, config files, crate dependencies, the release changelog, the docs index, the docs
+# layout that `docs_files` and `readme_sections` in Cargo.toml set, and the readme. What only a
+# release fails on, such as a readme prompt left to write, prints as a notice.
 #
 # Checks the structure rules.
 policy: install-policy
     {{ trellis_policy }} check
+
+# The release pull request and the release workflow run this before anything is published.
+#
+# Checks the structure rules as a release does, failing on the notices `just policy` prints too.
+policy-release: install-policy
+    {{ trellis_policy }} check --release
 
 # Runs clippy on every target with warnings as errors.
 lint:
