@@ -417,6 +417,17 @@ pins:
     # A runner image's ARM64 label is its x86-64 one with `-arm`, apart from Windows on ARM64's.
     # `latest` is a version like any other, so it conflicts with a numbered label.
     collect pinned_as runner "\b((ubuntu|macos|windows)-([0-9][0-9.]*|latest)(-arm)?)\b"
+    # Inno Setup's pin is its x64 installer's URL, which names the version in the release's tag and
+    # in the file name; tests/installer/run.sh's Inno Setup 6 has no `-x64`, so it isn't the pin.
+    collect pinned_as innosetup "/is-[0-9_]+/innosetup-$version-x64\.exe"
+    inno_urls=$(git_grep -h -o 'is-[0-9_]+/innosetup-[0-9.]+(-x64)?\.exe' -- "${scan[@]}") || [ $? -eq 1 ] || status=1
+    for url in $inno_urls; do
+      tag=$(sed -E 's|^is-([0-9_]+)/.*$|\1|' <<< "$url" | tr _ .)
+      if [ "$tag" != "$(sed -E 's|^.*/innosetup-([0-9.]+)(-x64)?\.exe$|\1|' <<< "$url")" ]; then
+        echo "error: the Inno Setup URL ending $url names two versions" >&2
+        status=1
+      fi
+    done
     versions=$(sed -E '/^$/d; s/^tool@//; s/@v/@/; s/^typos-cli@/typos@/; s/^taplo-cli@/taplo@/
       s/^runner@windows-([^ ]*)-arm /windows-arm-runner@\1 /; t
       s/^runner@(ubuntu|macos)-([^ ]*)-arm /\1-runner@\2 /; t
@@ -1356,7 +1367,14 @@ release-extras:
     {env: {target: "x"}}|use capitals
     {env: {DEMO_RELEASE: 1}}|needs a quoted one-line string
     {env: {1: "x", A: "y"}}|is not a variable the release build may set
-    {installer: true}|`installer` is not a key it takes
+    {installer: true}|`installer` maps a Windows target triple to its installer
+    {files: {x86_64-unknown-linux-musl: ["d-{version}.exe"]}, installer: {x86_64-unknown-linux-musl: {app_id: EBAC94F7-A24E-431F-B4F6-8E9D669E9E53, file: "d-{version}.exe"}}}|is not a Windows target
+    {files: {x86_64-pc-windows-msvc: ["d-{version}.exe"]}, installer: {x86_64-pc-windows-msvc: {app_id: "{EBAC94F7-A24E-431F-B4F6-8E9D669E9E53}", file: "d-{version}.exe"}}}|a new GUID without braces
+    {files: {x86_64-pc-windows-msvc: ["d-{version}.exe"]}, installer: {x86_64-pc-windows-msvc: {file: "d-{version}.exe"}}}|a new GUID without braces
+    {files: {x86_64-pc-windows-msvc: ["d-{version}.exe"]}, installer: {x86_64-pc-windows-msvc: {app_id: EBAC94F7-A24E-431F-B4F6-8E9D669E9E53, file: "e-{version}.exe"}}}|one of the names `files` lists for it
+    {files: {x86_64-pc-windows-msvc: ["d-{version}.zip"]}, installer: {x86_64-pc-windows-msvc: {app_id: EBAC94F7-A24E-431F-B4F6-8E9D669E9E53, file: "d-{version}.zip"}}}|ending in `.exe`
+    {files: {x86_64-pc-windows-msvc: ["d-{version}.exe"]}, installer: {x86_64-pc-windows-msvc: {app_id: EBAC94F7-A24E-431F-B4F6-8E9D669E9E53, file: "d-{version}.exe", icon: a.ico}}}|`icon` in `installer`'s `x86_64-pc-windows-msvc` is not a key it takes
+    {files: {x86_64-pc-windows-msvc: ["d-{version}.exe"]}, installer: {x86_64-pc-windows-msvc: {app_id: EBAC94F7-A24E-431F-B4F6-8E9D669E9E53, file: "d-{version}.exe", name: "A/B"}}}|has a `name` of up to 64 letters
     EOF
     if refusal=$(uv tool run copier@9.19.1 copy --quiet --defaults --vcs-ref HEAD --data project_name=demo-service \
       --data "description=A demo service." --data kind=service --data 'release={checksums: SUMS}' "$trellis" "$out/service" 2>&1); then
@@ -1378,7 +1396,11 @@ release-extras:
       || fail "a glibc release's docs/install.md doesn't list its files"
     # docs/maintaining.md's example release answer names files for exactly the project's targets,
     # so it works as written, and mentions Git Bash only when Windows is a platform.
-    example() { awk '/--data .release=\{checksums/,/\}\}.$/' "$1/docs/maintaining.md" | sed -e "s/^.*--data 'release=//" -e "s/'$//"; }
+    # Prints the $2th example release answer in $1's docs/maintaining.md, 1 by default.
+    example() {
+      awk -v want="${2:-1}" '/--data .release=\{checksums/ { n++ } n == want { print } n == want && /\}\}.$/ { exit }' \
+        "$1/docs/maintaining.md" | sed -e "s/^.*--data 'release=//" -e "s/'$//"
+    }
     for platforms in '[linux]' '[linux, macos, windows]'; do
       generate "$out/docs" --data "platforms=$platforms" --data 'architectures=[x86_64, aarch64]'
       answer=$(example "$out/docs")
@@ -1392,6 +1414,13 @@ release-extras:
         || fail "the docs' example release answer for $platforms names other targets than the project's: $answer"
       bullet=$(awk '/^- \*\*Release files\.\*\*/ { on = 1; print; next } on && /^(- \*\*|## )/ { exit } on' "$out/docs/docs/maintaining.md")
       if [[ "$platforms" = *windows* ]]; then
+        # The Windows installer's example works as written, given a GUID.
+        answer=$(example "$out/docs" 2 | sed 's/<GUID>/EBAC94F7-A24E-431F-B4F6-8E9D669E9E53/g')
+        [ -n "$answer" ] || fail "docs/maintaining.md has no example installer answer"
+        generate "$out/installer-example" --data "platforms=$platforms" --data 'architectures=[x86_64, aarch64]' --data "release=$answer"
+        [ "$(grep --count '^            installer: ' "$out/installer-example/.github/workflows/build-release.yml")" -eq 2 ] \
+          || fail "the docs' example installer answer doesn't give both Windows targets an installer: $answer"
+        rm -rf "$out/installer-example"
         grep --quiet 'Git Bash on Windows' <<< "$bullet" || fail "the docs don't say the release script runs with Git Bash on Windows"
         grep --quiet 'cygpath -w' <<< "$bullet" || fail "the docs don't say how to call a Windows program from Git Bash"
       elif grep --quiet 'Git Bash\|iscc\|cygpath' <<< "$bullet"; then
@@ -1408,6 +1437,22 @@ release-extras:
     grep --quiet --fixed-strings "steps.attest.outcome == 'success' && steps.attest.outputs.bundle-path || steps.attest-again.outcome == 'success' && steps.attest-again.outputs.bundle-path || steps.attest-last.outputs.bundle-path" <<< "$publish_job" \
       || fail "the release doesn't publish the bundle of the attempt that worked"
     grep --quiet '^    timeout-minutes: 20$' <<< "$publish_job" || fail "a public binary's publish job doesn't take 20 minutes for the attest retries"
+    # The update contract docs/stability.md states: attestation.json is one bundle whose statement
+    # names every release file by its name and SHA-256, which installed copies' updaters verify.
+    # The check must fail on a change to that shape: a subject other than the checksums file, a
+    # checksums file without digests, or a bundle per file.
+    attestation() { uv run --quiet --no-project --with pyyaml==6.0.3 python -I "$trellis/tests/release/attestation.py" "$@"; }
+    release_yml="$out/attested/.github/workflows/release.yml"
+    attestation "$release_yml" demo-binary-0.1.0-x86_64-unknown-linux-musl.tar.gz
+    for mutation in 's|subject-checksums: dist/SHA256SUMS$|subject-path: dist/*|' \
+      's|run: sha256sum -- \* > SHA256SUMS$|run: ls > SHA256SUMS|' \
+      's|cp "\$BUNDLE" dist/attestation.json|for file in dist/*; do cp "$BUNDLE" "$file.json"; done|'; do
+      sed "$mutation" "$release_yml" > "$out/mutated.yml"
+      ! cmp --quiet "$release_yml" "$out/mutated.yml" || fail "the attestation mutation $mutation changed nothing"
+      if attestation "$out/mutated.yml" demo-binary-0.1.0-x86_64-unknown-linux-musl.tar.gz 2> /dev/null; then
+        fail "the attestation check passed a release changed by $mutation"
+      fi
+    done
     rm -rf "$out/attested"
     # A private binary's release attests nothing, so its publish job keeps the limit without the
     # retries' waits, and a hung job stops before it spends more of the account's Actions usage.
@@ -1469,6 +1514,64 @@ release-extras:
       cat "$out/actionlint.txt" >&2
       fail "just actionlint passed a release/package.sh that shellcheck faults"
     fi
+    attestation .github/workflows/release.yml demo-binary-0.1.0-linux.tar.gz demo-binary-0.1.0-linux
+    [ ! -e release/installer.iss ] && [ ! -e release/installer-custom.iss ] \
+      || fail "a release answer without an installer got installer files"
+    # An installer answer gets release/installer.iss and release/installer-custom.iss, and the
+    # Windows target's build installs the pinned Inno Setup and builds the installer. An update
+    # rewrites installer.iss, keeps the owner's custom file, and refuses a new app_id. Copier's
+    # updates need a clean commit of the template, so it renders from a copy.
+    mkdir "$out/trellis"
+    (cd "$trellis" && tar --create --exclude=./.git --exclude=./target --exclude=./lints/target --file=- .) \
+      | tar --extract --directory="$out/trellis" --file=-
+    commit() { git -c user.name=trellis -c user.email=trellis@localhost "$@"; }
+    (cd "$out/trellis" && git init --quiet --initial-branch main && git add --all && commit commit --quiet --message v1)
+    installer_answer() {
+      echo "release={files: {x86_64-pc-windows-msvc: [\"demo-binary-{version}-setup.exe\", \"demo-binary-{version}.zip\"]}, installer: {x86_64-pc-windows-msvc: {app_id: $1, file: \"demo-binary-{version}-setup.exe\"$2}}}"
+    }
+    app_id=EBAC94F7-A24E-431F-B4F6-8E9D669E9E53
+    uv tool run copier@9.19.1 copy --quiet --defaults --vcs-ref HEAD --data project_name=demo-binary \
+      --data "description=A demo binary that trellis generates for its tests." --data kind=binary \
+      --data 'platforms=[linux, windows]' --data 'architectures=[x86_64]' \
+      --data "$(installer_answer "$app_id" "")" "$out/trellis" "$out/installer"
+    cd "$out/installer"
+    workflow=.github/workflows/build-release.yml
+    [ "$(grep --count '^            installer: demo-binary-{version}-setup.exe$' "$workflow")" -eq 1 ] \
+      || fail "the Windows target's build doesn't name its installer, or another target's does"
+    grep --quiet '^      - name: Install Inno Setup$' "$workflow" || fail "the release build doesn't install Inno Setup"
+    grep --quiet 'innosetup-7.1.1-x64.exe$' "$workflow" || fail "the release build doesn't install the pinned Inno Setup"
+    grep --quiet 'export STAGING=' "$workflow" || fail "release/package.sh gets no STAGING"
+    grep --quiet --fixed-strings "#define AppId \"$app_id\"" release/installer.iss || fail "release/installer.iss doesn't hold the app_id"
+    grep --quiet --fixed-strings '#define OutputName "demo-binary-" + AppVersion + "-setup"' release/installer.iss \
+      || fail "release/installer.iss doesn't name the installer as the answer's file"
+    grep --quiet --line-regexp 'AppPublisher=265866' release/installer.iss || fail "release/installer.iss doesn't name the author as its publisher"
+    grep --quiet --line-regexp '#include "installer-custom.iss"' release/installer.iss || fail "release/installer.iss doesn't include the custom file"
+    printf '#!/usr/bin/env bash\nset -euo pipefail\ncp "$BINARY" "$STAGING/$NAME.exe"\n' > release/package.sh
+    git init --quiet --initial-branch main
+    git add --all
+    just actionlint zizmor > /dev/null 2>&1 || fail "the installer's release build fails actionlint or zizmor"
+    echo "; The owner's line." >> release/installer-custom.iss
+    git add --all
+    commit commit --quiet --message "chore: generate from trellis"
+    if refusal=$(uv tool run copier@9.19.1 update --quiet --defaults --vcs-ref=:current: \
+      --data "$(installer_answer C882D75D-CDF1-4F35-91C7-8D8A7A01A810 "")" 2>&1); then
+      fail "an update took a new app_id"
+    fi
+    grep --quiet --fixed-strings "has \`app_id\` $app_id in .copier-answers.yml" <<< "$refusal" \
+      || fail "an update refused a new app_id for another reason: $refusal"
+    [ -z "$(git status --porcelain)" ] || fail "the refused update changed files"
+    uv tool run copier@9.19.1 update --quiet --defaults --vcs-ref=:current: \
+      --data "$(installer_answer "$app_id" ", name: Demo App")" > "$out/update.txt" 2>&1 \
+      || { cat "$out/update.txt" >&2; fail "an update with the same app_id and a new name failed"; }
+    ! grep --quiet Warning "$out/update.txt" || fail "an installer update warned: $(cat "$out/update.txt")"
+    grep --quiet --fixed-strings '#define AppName "Demo App"' release/installer.iss || fail "the update didn't rewrite release/installer.iss"
+    grep --quiet --line-regexp "; The owner's line." release/installer-custom.iss || fail "the update dropped the owner's line in release/installer-custom.iss"
+    git add --all
+    commit commit --quiet --message "chore: rename the installer"
+    uv tool run copier@9.19.1 update --quiet --defaults --vcs-ref=:current: > "$out/update.txt" 2>&1 \
+      || { cat "$out/update.txt" >&2; fail "an update without answers failed"; }
+    ! grep --quiet Warning "$out/update.txt" || fail "an installer update warned: $(cat "$out/update.txt")"
+    [ -z "$(git status --porcelain)" ] || fail "an update without answers changed files: $(git status --porcelain)"
 
 # Generates a library as a user gets it, with its checker fetched from a scratch copy of this
 # checkout in place of GitHub, and checks that `just install-policy` installs the pinned checker
