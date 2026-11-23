@@ -645,10 +645,11 @@ update:
     ! has CONTRIBUTING.md "$boundaries" || fail "the update kept v1's Product boundaries sentence"
     cmp --quiet README.md "$out/README.md" || fail "the update changed the owner's README.md"
     # The README keeps `## Use it` while readme_sections moved, so `trellis-policy check` names the
-    # mismatch, as the changelog's action item says, until the owner renames the section.
+    # mismatch, as the changelog's action item says, until the owner renames the section. Under
+    # GitHub Actions the checker writes each error as an `::error::` annotation.
     if policy check > "$out/sections.txt" \
-      || [ "$(grep --count '^error: ' "$out/sections.txt")" != 1 ] \
-      || ! grep --quiet '^error: \[docs_layout\] README.md: The readme'"'"'s `##` sections are `Use it`, `Documentation`, `License`, but `readme_sections` in `\[workspace.metadata.policy\]` lists `Quick start`, `Documentation`, `License`\.' "$out/sections.txt"; then
+      || [ "$(grep --count -E '^(error: |::error::)' "$out/sections.txt")" != 1 ] \
+      || ! grep --quiet -E '^(error: |::error::)\[docs_layout\] README.md: The readme'"'"'s `##` sections are `Use it`, `Documentation`, `License`, but `readme_sections` in `\[workspace.metadata.policy\]` lists `Quick start`, `Documentation`, `License`\.' "$out/sections.txt"; then
       cat "$out/sections.txt" >&2
       fail "trellis-policy check didn't report only the README's old section after the update"
     fi
