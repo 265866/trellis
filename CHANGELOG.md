@@ -28,9 +28,16 @@ has the versioning rule.
   `library` for a library, `web` with a web UI, `service` for a service and `cli` for any other
   binary, and `other_interfaces` is empty. They're wrong for a program whose window or full-screen
   terminal screens are the product, which gets `cli`, and for a web app with a command-line tool
-  or desktop app beside it, which gets `web` alone. Run the update with the right answers then,
+  or desktop app beside it, which gets `web` alone. Nothing fails to tell you: with `cli` in place
+  of `desktop` or `terminal`, the release check never asks for the picture and screenshots page,
+  and the generated `CONTRIBUTING.md` leaves out the screenshots rules. Run the update with the
+  right answers then,
   such as `uvx copier update --defaults --data interface=desktop`, or
   `uvx copier update --defaults --data interface=web --data 'other_interfaces=[cli]'`.
+- **A service: check `docs/install.md`'s run command.** It runs the image with no data folder,
+  published ports, devices or settings. If yours needs any, write them into the page's
+  `## Run the image`, or send the reader to the README's Quick start from there; an update keeps
+  your edits.
 - **Turning on a web UI later names `web` among the interfaces.** An update with
   `--data web_ui=true` refuses a project whose interfaces lack `web`, rather than drop the ones it
   has: pass `--data 'other_interfaces=[web]'` with it, listing the others it has too, or
@@ -61,9 +68,7 @@ has the versioning rule.
   a phone width, a terminal screen as an SVG, PNG files without metadata, where capture code may
   live, and a privacy check before an image is committed. Its pull request template asks whether
   the privacy check ran on changed images.
-- A service's `docs/install.md` is titled "Container image", and its run command says it is a
-  reference for the image's name and tags, with no data folder, ports, devices or settings, and
-  that the README's Quick start says what a working run needs.
+- A service's `docs/install.md` is titled "Container image".
 - `docs/style.md` replaces "a short README" with what a README opens with, and in what order, and
   adds what the checks catch first in test-only code. `docs/maintaining.md` lists `README.md`, and
   `docs/usage.md` where a project has one, among the files an update never touches, says to edit
